@@ -1,0 +1,54 @@
+# === SECRETS ===
+.env
+*.key
+*.pem
+*.p12
+credentials.json
+service-account*.json
+
+# === RUNTIME DATA ===
+data/
+state.json
+agent.log
+*.db
+chroma_db/
+__pycache__/
+*.pyc
+
+# === BACKUPS & TEMP ===
+*.backup.*
+*.bak.*
+*.swp
+*.tar.gz
+backup_*/
+mbio_backup_*
+
+# === THIRD-PARTY SDKs ===
+gsutil/
+google-cloud-sdk/
+which gsutil/
+install_dir/
+node_modules/
+package-lock.json
+
+# === BUILD ARTIFACTS ===
+.docker.swp
+.compose.swp
+.mbio-signalbot.swp
+CACHED
+exporting
+transferring
+unpacking
+resolving
+reading
+naming
+resolve
+0
+=
+=0.4.22
+=2.2.2
+
+# === IDE/OS ===
+.vscode/
+.idea/
+.DS_Store

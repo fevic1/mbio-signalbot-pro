@@ -1,0 +1,181 @@
+# ==========================================
+# MBIO SignalBot Pro v9.0 Configuration
+# ==========================================
+
+bot:
+  name: "MBIO SignalBot Pro"
+  version: "9.0.0"
+  debug: false
+
+# Asset Tiers
+assets:
+  tier1:  # Major assets - analyzed every 2h
+    BTC: "BTC-USD"
+    ETH: "ETH-USD"
+    SOL: "SOL-USD"
+    XRP: "XRP-USD"
+  
+  tier2:  # Altcoins - analyzed every 4h
+    DOGE: "DOGE-USD"
+    SEI: "SEI-USD"
+    TIA: "TIA-USD"
+  
+  tier3:  # L2/DeFi - analyzed every 6h
+    ARB: "ARB-USD"
+    OP: "OP-USD"
+    AVAX: "AVAX-USD"
+    LINK: "LINK-USD"
+    NEAR: "NEAR-USD"
+
+# Hyperliquid mappings
+hyperliquid:
+  network: "MAINNET"
+  assets:
+    BTC: "BTC"
+    ETH: "ETH"
+    SOL: "SOL"
+    XRP: "XRP"
+    DOGE: "DOGE"
+    SEI: "SEI"
+    TIA: "TIA"
+    ARB: "ARB"
+    OP: "OP"
+    AVAX: "AVAX"
+    LINK: "LINK"
+    NEAR: "NEAR"
+hyperliquid:
+  network: MAINNET
+  # Precision rules for order execution (No magic numbers in code)
+  precision:
+    BTC:
+      tick_size: 0.1
+      price_dec: 1
+      sz_dec: 5
+    ETH:
+      tick_size: 0.01
+      price_dec: 2
+      sz_dec: 4
+    SOL:
+      tick_size: 0.01
+      price_dec: 2
+      sz_dec: 2
+    XRP:
+      tick_size: 0.0001
+      price_dec: 4
+      sz_dec: 0
+    DOGE:
+      tick_size: 0.00001
+      price_dec: 5
+      sz_dec: 0
+    ARB:
+      tick_size: 0.0001
+      price_dec: 4
+      sz_dec: 0
+    OP:
+      tick_size: 0.0001
+      price_dec: 4
+      sz_dec: 1
+    AVAX:
+      tick_size: 0.001
+      price_dec: 3
+      sz_dec: 2
+    LINK:
+      tick_size: 0.001
+      price_dec: 3
+      sz_dec: 2
+    NEAR:
+      tick_size: 0.001
+      price_dec: 3
+      sz_dec: 1
+    SEI:
+      tick_size: 0.0001
+      price_dec: 4
+      sz_dec: 1
+    TIA:
+      tick_size: 0.001
+      price_dec: 3
+      sz_dec: 2
+
+# Analysis intervals (hours)
+intervals:
+  tier1: 2
+  tier2: 4
+  tier3: 6
+  position_monitor: 1.0  # 60 seconds
+  quick_scan: 0.25          # 15 minutes
+  entry_scan: 0.5           # 30 minutes
+
+# Risk Management
+risk:
+  max_open_positions: 3
+  max_positions_per_tier: 2
+  entry_min_confidence: 75
+  daily_loss_limit: -7.0
+  weekly_loss_limit: -15.0
+  max_drawdown_percent: -20.0
+  
+  # Position sizing
+  risk_per_trade: 0.05
+  max_position_percent: 0.50
+  small_account_threshold: 100
+  volatility_multiplier: 1.5
+  max_volatility: 0.05
+  min_order_value: 10.0
+  
+  # Correlation
+  correlation_threshold: 0.7
+  max_correlated_positions: 2
+
+# Trading Strategy
+strategy:
+  # RSI thresholds
+  rsi_oversold: 30
+  rsi_overbought: 70
+  rsi_entry_max: 45
+  
+  # Bollinger Bands
+  bb_std_dev: 2.0
+  
+  # Take Profit levels (ATR multiples)
+  tp1_atr: 1.0
+  tp2_atr: 2.0
+  tp3_atr: 3.0
+  
+  # Stop Loss
+  sl_atr: 1.5
+  
+  # ATR period
+  atr_period: 14
+  rsi_period: 14
+
+# AI Providers (priority order)
+ai:
+  providers:
+    - name: "groq"
+      enabled: true
+      model: "llama-3.3-70b-versatile"  # Keep this, it works
+      timeout: 30
+    - name: "cerebras"
+      enabled: true
+      model: "gpt-oss-120b"
+      timeout: 30
+    - name: "openrouter"
+      enabled: true
+      model: "meta-llama/llama-3.3-70b-instruct" # CHANGED from 3.3-405b
+      timeout: 60
+
+# Telegram
+telegram:
+  enabled: true
+  commands:
+    - "/positions"
+    - "/stats"
+    - "/close"
+    - "/closeall"
+    - "/help"
+
+# Logging
+logging:
+  level: "INFO"
+  hide_tokens: true
+  log_file: "bot.log"

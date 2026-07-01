@@ -1,0 +1,255 @@
+"""
+execution/hl_executor.py — Hyperliquid order execution with precision sizing.
+"""
+import os
+import math  # <-- ADDED: for floor rounding
+import logging
+import time
+from typing import Optional, Dict, List, Tuple
+from decimal import Decimal
+
+from hyperliquid.info import Info
+from hyperliquid.utils.signing import get_order_signing_elements, sign_order
+from hyperliquid.utils.types import Cloid, OptionalInt
+
+logger = logging.getLogger(__name__)
+
+
+class HLExecutor:
+    """Handles order execution on Hyperliquid with risk controls."""
+    
+    def __init__(self, config: dict):
+        self.config = config
+        self.network = config.get("network", "mainnet").lower()
+        self.api_url = self._get_api_url()
+        
+        # Initialize Hyperliquid clients
+        self.info = Info(self.api_url, skip_ws=True)
+        
+        # Wallet setup
+        self.private_key = os.getenv("HL_PRIVATE_KEY", "").strip()
+        self.address = os.getenv("HL_ACCOUNT_ADDRESS", "").strip()
+        
+        if not self.private_key or not self.address:
+            logger.error("❌ HL_PRIVATE_KEY or HL_ACCOUNT_ADDRESS not set")
+            raise ValueError("Missing Hyperliquid credentials")
+        
+        # Asset metadata (fetched on first use)
+        self._asset_meta: Dict[str, dict] = {}
+        self._last_meta_fetch = 0
+        
+    def _get_api_url(self) -> str:
+        """Get API URL based on network."""
+        if self.network == "testnet":
+            return "https://api.hyperliquid-testnet.xyz"
+        return "https://api.hyperliquid.xyz"
+    
+    def _fetch_asset_meta(self, asset: str) -> Optional[dict]:
+        """Fetch asset metadata (sz_decimals, etc.) from Hyperliquid."""
+        try:
+            # Cache metadata for 5 minutes
+            if time.time() - self._last_meta_fetch < 300 and asset in self._asset_meta:
+                return self._asset_meta[asset]
+            
+            universe = self.info.meta()["universe"]
+            for u in universe:
+                if u["name"] == asset:
+                    meta = {
+                        "sz_decimals": u.get("szDecimals", 1),
+                        "tick_size": float(u.get("tickSize", "0.01")),
+                        "min_order_size": float(u.get("minOrderSz", "10"))
+                    }
+                    self._asset_meta[asset] = meta
+                    self._last_meta_fetch = time.time()
+                    return meta
+            return None
+        except Exception as e:
+            logger.error(f"Failed to fetch metadata for {asset}: {e}")
+            return None
+    
+    def get_account_balance(self) -> float:
+        """Get current account equity."""
+        try:
+            user_state = self.info.user_state(self.address)
+            summary = user_state.get("marginSummary", {})
+            return float(summary.get("accountValue", 0))
+        except Exception as e:
+            logger.error(f"Failed to get account balance: {e}")
+            return 0.0
+    
+    def _round_size(self, asset: str, size: float) -> float:
+        """Round position size DOWN to exchange precision."""
+        meta = self._fetch_asset_meta(asset)
+        if not meta:
+            return round(size, 1)  # fallback
+        
+        allowed_decimals = meta.get("sz_decimals", 1)
+        
+        # FIX: Always round DOWN (floor) to avoid over-committing capital
+        factor = 10 ** allowed_decimals
+        size = math.floor(size * factor) / factor
+        
+        return size
+    
+    def _round_price(self, asset: str, price: float) -> float:
+        """Round price to exchange tick size."""
+        meta = self._fetch_asset_meta(asset)
+        if not meta:
+            return round(price, 2)  # fallback
+        
+        tick_size = meta.get("tick_size", 0.01)
+        return round(price / tick_size) * tick_size
+    
+    async def execute_order(
+        self,
+        asset: str,
+        side: str,
+        size: float,
+        limit_price: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        take_profit: Optional[float] = None
+    ) -> Tuple[bool, str]:
+        """
+        Execute a trade on Hyperliquid.
+        
+        Returns: (success: bool, message: str)
+        """
+        try:
+            # Validate inputs
+            if size <= 0:
+                return False, "Size must be positive"
+            
+            # Get current price if limit not specified
+            if limit_price is None:
+                from core.data_fetcher import fetch_market_data
+                data = fetch_market_data(asset, "1h", 1)
+                if not data:
+                    return False, "Failed to fetch current price"
+                limit_price = float(data[-1].get("close", 0))
+            
+            # FIX: Apply floor rounding to size to avoid overshoot
+            size = self._round_size(asset, size)
+            limit_price = self._round_price(asset, limit_price)
+            
+            # Log execution details
+            logger.info(
+                f"🚀 Executing {side.upper()} {asset}: "
+                f"Size={size} @ ${limit_price:.4f}"
+            )
+            
+            # Prepare order parameters
+            order_params = {
+                "coin": asset,
+                "is_buy": side.lower() in ("buy", "long"),
+                "sz": str(size),
+                "limit_px": str(limit_price),
+                "reduce_only": False,
+                "cloid": None
+            }
+            
+            # Add stop-loss/take-profit if specified
+            if stop_loss or take_profit:
+                order_params["trigger"] = {
+                    "isMarket": True,
+                    "triggerPx": str(stop_loss or take_profit),
+                    "tpsl": "sl" if stop_loss else "tp"
+                }
+            
+            # Sign and submit order
+            # (Simplified - in production, use proper signing)
+            result = await self._submit_order(order_params)
+            
+            if result.get("status") == "ok":
+                logger.info(f"✅ Order filled: {asset} {side} {size} @ ${limit_price}")
+                return True, "Order executed successfully"
+            else:
+                error = result.get("error", "Unknown error")
+                logger.error(f"❌ Order failed: {error}")
+                return False, error
+                
+        except Exception as e:
+            logger.error(f"❌ Execution error for {asset}: {e}")
+            return False, str(e)
+    
+    async def _submit_order(self, params: dict) -> dict:
+        """Submit order to Hyperliquid API."""
+        # Placeholder for actual API call
+        # In production, implement proper signing and HTTP request
+        return {"status": "ok", "order_id": "mock_123"}
+    
+    def close_position(
+        self,
+        asset: str,
+        side: str,
+        size: float,
+        limit_price: Optional[float] = None
+    ) -> bool:
+        """
+        Close an existing position.
+        
+        Note: This is a SYNC method - wrap with asyncio.to_thread() when calling from async code.
+        """
+        try:
+            # FIX: Apply floor rounding to size for closure too
+            size = self._round_size(asset, size)
+            
+            # For closing, we use market order by default
+            if limit_price is None:
+                from core.data_fetcher import fetch_market_data
+                data = fetch_market_data(asset, "1h", 1)
+                if data:
+                    limit_price = float(data[-1].get("close", 0))
+                else:
+                    return False
+            
+            limit_price = self._round_price(asset, limit_price)
+            
+            # Opposite side for closure
+            close_side = "sell" if side.lower() in ("buy", "long") else "buy"
+            
+            logger.info(f"🚪 Closing {asset}: {size} @ ${limit_price:.4f}")
+            
+            # Execute closure (sync - should be called via asyncio.to_thread)
+            order_params = {
+                "coin": asset,
+                "is_buy": close_side.lower() == "buy",
+                "sz": str(size),
+                "limit_px": str(limit_price),
+                "reduce_only": True
+            }
+            
+            result = self._submit_order_sync(order_params)
+            return result.get("status") == "ok"
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to close {asset}: {e}")
+            return False
+    
+    def _submit_order_sync(self, params: dict) -> dict:
+        """Sync version of order submission for close_position."""
+        # Placeholder - implement actual API call
+        return {"status": "ok"}
+    
+    def get_open_positions(self) -> List[dict]:
+        """Get all open positions for the account."""
+        try:
+            user_state = self.info.user_state(self.address)
+            positions = []
+            
+            for p in user_state.get("assetPositions", []):
+                pos = p.get("position", {})
+                szi = float(pos.get("szi", 0))
+                if abs(szi) > 0.0001:  # Has actual position
+                    positions.append({
+                        "symbol": pos.get("coin", "?"),
+                        "side": "long" if szi > 0 else "short",
+                        "size": abs(szi),
+                        "entry_price": float(pos.get("entryPx", 0) or 0),
+                        "mark_price": float(pos.get("markPx", 0) or 0),
+                        "unrealized_pnl": float(pos.get("unrealizedPnl", 0)),
+                        "liquidation_price": pos.get("liquidationPx")
+                    })
+            return positions
+        except Exception as e:
+            logger.error(f"Failed to get open positions: {e}")
+            return []

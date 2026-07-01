@@ -1,0 +1,29 @@
+services:
+  mbio-bot:
+    build: .
+    container_name: mbio-signalbot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - ANONYMIZED_TELEMETRY=False
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./main.py:/app/main.py:ro
+      - ./config:/app/config:ro
+      - ./core:/app/core:ro
+      - ./monitoring:/app/monitoring:ro
+      - ./data:/app/data
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: mbio-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

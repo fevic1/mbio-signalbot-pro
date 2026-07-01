@@ -1,0 +1,214 @@
+"""
+core/signal_generator.py — Institutional AI Signal Generation.
+Features: Exponential backoff, strict validation, and technical fallbacks.
+"""
+import asyncio
+import json
+import logging
+import os
+import re
+from typing import Dict, Tuple
+import backoff
+
+from groq import AsyncGroq
+try:
+    # Try standard import
+    from cerebras.cloud.sdk import AsyncCerebras
+except ImportError:
+    try:
+        # Fallback for underscore naming if applicable
+        from cerebras_cloud_sdk.cloud.sdk import AsyncCerebras
+    except ImportError:
+        AsyncCerebras = None
+        print("⚠️ Warning: Cerebras SDK not found. Disabling Cerebras provider.")
+from openai import AsyncOpenAI
+
+logger = logging.getLogger(__name__)
+
+_groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY")) if os.getenv("GROQ_API_KEY") else None
+_cerebras_client = AsyncCerebras(api_key=os.getenv("CEREBRAS_API_KEY")) if os.getenv("CEREBRAS_API_KEY") else None
+_openrouter_client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY")) if os.getenv("OPENROUTER_API_KEY") else None
+
+# ========== FALLBACK SIGNAL (Technical Indicators) ==========
+def generate_fallback_signal(asset: str, data: Dict) -> Dict:
+    """
+    Fallback when ALL AI providers fail.
+    Uses simple 1H RSI momentum to prevent the bot from going completely dark.
+    """
+    rsi_1h = data.get("1h", {}).get("rsi", 50)
+    if rsi_1h < 30:
+        return {"signal": "BUY", "confidence": 50, "reasoning": "Oversold (AI fallback)"}
+    elif rsi_1h > 70:
+        return {"signal": "SELL", "confidence": 50, "reasoning": "Overbought (AI fallback)"}
+    return {"signal": "HOLD", "confidence": 30, "reasoning": "Neutral (AI fallback)"}
+
+# ========== STRICT VALIDATION ==========
+def validate_ai_response(response: Dict, asset: str) -> Dict:
+    """Prevents NoneType.get() crashes by enforcing strict schema."""
+    if not response or not isinstance(response, dict):
+        raise ValueError(f"Invalid response type for {asset}")
+    
+    signal = str(response.get("signal", "HOLD")).upper()
+    if signal not in {"STRONG BUY", "BUY", "STRONG SELL", "SELL", "HOLD"}:
+        signal = "HOLD"
+        
+    try:
+        confidence = int(response.get("confidence", 50))
+        confidence = min(100, max(0, confidence))
+    except (ValueError, TypeError):
+        confidence = 50
+        
+    return {
+        "signal": signal,
+        "confidence": confidence,
+        "reasoning": str(response.get("reasoning", "AI signal"))    }
+
+def validate_signal_rules(signal: str, data: dict, cfg: dict) -> str:
+    """Hard override: block AI signals that violate configured RSI thresholds."""
+    s     = cfg.get("signal_rules", {})
+    rsi1h = data.get("1h", {}).get("rsi", 50)
+    rsi1d = data.get("1d", {}).get("rsi", 50)
+
+    if signal == "STRONG BUY":
+        max_1d = s.get("strong_buy_1d_rsi_max", 32)
+        max_1h = s.get("strong_buy_1h_rsi_max", 45)
+        if rsi1d > max_1d or rsi1h > max_1h:
+            import logging
+            logging.warning(
+                f"STRONG BUY blocked: 1D RSI={rsi1d} (max {max_1d}), "
+                f"1H RSI={rsi1h} (max {max_1h}) -> HOLD"
+            )
+            return "HOLD"
+
+    elif signal == "BUY":
+        max_1d = s.get("buy_1d_rsi_max", 38)
+        if rsi1d > max_1d:
+            import logging
+            logging.warning(f"BUY blocked: 1D RSI={rsi1d} > {max_1d} -> HOLD")
+            return "HOLD"
+
+    elif signal == "STRONG SELL":
+        min_1d = s.get("strong_sell_1d_rsi_min", 68)
+        min_1h = s.get("strong_sell_1h_rsi_min", 58)
+        if rsi1d < min_1d or rsi1h < min_1h:
+            import logging
+            logging.warning(f"STRONG SELL blocked: RSI rules not met -> HOLD")
+            return "HOLD"
+
+    elif signal == "SELL":
+        min_1d = s.get("sell_1d_rsi_min", 62)
+        if rsi1d < min_1d:
+            import logging
+            logging.warning(f"SELL blocked: 1D RSI={rsi1d} < {min_1d} -> HOLD")
+            return "HOLD"
+
+    return signal
+
+# ========== PROMPT BUILDERS ==========
+def _get_system_prompt(cfg: dict) -> str:
+    s = cfg.get("signals", {})
+    return f"""You are an elite quantitative trading algorithm. Analyze crypto market data and output strict JSON.
+TRADING LOGIC:
+1. STRONG BUY: 1D RSI < {s.get('strong_buy_1d_rsi_max', 32)} AND 1H RSI < {s.get('strong_buy_1h_rsi_max', 45)}
+2. BUY: 1D RSI < {s.get('buy_1d_rsi_max', 38)} AND Price near lower Bollinger Band.
+3. STRONG SELL: 1D RSI > {s.get('strong_sell_1d_rsi_min', 68)} AND 1H RSI > {s.get('strong_sell_1h_rsi_min', 58)}
+4. SELL: 1D RSI > {s.get('sell_1d_rsi_min', 62)} AND Price near upper Bollinger Band.
+5. HOLD: If RSI is near 50 (neutral) or timeframes conflict.
+OUTPUT FORMAT: {{"signal": "STRONG BUY|BUY|STRONG SELL|SELL|HOLD", "confidence": 0-100, "reasoning": "1 sentence"}}"""
+
+def _build_user_prompt(asset_batch: dict) -> str:
+    lines = []
+    for asset_name, data in asset_batch.items():
+        d1h, d4h, d1d = data.get("1h", {}), data.get("4h", {}), data.get("1d", {})
+        lines.append(f"ASSET: {asset_name}\n1H: Price={d1h.get('price', 0)}, RSI={d1h.get('rsi', 50)}\n4H: RSI={d4h.get('rsi', 50)}\n1D: RSI={d1d.get('rsi', 50)}\n")
+    return "Analyze:\n\n" + "\n".join(lines)
+
+def _parse_json_response(text: str) -> Dict:
+    if not text: return {}
+    text = re.sub(r'```json\s*|\s*```', '', text)
+    start, end = text.find('{'), text.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        try: return json.loads(text[start:end+1])
+        except: pass
+    return {}
+
+# ========== RETRY LOGIC ==========
+@backoff.on_exception(
+    backoff.expo,
+    Exception,
+    max_tries=2,
+    max_time=10,
+    giveup=lambda e: "429" in str(e) or "rate" in str(e).lower() or "queue" in str(e).lower()
+)
+async def _call_provider(name: str, client, sys_prompt: str, user_prompt: str, model: str, json_mode: bool) -> Dict:
+    messages = [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}]
+    kwargs = {"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 300}
+    if json_mode: kwargs["response_format"] = {"type": "json_object"}
+    
+    response = await client.chat.completions.create(**kwargs)
+    content = response.choices[0].message.content
+    return json.loads(content) if json_mode else _parse_json_response(content)
+
+# ========== MAIN ENTRY POINT ==========
+async def analyze_batch(asset_batch: dict, cfg: dict) -> Tuple[Dict, str]:
+    """Returns (results_dict, provider_name). Falls back to technicals if AI fails."""
+    if not asset_batch: return {}, "none"
+    
+    sys_prompt = _get_system_prompt(cfg)
+    user_prompt = _build_user_prompt(asset_batch)
+    models = cfg.get("ai", {}).get("models", {})
+    
+    # Sequential provider chain — first success wins, errors skip to next
+    providers = []
+    if _groq_client:       providers.append(("groq",       _groq_client,       models.get("groq",       "llama-3.3-70b-versatile"),           True))
+    if _cerebras_client:   providers.append(("cerebras",   _cerebras_client,   models.get("cerebras",   "llama3.1-70b"),                      False))
+    if _openrouter_client: providers.append(("openrouter", _openrouter_client, models.get("openrouter", "meta-llama/llama-3.3-70b-instruct"), True))
+
+    raw_result = None
+    provider_used = "fallback"
+    for pname, pclient, pmodel, pjson in providers:
+        try:
+            raw_result = await _call_provider(pname, pclient, sys_prompt, user_prompt, pmodel, pjson)
+            if raw_result:
+                provider_used = pname
+                logger.info(f"✅ {pname} responded successfully")
+                break
+        except Exception as e:
+            is_rate = any(x in str(e).lower() for x in ["429","rate","queue","too many","exceeded"])
+            logger.warning(f"⚠️ {pname} {'rate limited' if is_rate else 'failed'} — trying next provider")
+            continue
+
+    # If ALL AI providers fail, use technical fallback
+    if not raw_result:
+        logger.warning("🚨 ALL AI PROVIDERS FAILED. Activating technical fallback.")
+        fallback_results = {}
+        for asset, data in asset_batch.items():
+            fallback_results[asset] = generate_fallback_signal(asset, data)
+        return fallback_results, "fallback"
+    
+    best = raw_result
+    
+    # Flatten and validate strictly
+    flat_results = {}
+    if isinstance(best.get("results"), list): # Batch response format
+        for item in best["results"]:
+            asset = item.get("asset")
+            if asset:
+                try:
+                    r = validate_ai_response(item, asset)
+                    r["signal"] = validate_signal_rules(r["signal"], asset_batch.get(asset, {}), cfg)
+                    flat_results[asset] = r
+                except ValueError: flat_results[asset] = generate_fallback_signal(asset, asset_batch.get(asset, {}))
+    else: # Single response format
+        for asset in asset_batch.keys():
+            try:
+                r = validate_ai_response(best, asset)
+                r["signal"] = validate_signal_rules(r["signal"], asset_batch.get(asset, {}), cfg)
+                flat_results[asset] = r
+            except ValueError: flat_results[asset] = generate_fallback_signal(asset, asset_batch.get(asset, {}))
+            
+    provider = "groq" if _groq_client else ("cerebras" if _cerebras_client else "openrouter")
+    return flat_results, provider
+
+def init_ai_clients() -> int:
+    return sum(x is not None for x in [_groq_client, _cerebras_client, _openrouter_client])

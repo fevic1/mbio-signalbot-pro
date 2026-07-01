@@ -1,0 +1,22 @@
+hyperliquid-python-sdk
+# Paste contents of requirements-hl.txt here after running Step 1
+# For now, using known-working base from SDK v0.8.x:
+eth-account==0.10.0
+websockets==11.0.3
+msgpack==1.0.7
+requests==2.31.0
+pycryptodome==3.19.0
+
+# === BOT DEPENDENCIES (PINNED FOR PY3.10) ===
+python-telegram-bot==21.3
+pandas==2.0.3
+numpy==1.24.4
+yfinance==0.2.28
+openai==1.12.0
+groq==0.4.2
+cerebras-cloud-sdk==1.0.0
+chromadb==0.4.22
+python-dotenv==1.0.0
+
+# === AUTO-EXTRACTED HL SDK DEPS ===
+httpx==0.27.0

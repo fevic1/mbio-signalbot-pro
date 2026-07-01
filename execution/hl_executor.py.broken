@@ -1,0 +1,276 @@
+"""
+execution/hl_executor.py
+
+Functional wrapper for Hyperliquid execution.
+Compatible with hyperliquid-python-sdk 0.24.0
+"""
+
+import os
+import logging
+from decimal import Decimal, ROUND_DOWN
+
+from hyperliquid.info import Info
+from hyperliquid.exchange import Exchange
+from hyperliquid.utils import constants
+from eth_account import Account
+
+logger = logging.getLogger(__name__)
+
+# Asset precision rules
+PRECISION = {
+    "BTC": {"tick": 0.1, "dec": 1, "sz": 5},
+    "ETH": {"tick": 0.01, "dec": 2, "sz": 4},
+    "SOL": {"tick": 0.01, "dec": 2, "sz": 2},
+    "XRP": {"tick": 0.0001, "dec": 4, "sz": 0},
+    "DOGE": {"tick": 0.00001, "dec": 5, "sz": 0},
+    "ARB": {"tick": 0.0001, "dec": 4, "sz": 0},
+    "OP": {"tick": 0.0001, "dec": 4, "sz": 1},
+    "AVAX": {"tick": 0.001, "dec": 3, "sz": 2},
+}
+
+
+def _get_exchange():
+    """
+    Initialize Hyperliquid clients.
+    """
+    network = os.getenv("HL_NETWORK", "MAINNET").upper()
+
+    base_url = (
+        constants.TESTNET_API_URL
+        if network == "TESTNET"
+        else constants.MAINNET_API_URL
+    )
+
+    address = os.getenv("HL_ACCOUNT_ADDRESS", "")
+    private_key = os.getenv("HL_PRIVATE_KEY", "")
+
+    if not address:
+        raise ValueError("HL_ACCOUNT_ADDRESS not set")
+
+    if not private_key:
+        raise ValueError("HL_PRIVATE_KEY not set")
+
+    account = Account.from_key(private_key)
+
+    info = Info(base_url, skip_ws=True)
+
+    exchange = Exchange(
+        account,
+        base_url,
+        account_address=address,
+    )
+
+    return info, exchange
+
+
+def _round_to_tick(price: float, asset: str) -> float:
+    """
+    Snap price to exchange tick size.
+    """
+    rules = PRECISION.get(
+        asset,
+        {"tick": 0.01, "dec": 4}
+    )
+
+    tick = Decimal(str(rules["tick"]))
+    decimals = rules["dec"]
+
+    p = Decimal(str(price))
+
+    snapped = (
+        (p / tick)
+        .to_integral_value(rounding=ROUND_DOWN)
+        * tick
+    )
+
+    return float(f"{snapped:.{decimals}f}")
+
+
+def _round_size(size: float, asset: str) -> float:
+    """
+    Round DOWN size to allowed precision.
+    """
+    rules = PRECISION.get(asset, {"sz": 2})
+
+    decimals = rules["sz"]
+
+    quantum = Decimal(f"1e-{decimals}")
+
+    rounded = Decimal(str(size)).quantize(
+        quantum,
+        rounding=ROUND_DOWN,
+    )
+
+    return float(rounded)
+
+
+def _extract_error(result: dict) -> str:
+    """
+    Extract Hyperliquid rejection reason.
+    """
+    try:
+        statuses = (
+            result.get("response", {})
+            .get("data", {})
+            .get("statuses", [])
+        )
+
+        if statuses:
+            status = statuses[0]
+
+            if "error" in status:
+                return status["error"]
+
+    except Exception:
+        pass
+
+    return "Unknown execution error"
+
+
+def execute_hl_order(
+    coin: str,
+    side: str,
+    size: float,
+    limit_px: float | None = None,
+) -> dict:
+    """
+    Execute Hyperliquid order.
+
+    Returns:
+
+    Success:
+    {
+        "status": "success",
+        "response": result
+    }
+
+    Failure:
+    {
+        "status": "error",
+        "reason": "..."
+    }
+    """
+    try:
+        info, exchange = _get_exchange()
+
+        is_buy = side.upper() == "BUY"
+
+        # Round size
+        clean_size = _round_size(size, coin)
+
+        if clean_size <= 0:
+            return {
+                "status": "error",
+                "reason": "Rounded size became zero",
+            }
+
+        # Determine limit price
+        if limit_px is None:
+
+            mids = info.all_mids()
+
+            mid = float(mids.get(coin, 0))
+
+            if mid <= 0:
+                return {
+                    "status": "error",
+                    "reason": f"No live price for {coin}",
+                }
+
+            raw_limit = (
+                mid * 1.005
+                if is_buy
+                else mid * 0.995
+            )
+
+            clean_price = _round_to_tick(
+                raw_limit,
+                coin,
+            )
+
+        else:
+            clean_price = _round_to_tick(
+                limit_px,
+                coin,
+            )
+
+        logger.info(
+            f"🚀 HL Order: "
+            f"{side} "
+            f"{clean_size} "
+            f"{coin} "
+            f"@ {clean_price}"
+        )
+
+        result = exchange.order(
+            coin,
+            is_buy,
+            clean_size,
+            clean_price,
+            {"limit": {"tif": "Gtc"}},
+            False,
+        )
+
+        logger.info(f"📦 HL Raw Response: {result}")
+
+        if not isinstance(result, dict):
+            return {
+                "status": "error",
+                "reason": "Invalid API response",
+            }
+
+        statuses = (
+            result.get("response", {})
+            .get("data", {})
+            .get("statuses", [])
+        )
+
+        if statuses:
+
+            first = statuses[0]
+
+            # Explicit rejection
+            if "error" in first:
+                err = first["error"]
+
+                logger.error(
+                    f"❌ Order rejected: {err}"
+                )
+
+                return {
+                    "status": "error",
+                    "reason": err,
+                }
+
+            # Filled
+            if "filled" in first:
+                logger.info("✅ Order filled")
+
+                return {
+                    "status": "success",
+                    "response": result,
+                }
+
+            # Resting
+            if "resting" in first:
+                logger.info("✅ Order resting")
+
+                return {
+                    "status": "success",
+                    "response": result,
+                }
+
+        return {
+            "status": "error",
+            "reason": _extract_error(result),
+        }
+
+    except Exception as e:
+        logger.exception(
+            f"❌ HL execution failed for {coin}"
+        )
+
+        return {
+            "status": "error",
+            "reason": str(e),
+        }
