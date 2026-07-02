@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MBIO SignalBot Pro — Dashboard</title>
+    <script src="https://cdn.tailwindcss.com">
+        // === CONFIG EDITOR ===
+        var fullConfig = {};
+        function showConfigTab(tab, el) {
+            ['grid','dca','risk'].forEach(function(t) { document.getElementById('cfg-' + t).style.display = 'none'; });
+            document.getElementById('cfg-' + tab).style.display = 'block';
+            document.querySelectorAll('#page-config .tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            if (el) el.classList.add('active');
+        }
+        async function loadConfigForEdit() {
+            try {
+                var resp = await fetch('/api/dashboard/config/current', { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                fullConfig = data.config || {};
+                var g = fullConfig.grid || {};
+                document.getElementById('cfg-grid-investment').value = g.investment_amount || 30;
+                document.getElementById('cfg-grid-nodes').value = g.num_nodes || 10;
+                document.getElementById('cfg-grid-step').value = g.min_step_size || 0.5;
+                document.getElementById('cfg-grid-range').value = g.max_range_pct || 10;
+                var d = fullConfig.dca || {};
+                document.getElementById('cfg-dca-base').value = d.base_order_size || 5;
+                document.getElementById('cfg-dca-so').value = d.max_safety_orders || 5;
+                document.getElementById('cfg-dca-dev').value = d.price_deviation_pct || 1.5;
+                document.getElementById('cfg-dca-scale').value = d.safety_order_step_scale || 1.2;
+                document.getElementById('cfg-dca-tp').value = d.take_profit_pct || 1.5;
+                document.getElementById('cfg-dca-sl').value = d.stop_loss_pct || 5;
+                var r = fullConfig.risk || {};
+                document.getElementById('cfg-risk-maxpos').value = r.max_positions || 5;
+                document.getElementById('cfg-risk-notional').value = r.max_notional_per_asset || 100;
+                document.getElementById('cfg-risk-minnot').value = r.min_notional || 2;
+                document.getElementById('cfg-risk-leverage').value = r.max_leverage || 20;
+            } catch(e) { console.error('Config load failed:', e); }
+        }
+        function saveConfig() {
+            fullConfig.grid = fullConfig.grid || {};
+            fullConfig.grid.investment_amount = parseFloat(document.getElementById('cfg-grid-investment').value);
+            fullConfig.grid.num_nodes = parseInt(document.getElementById('cfg-grid-nodes').value);
+            fullConfig.grid.min_step_size = parseFloat(document.getElementById('cfg-grid-step').value);
+            fullConfig.grid.max_range_pct = parseFloat(document.getElementById('cfg-grid-range').value);
+            fullConfig.dca = fullConfig.dca || {};
+            fullConfig.dca.base_order_size = parseFloat(document.getElementById('cfg-dca-base').value);
+            fullConfig.dca.max_safety_orders = parseInt(document.getElementById('cfg-dca-so').value);
+            fullConfig.dca.price_deviation_pct = parseFloat(document.getElementById('cfg-dca-dev').value);
+            fullConfig.dca.safety_order_step_scale = parseFloat(document.getElementById('cfg-dca-scale').value);
+            fullConfig.dca.take_profit_pct = parseFloat(document.getElementById('cfg-dca-tp').value);
+            fullConfig.dca.stop_loss_pct = parseFloat(document.getElementById('cfg-dca-sl').value);
+            fullConfig.risk = fullConfig.risk || {};
+            fullConfig.risk.max_positions = parseInt(document.getElementById('cfg-risk-maxpos').value);
+            fullConfig.risk.max_notional_per_asset = parseFloat(document.getElementById('cfg-risk-notional').value);
+            fullConfig.risk.min_notional = parseFloat(document.getElementById('cfg-risk-minnot').value);
+            fullConfig.risk.max_leverage = parseInt(document.getElementById('cfg-risk-leverage').value);
+            requestOtpForAction('/api/dashboard/config/save', { config: fullConfig }, 'Save configuration changes');
+        }
+        function reloadConfig() {
+            requestOtpForAction('/api/dashboard/config/reload', {}, 'Reload configuration (apply changes)');
+        }
+
+        // === SAFETY PANEL ===
+        async function loadSafetyPanel() {
+            try {
+                var [defResp, ovResp] = await Promise.all([
+                    fetch('/api/dashboard/config/defaults', { credentials: 'include' }),
+                    fetch('/api/dashboard/overview', { credentials: 'include' })
+                ]);
+                if (defResp.ok) {
+                    var d = await defResp.json();
+                    var r = d.risk || {};
+                    document.getElementById('safe-maxpos').textContent = r.max_positions || '-';
+                    document.getElementById('safe-minnot').textContent = '$' + (r.min_notional || 0);
+                    document.getElementById('safe-maxlev').textContent = (r.max_leverage || 20) + 'x';
+                }
+                if (ovResp.ok) {
+                    var ov = await ovResp.json();
+                    document.getElementById('safe-active').textContent = (ov.open_positions || 0) + ' / ' + (ov.active_grids || 0) + ' grids';
+                }
+                // Load emergency stop history from audit
+                var auditResp = await fetch('/api/dashboard/audit-log?action=EMERGENCY_STOP&limit=5', { credentials: 'include' });
+                if (auditResp.ok) {
+                    var auditData = await auditResp.json();
+                    var el = document.getElementById('estop-history');
+                    if (!auditData.entries.length) { el.textContent = 'No emergency stops recorded'; return; }
+                    el.innerHTML = auditData.entries.map(function(e) {
+                        return '<div class="mb-2 pb-2 border-b border-slate-700"><span class="text-red-400 font-semibold">' + e.created_at.substring(0,19) + '</span> by ' + e.user_id.substring(0,8) + '...<br><span class="text-slate-500">' + (e.details || '').substring(0,200) + '</span></div>';
+                    }).join('');
+                }
+            } catch(e) { console.error('Safety load failed:', e); }
+        }
+
+        // === AUDIT LOG ===
+        async function loadAuditLog() {
+            var search = document.getElementById('audit-search').value;
+            var action = document.getElementById('audit-action-filter').value;
+            var params = new URLSearchParams({ limit: '100', offset: '0' });
+            if (search) params.set('search', search);
+            if (action) params.set('action', action);
+            try {
+                var resp = await fetch('/api/dashboard/audit-log?' + params.toString(), { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                var tbody = document.getElementById('audit-table');
+                var noAudit = document.getElementById('no-audit');
+                document.getElementById('audit-total').textContent = 'Total: ' + data.total + ' entries';
+                if (!data.entries.length) { tbody.innerHTML = ''; noAudit.style.display = 'block'; return; }
+                noAudit.style.display = 'none';
+                tbody.innerHTML = data.entries.map(function(e) {
+                    return '<tr><td class="text-slate-400">' + (e.created_at || '').substring(0,19) + '</td>' +
+                        '<td class="text-slate-400">' + (e.user_id || '').substring(0,8) + '</td>' +
+                        '<td class="font-medium text-white">' + e.action + '</td>' +
+                        '<td>' + (e.resource || '') + '</td>' +
+                        '<td>' + (e.otp_verified ? '✅' : '❌') + '</td>' +
+                        '<td class="text-slate-500 text-xs max-w-xs truncate">' + (e.details || '').substring(0,150) + '</td></tr>';
+                }).join('');
+            } catch(e) { console.error('Audit load failed:', e); }
+        }
+
+        // === SIGNAL RECONCILIATION ===
+        async function loadOrphanedSignals() {
+            try {
+                var resp = await fetch('/api/dashboard/signals/orphaned', { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                var tbody = document.getElementById('orphan-table');
+                var noOrph = document.getElementById('no-orphans');
+                if (!data.orphaned.length) { tbody.innerHTML = ''; noOrph.style.display = 'block'; return; }
+                noOrph.style.display = 'none';
+                tbody.innerHTML = data.orphaned.map(function(s) {
+                    return '<tr><td><input type="checkbox" class="orphan-check" value="' + s.id + '"></td>' +
+                        '<td class="font-medium text-white">' + s.asset + '</td>' +
+                        '<td>' + s.signal + '</td>' +
+                        '<td>$' + (s.entry_price || 0).toLocaleString() + '</td>' +
+                        '<td class="text-slate-400">' + (s.timestamp || '').substring(0,19) + '</td>' +
+                        '<td class="text-yellow-400 text-xs">' + s.reason + '</td></tr>';
+                }).join('');
+            } catch(e) { console.error('Orphan detection failed:', e); }
+        }
+        function reconcileSelected() {
+            var ids = [];
+            document.querySelectorAll('.orphan-check:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
+            if (!ids.length) { alert('Select at least one signal to reconcile'); return; }
+            requestOtpForAction('/api/dashboard/signals/reconcile', { signal_ids: ids }, 'Reconcile ' + ids.length + ' orphaned signal(s)');
+        }
+
+        // Override showPage to trigger data loads
+        var _origShowPage = showPage;
+        showPage = function(page, el) {
+            _origShowPage(page, el);
+            if (page === 'config') loadConfigForEdit();
+            if (page === 'safety') loadSafetyPanel();
+            if (page === 'audit') loadAuditLog();
+            if (page === 'reconcile') loadOrphanedSignals();
+        };
+
+    
+        // === SYSTEM MONITOR ===
+        async function loadSystemMonitor() {
+            try {
+                var resp = await fetch('/api/dashboard/system/status', { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                var hrs = Math.floor((data.uptime_sec || 0) / 3600);
+                var mins = Math.floor(((data.uptime_sec || 0) % 3600) / 60);
+                document.getElementById('sys-uptime').textContent = hrs + 'h ' + mins + 'm';
+                document.getElementById('sys-autotrade').textContent = data.auto_trading ? 'ENABLED' : 'DISABLED';
+                document.getElementById('sys-autotrade').className = 'metric-value ' + (data.auto_trading ? 'text-green-400' : 'text-yellow-400');
+                var tasks = data.tasks || {};
+                var healthy = 0, total = 0;
+                var tbody = document.getElementById('sysmon-table');
+                var rows = '';
+                for (var name in tasks) {
+                    var t = tasks[name]; total++;
+                    if (t.status === 'healthy') healthy++;
+                    var statusColor = t.status === 'healthy' ? 'text-green-400' : t.status === 'stale' ? 'text-yellow-400' : t.status === 'degraded' ? 'text-red-400' : 'text-slate-500';
+                    var statusBadge = t.status === 'healthy' ? '&#x2705;' : t.status === 'stale' ? '&#x26A0;' : t.status === 'degraded' ? '&#x274C;' : '&#x2753;';
+                    var lastRun = t.last_run ? t.last_run.substring(0, 19).replace('T', ' ') : 'Never';
+                    rows += '<tr><td class="font-medium text-white">' + name.replace(/_/g, ' ') + '</td>' +
+                        '<td class="' + statusColor + '">' + statusBadge + ' ' + t.status.toUpperCase() + '</td>' +
+                        '<td class="text-slate-400">' + lastRun + '</td>' +
+                        '<td class="' + (t.error_count > 0 ? 'text-red-400' : 'text-slate-500') + '">' + t.error_count + '</td></tr>';
+                }
+                tbody.innerHTML = rows;
+                document.getElementById('sys-healthy').textContent = healthy + '/' + total;
+            } catch(e) { console.error('System monitor load failed:', e); }
+        }
+
+        // === ALERT CONFIG ===
+        async function loadAlertConfig() {
+            try {
+                var resp = await fetch('/api/dashboard/alerts/config', { credentials: 'include' });
+                if (!resp.ok) return;
+                var cfg = await resp.json();
+                document.getElementById('alert-master').checked = cfg.master_enabled !== false;
+                var g = cfg.groups || {};
+                document.getElementById('alert-trades').checked = g.trades_fills !== false;
+                document.getElementById('alert-errors').checked = g.errors_exceptions !== false;
+                document.getElementById('alert-scans').checked = g.routine_scans === true;
+            } catch(e) { console.error('Alert config load failed:', e); }
+        }
+        function saveAlertConfig() {
+            var payload = {
+                master_enabled: document.getElementById('alert-master').checked,
+                trades_fills: document.getElementById('alert-trades').checked,
+                errors_exceptions: document.getElementById('alert-errors').checked,
+                routine_scans: document.getElementById('alert-scans').checked,
+            };
+            requestOtpForAction('/api/dashboard/alerts/config', payload, 'Save alert preferences');
+        }
+
+        // === CHART.JS EQUITY CURVE ===
+        var equityChartInstance = null;
+        function drawEquityCurve(curve) {
+            var canvas = document.getElementById('equity-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (equityChartInstance) { equityChartInstance.destroy(); }
+            if (!curve || !curve.length) return;
+            var labels = curve.map(function(p, i) { return p.trade || (i + 1); });
+            var values = curve.map(function(p) { return typeof p === 'object' ? p.equity : p; });
+            equityChartInstance = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Equity ($)',
+                        data: values,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59,130,246,0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 10 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    },
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false }
+                }
+            });
+        }
+
+        // Override showPage for Phase 5 pages
+        var _prevShowPage = showPage;
+        showPage = function(page, el) {
+            _prevShowPage(page, el);
+            if (page === 'sysmon') loadSystemMonitor();
+            if (page === 'alerts') loadAlertConfig();
+        };
+
+    </script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { slate: { 850: '#1a2332', 950: '#0b1120' } } } }
+        }
+    
+        // === CONFIG EDITOR ===
+        var fullConfig = {};
+        function showConfigTab(tab, el) {
+            ['grid','dca','risk'].forEach(function(t) { document.getElementById('cfg-' + t).style.display = 'none'; });
+            document.getElementById('cfg-' + tab).style.display = 'block';
+            document.querySelectorAll('#page-config .tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            if (el) el.classList.add('active');
+        }
+        async function loadConfigForEdit() {
+            try {
+                var resp = await fetch('/api/dashboard/config/current', { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                fullConfig = data.config || {};
+                var g = fullConfig.grid || {};
+                document.getElementById('cfg-grid-investment').value = g.investment_amount || 30;
+                document.getElementById('cfg-grid-nodes').value = g.num_nodes || 10;
+                document.getElementById('cfg-grid-step').value = g.min_step_size || 0.5;
+                document.getElementById('cfg-grid-range').value = g.max_range_pct || 10;
+                var d = fullConfig.dca || {};
+                document.getElementById('cfg-dca-base').value = d.base_order_size || 5;
+                document.getElementById('cfg-dca-so').value = d.max_safety_orders || 5;
+                document.getElementById('cfg-dca-dev').value = d.price_deviation_pct || 1.5;
+                document.getElementById('cfg-dca-scale').value = d.safety_order_step_scale || 1.2;
+                document.getElementById('cfg-dca-tp').value = d.take_profit_pct || 1.5;
+                document.getElementById('cfg-dca-sl').value = d.stop_loss_pct || 5;
+                var r = fullConfig.risk || {};
+                document.getElementById('cfg-risk-maxpos').value = r.max_positions || 5;
+                document.getElementById('cfg-risk-notional').value = r.max_notional_per_asset || 100;
+                document.getElementById('cfg-risk-minnot').value = r.min_notional || 2;
+                document.getElementById('cfg-risk-leverage').value = r.max_leverage || 20;
+            } catch(e) { console.error('Config load failed:', e); }
+        }
+        function saveConfig() {
+            fullConfig.grid = fullConfig.grid || {};
+            fullConfig.grid.investment_amount = parseFloat(document.getElementById('cfg-grid-investment').value);
+            fullConfig.grid.num_nodes = parseInt(document.getElementById('cfg-grid-nodes').value);
+            fullConfig.grid.min_step_size = parseFloat(document.getElementById('cfg-grid-step').value);
+            fullConfig.grid.max_range_pct = parseFloat(document.getElementById('cfg-grid-range').value);
+            fullConfig.dca = fullConfig.dca || {};
+            fullConfig.dca.base_order_size = parseFloat(document.getElementById('cfg-dca-base').value);
+            fullConfig.dca.max_safety_orders = parseInt(document.getElementById('cfg-dca-so').value);
+            fullConfig.dca.price_deviation_pct = parseFloat(document.getElementById('cfg-dca-dev').value);
+            fullConfig.dca.safety_order_step_scale = parseFloat(document.getElementById('cfg-dca-scale').value);
+            fullConfig.dca.take_profit_pct = parseFloat(document.getElementById('cfg-dca-tp').value);
+            fullConfig.dca.stop_loss_pct = parseFloat(document.getElementById('cfg-dca-sl').value);
+            fullConfig.risk = fullConfig.risk || {};
+            fullConfig.risk.max_positions = parseInt(document.getElementById('cfg-risk-maxpos').value);
+            fullConfig.risk.max_notional_per_asset = parseFloat(document.getElementById('cfg-risk-notional').value);
+            fullConfig.risk.min_notional = parseFloat(document.getElementById('cfg-risk-minnot').value);
+            fullConfig.risk.max_leverage = parseInt(document.getElementById('cfg-risk-leverage').value);
+            requestOtpForAction('/api/dashboard/config/save', { config: fullConfig }, 'Save configuration changes');
+        }
+        function reloadConfig() {
+            requestOtpForAction('/api/dashboard/config/reload', {}, 'Reload configuration (apply changes)');
+        }
+
+        // === SAFETY PANEL ===
+        async function loadSafetyPanel() {
+            try {
+                var [defResp, ovResp] = await Promise.all([
+                    fetch('/api/dashboard/config/defaults', { credentials: 'include' }),
+                    fetch('/api/dashboard/overview', { credentials: 'include' })
+                ]);
+                if (defResp.ok) {
+                    var d = await defResp.json();
+                    var r = d.risk || {};
+                    document.getElementById('safe-maxpos').textContent = r.max_positions || '-';
+                    document.getElementById('safe-minnot').textContent = '$' + (r.min_notional || 0);
+                    document.getElementById('safe-maxlev').textContent = (r.max_leverage || 20) + 'x';
+                }
+                if (ovResp.ok) {
+                    var ov = await ovResp.json();
+                    document.getElementById('safe-active').textContent = (ov.open_positions || 0) + ' / ' + (ov.active_grids || 0) + ' grids';
+                }
+                // Load emergency stop history from audit
+                var auditResp = await fetch('/api/dashboard/audit-log?action=EMERGENCY_STOP&limit=5', { credentials: 'include' });
+                if (auditResp.ok) {
+                    var auditData = await auditResp.json();
+                    var el = document.getElementById('estop-history');
+                    if (!auditData.entries.length) { el.textContent = 'No emergency stops recorded'; return; }
+                    el.innerHTML = auditData.entries.map(function(e) {
+                        return '<div class="mb-2 pb-2 border-b border-slate-700"><span class="text-red-400 font-semibold">' + e.created_at.substring(0,19) + '</span> by ' + e.user_id.substring(0,8) + '...<br><span class="text-slate-500">' + (e.details || '').substring(0,200) + '</span></div>';
+                    }).join('');
+                }
+            } catch(e) { console.error('Safety load failed:', e); }
+        }
+
+        // === AUDIT LOG ===
+        async function loadAuditLog() {
+            var search = document.getElementById('audit-search').value;
+            var action = document.getElementById('audit-action-filter').value;
+            var params = new URLSearchParams({ limit: '100', offset: '0' });
+            if (search) params.set('search', search);
+            if (action) params.set('action', action);
+            try {
+                var resp = await fetch('/api/dashboard/audit-log?' + params.toString(), { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                var tbody = document.getElementById('audit-table');
+                var noAudit = document.getElementById('no-audit');
+                document.getElementById('audit-total').textContent = 'Total: ' + data.total + ' entries';
+                if (!data.entries.length) { tbody.innerHTML = ''; noAudit.style.display = 'block'; return; }
+                noAudit.style.display = 'none';
+                tbody.innerHTML = data.entries.map(function(e) {
+                    return '<tr><td class="text-slate-400">' + (e.created_at || '').substring(0,19) + '</td>' +
+                        '<td class="text-slate-400">' + (e.user_id || '').substring(0,8) + '</td>' +
+                        '<td class="font-medium text-white">' + e.action + '</td>' +
+                        '<td>' + (e.resource || '') + '</td>' +
+                        '<td>' + (e.otp_verified ? '✅' : '❌') + '</td>' +
+                        '<td class="text-slate-500 text-xs max-w-xs truncate">' + (e.details || '').substring(0,150) + '</td></tr>';
+                }).join('');
+            } catch(e) { console.error('Audit load failed:', e); }
+        }
+
+        // === SIGNAL RECONCILIATION ===
+        async function loadOrphanedSignals() {
+            try {
+                var resp = await fetch('/api/dashboard/signals/orphaned', { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                var tbody = document.getElementById('orphan-table');
+                var noOrph = document.getElementById('no-orphans');
+                if (!data.orphaned.length) { tbody.innerHTML = ''; noOrph.style.display = 'block'; return; }
+                noOrph.style.display = 'none';
+                tbody.innerHTML = data.orphaned.map(function(s) {
+                    return '<tr><td><input type="checkbox" class="orphan-check" value="' + s.id + '"></td>' +
+                        '<td class="font-medium text-white">' + s.asset + '</td>' +
+                        '<td>' + s.signal + '</td>' +
+                        '<td>$' + (s.entry_price || 0).toLocaleString() + '</td>' +
+                        '<td class="text-slate-400">' + (s.timestamp || '').substring(0,19) + '</td>' +
+                        '<td class="text-yellow-400 text-xs">' + s.reason + '</td></tr>';
+                }).join('');
+            } catch(e) { console.error('Orphan detection failed:', e); }
+        }
+        function reconcileSelected() {
+            var ids = [];
+            document.querySelectorAll('.orphan-check:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
+            if (!ids.length) { alert('Select at least one signal to reconcile'); return; }
+            requestOtpForAction('/api/dashboard/signals/reconcile', { signal_ids: ids }, 'Reconcile ' + ids.length + ' orphaned signal(s)');
+        }
+
+        // Override showPage to trigger data loads
+        var _origShowPage = showPage;
+        showPage = function(page, el) {
+            _origShowPage(page, el);
+            if (page === 'config') loadConfigForEdit();
+            if (page === 'safety') loadSafetyPanel();
+            if (page === 'audit') loadAuditLog();
+            if (page === 'reconcile') loadOrphanedSignals();
+        };
+
+    
+        // === SYSTEM MONITOR ===
+        async function loadSystemMonitor() {
+            try {
+                var resp = await fetch('/api/dashboard/system/status', { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                var hrs = Math.floor((data.uptime_sec || 0) / 3600);
+                var mins = Math.floor(((data.uptime_sec || 0) % 3600) / 60);
+                document.getElementById('sys-uptime').textContent = hrs + 'h ' + mins + 'm';
+                document.getElementById('sys-autotrade').textContent = data.auto_trading ? 'ENABLED' : 'DISABLED';
+                document.getElementById('sys-autotrade').className = 'metric-value ' + (data.auto_trading ? 'text-green-400' : 'text-yellow-400');
+                var tasks = data.tasks || {};
+                var healthy = 0, total = 0;
+                var tbody = document.getElementById('sysmon-table');
+                var rows = '';
+                for (var name in tasks) {
+                    var t = tasks[name]; total++;
+                    if (t.status === 'healthy') healthy++;
+                    var statusColor = t.status === 'healthy' ? 'text-green-400' : t.status === 'stale' ? 'text-yellow-400' : t.status === 'degraded' ? 'text-red-400' : 'text-slate-500';
+                    var statusBadge = t.status === 'healthy' ? '&#x2705;' : t.status === 'stale' ? '&#x26A0;' : t.status === 'degraded' ? '&#x274C;' : '&#x2753;';
+                    var lastRun = t.last_run ? t.last_run.substring(0, 19).replace('T', ' ') : 'Never';
+                    rows += '<tr><td class="font-medium text-white">' + name.replace(/_/g, ' ') + '</td>' +
+                        '<td class="' + statusColor + '">' + statusBadge + ' ' + t.status.toUpperCase() + '</td>' +
+                        '<td class="text-slate-400">' + lastRun + '</td>' +
+                        '<td class="' + (t.error_count > 0 ? 'text-red-400' : 'text-slate-500') + '">' + t.error_count + '</td></tr>';
+                }
+                tbody.innerHTML = rows;
+                document.getElementById('sys-healthy').textContent = healthy + '/' + total;
+            } catch(e) { console.error('System monitor load failed:', e); }
+        }
+
+        // === ALERT CONFIG ===
+        async function loadAlertConfig() {
+            try {
+                var resp = await fetch('/api/dashboard/alerts/config', { credentials: 'include' });
+                if (!resp.ok) return;
+                var cfg = await resp.json();
+                document.getElementById('alert-master').checked = cfg.master_enabled !== false;
+                var g = cfg.groups || {};
+                document.getElementById('alert-trades').checked = g.trades_fills !== false;
+                document.getElementById('alert-errors').checked = g.errors_exceptions !== false;
+                document.getElementById('alert-scans').checked = g.routine_scans === true;
+            } catch(e) { console.error('Alert config load failed:', e); }
+        }
+        function saveAlertConfig() {
+            var payload = {
+                master_enabled: document.getElementById('alert-master').checked,
+                trades_fills: document.getElementById('alert-trades').checked,
+                errors_exceptions: document.getElementById('alert-errors').checked,
+                routine_scans: document.getElementById('alert-scans').checked,
+            };
+            requestOtpForAction('/api/dashboard/alerts/config', payload, 'Save alert preferences');
+        }
+
+        // === CHART.JS EQUITY CURVE ===
+        var equityChartInstance = null;
+        function drawEquityCurve(curve) {
+            var canvas = document.getElementById('equity-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (equityChartInstance) { equityChartInstance.destroy(); }
+            if (!curve || !curve.length) return;
+            var labels = curve.map(function(p, i) { return p.trade || (i + 1); });
+            var values = curve.map(function(p) { return typeof p === 'object' ? p.equity : p; });
+            equityChartInstance = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Equity ($)',
+                        data: values,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59,130,246,0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 10 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    },
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false }
+                }
+            });
+        }
+
+        // Override showPage for Phase 5 pages
+        var _prevShowPage = showPage;
+        showPage = function(page, el) {
+            _prevShowPage(page, el);
+            if (page === 'sysmon') loadSystemMonitor();
+            if (page === 'alerts') loadAlertConfig();
+        };
+
+    </script>
+    <style>
+        body { background: #0b1120; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; }
+        .card { background: #1a2332; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; }
+        .metric-label { color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .metric-value { font-size: 1.5rem; font-weight: 700; }
+        .pnl-positive { color: #4ade80; } .pnl-negative { color: #f87171; } .pnl-neutral { color: #94a3b8; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+        th { text-align: left; padding: 10px 8px; color: #64748b; border-bottom: 1px solid #1e293b; font-weight: 600; white-space: nowrap; }
+        td { padding: 10px 8px; border-bottom: 1px solid #1e293b1a; white-space: nowrap; }
+        tr:hover td { background: #1e293b33; }
+        .sidebar-link { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 8px; color: #94a3b8; transition: all 0.2s; cursor: pointer; }
+        .sidebar-link:hover, .sidebar-link.active { background: #1e3a5f33; color: #60a5fa; border-left: 3px solid #3b82f6; }
+        .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+        .badge-buy { background: #16653433; color: #4ade80; } .badge-sell { background: #7f1d1d33; color: #f87171; }
+        .badge-grid { background: #4c1d9533; color: #a78bfa; } .badge-dca { background: #1e3a5f33; color: #60a5fa; }
+        #connection-status { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .connected { background: #4ade80; box-shadow: 0 0 6px #4ade80; } .disconnected { background: #f87171; box-shadow: 0 0 6px #f87171; }
+        .logout-btn { color: #64748b; font-size: 0.75rem; cursor: pointer; transition: color 0.2s; background: none; border: none; font-family: inherit; padding: 4px 0; }
+        .logout-btn:hover { color: #f87171; }
+        input, select { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font-family: inherit; outline: none; font-size: 0.85rem; width: 100%; box-sizing: border-box; }
+        input:focus, select:focus { border-color: #3b82f6; }
+        .btn { padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; font-size: 0.85rem; transition: all 0.2s; }
+        .btn-primary { background: #2563eb; color: white; } .btn-primary:hover { background: #1d4ed8; }
+        .btn-danger { background: #dc2626; color: white; } .btn-danger:hover { background: #b91c1c; }
+        .btn-secondary { background: #334155; color: #e2e8f0; } .btn-secondary:hover { background: #475569; }
+        .btn-success { background: #16a34a; color: white; } .btn-success:hover { background: #15803d; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 50; }
+        .modal-overlay.active { display: flex; }
+        .modal-card { background: #1a2332; border: 1px solid #1e293b; border-radius: 16px; padding: 32px; max-width: 440px; width: 90%; }
+        .bot-card { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+        .bot-card:hover { border-color: #3b82f6; transform: translateY(-2px); }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .tab-bar { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #1e293b; padding-bottom: 0; }
+        .tab-btn { padding: 10px 20px; color: #94a3b8; cursor: pointer; border: none; background: none; font-family: inherit; font-size: 0.85rem; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .tab-btn:hover { color: #e2e8f0; } .tab-btn.active { color: #60a5fa; border-bottom-color: #3b82f6; }
+        canvas { width: 100%; height: 250px; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-64 flex-shrink-0 border-r border-slate-800 flex flex-col">
+        <div class="p-6 border-b border-slate-800">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-xl">&#x1F916;</div>
+                <span class="text-xl font-bold tracking-tight text-white">MBIO</span>
+            </div>
+        </div>
+        <nav class="flex-1 p-4 space-y-1">
+            <div class="sidebar-link active" onclick="showPage('dashboard', this)">&#x1F4CA; Dashboard</div>
+            <div class="sidebar-link" onclick="showPage('positions', this)">&#x1F4C8; Positions</div>
+            <div class="sidebar-link" onclick="showPage('grids', this)">&#x1F532; Grids</div>
+            <div class="sidebar-link" onclick="showPage('create', this)">&#x2795; Create Bot</div>
+            <div class="sidebar-link" onclick="showPage('orders', this)">&#x1F4DD; Order Desk</div>
+            <div class="sidebar-link" onclick="showPage('history', this)">&#x1F4DC; Trade History</div>
+            <div class="sidebar-link" onclick="showPage('analytics', this)">&#x1F4C9; Analytics</div>
+            <div class="sidebar-link" onclick="showPage('config', this)">&#x2699; Config</div>
+            <div class="sidebar-link" onclick="showPage('safety', this)">&#x1F6E1; Safety</div>
+            <div class="sidebar-link" id="nav-audit" style="display:none;" onclick="showPage('audit', this)">&#x1F4CB; Audit Log</div>
+            <div class="sidebar-link" onclick="showPage('reconcile', this)">&#x1F527; Reconcile</div>
+            <div class="sidebar-link" onclick="showPage('sysmon', this)">&#x1F5A5; System</div>
+            <div class="sidebar-link" id="nav-alerts" style="display:none;" onclick="showPage('alerts', this)">&#x1F514; Alerts</div>
+        </nav>
+        <div class="p-4 border-t border-slate-800">
+            <div class="card !p-3">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="metric-label">Equity</span>
+                    <span id="sidebar-equity" class="text-white font-semibold">$0.00</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="metric-label">Today P/L</span>
+                    <span id="sidebar-pnl" class="pnl-neutral font-semibold">$0.00</span>
+                </div>
+                <div class="flex items-center gap-2 mt-3 pt-2 border-t border-slate-700">
+                    <span id="connection-status" class="disconnected"></span>
+                    <span id="connection-text" class="text-xs text-slate-400">Connecting...</span>
+                </div>
+                <div class="mt-3 pt-2 border-t border-slate-700 sidebar-user-info">
+                    <p id="user-name" class="text-sm font-medium text-white">Loading...</p>
+                    <p id="user-role" class="text-xs text-slate-400"></p>
+                    <button class="logout-btn" onclick="doLogout()">Sign Out</button>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto p-8">
+
+        <!-- Dashboard Page -->
+        <div id="page-dashboard">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold text-white">Dashboard Overview</h1>
+                <button id="emergency-stop-btn" class="btn btn-danger" style="display:none;" onclick="openEmergencyStopModal()">&#x26A0; EMERGENCY STOP</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div class="card"><div class="metric-label mb-1">Balance</div><div id="ov-balance" class="metric-value text-white">$0.00</div></div>
+                <div class="card"><div class="metric-label mb-1">Equity</div><div id="ov-equity" class="metric-value text-white">$0.00</div></div>
+                <div class="card"><div class="metric-label mb-1">Deployed</div><div id="ov-deployed" class="metric-value text-white">0%</div></div>
+                <div class="card"><div class="metric-label mb-1">Daily PnL</div><div id="ov-daily-pnl" class="metric-value pnl-neutral">0.00%</div></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div class="card"><div class="metric-label mb-1">Realized PnL</div><div id="ov-realized" class="text-xl font-bold pnl-neutral">$0.00</div></div>
+                <div class="card"><div class="metric-label mb-1">Unrealized PnL</div><div id="ov-unrealized" class="text-xl font-bold pnl-neutral">$0.00</div></div>
+                <div class="card"><div class="metric-label mb-1">Win Rate</div><div id="ov-winrate" class="text-xl font-bold text-white">N/A</div></div>
+            </div>
+            <div class="card">
+                <div class="metric-label mb-3">System Health</div>
+                <div id="health-checks" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm"></div>
+            </div>
+        </div>
+
+        <!-- Positions Page -->
+        <div id="page-positions" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Open Positions</h1>
+            <div class="card !p-0 overflow-x-auto">
+                <table>
+                    <thead><tr>
+                        <th>Asset</th><th>Side</th><th>Size</th><th>Entry</th><th>Current</th>
+                        <th>uPnL</th><th>PnL%</th><th>Margin</th><th>Liq Px</th><th>Leverage</th><th>ROE</th><th>SL</th><th>Strategy</th>
+                    </tr></thead>
+                    <tbody id="positions-table"></tbody>
+                </table>
+                <div id="no-positions" class="p-8 text-center text-slate-500" style="display:none;">No open positions</div>
+            </div>
+        </div>
+
+        <!-- Grids Page -->
+        <div id="page-grids" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Active Grids</h1>
+            <div id="grids-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            <div id="no-grids" class="card text-center text-slate-500 py-8" style="display:none;">No active grids</div>
+        </div>
+
+        <!-- Create Bot Page -->
+        <div id="page-create" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Create New Bot</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="card bot-card" onclick="showBotForm('dca')">
+                    <div class="flex items-center gap-3 mb-3">
+                        <span class="badge badge-dca">DCA BOT</span>
+                        <span class="text-lg font-bold text-white">Trend Trading</span>
+                    </div>
+                    <p class="text-slate-400 text-sm">Classic averaging strategy for trending markets. Accumulate on dips or rallies with configurable safety orders.</p>
+                </div>
+                <div class="card bot-card" onclick="showBotForm('grid')">
+                    <div class="flex items-center gap-3 mb-3">
+                        <span class="badge badge-grid">GRID BOT</span>
+                        <span class="text-lg font-bold text-white">Sideways Market</span>
+                    </div>
+                    <p class="text-slate-400 text-sm">Profit from small price movements in range-bound markets. Automated buy-low sell-high within defined range.</p>
+                </div>
+            </div>
+            <div id="dca-form" class="card" style="display:none;">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-white">Configure DCA Bot</h2>
+                    <button class="btn btn-secondary" onclick="hideBotForms()">Cancel</button>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group"><label>Asset</label><select id="dca-asset" class="dynamic-asset-select"></select></div>
+                    <div class="form-group"><label>Side</label><select id="dca-side"><option value="BUY">LONG (Buy)</option><option value="SELL">SHORT (Sell)</option></select></div>
+                    <div class="form-group"><label>Base Order Size ($)</label><input type="number" id="dca-base-size" step="0.1" min="1"></div>
+                    <div class="form-group"><label>Take Profit %</label><input type="number" id="dca-tp" step="0.1" min="0.1"></div>
+                    <div class="form-group"><label>Stop Loss %</label><input type="number" id="dca-sl" step="0.1" min="0.1"></div>
+                    <div class="form-group"><label>Max Safety Orders</label><input type="number" id="dca-max-so" step="1" min="1"></div>
+                </div>
+                <div class="mt-4"><button class="btn btn-primary" onclick="submitDcaOpen()">Open DCA Bot</button></div>
+            </div>
+            <div id="grid-form" class="card" style="display:none;">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-white">Configure Grid Bot</h2>
+                    <button class="btn btn-secondary" onclick="hideBotForms()">Cancel</button>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group"><label>Asset</label><select id="grid-asset" class="dynamic-asset-select"></select></div>
+                    <div class="form-group"><label>Investment ($)</label><input type="number" id="grid-investment" step="1" min="1"></div>
+                    <div class="form-group"><label>Lower Price</label><input type="number" id="grid-lower" step="0.01" min="0"></div>
+                    <div class="form-group"><label>Upper Price</label><input type="number" id="grid-upper" step="0.01" min="0"></div>
+                    <div class="form-group"><label>Number of Nodes</label><input type="number" id="grid-nodes" step="1" min="3"></div>
+                    <div class="form-group"><label>Mode</label><select id="grid-mode"><option value="RANGE">Range</option></select></div>
+                </div>
+                <div class="mt-4"><button class="btn btn-primary" onclick="submitGridOpen()">Open Grid Bot</button></div>
+            </div>
+        </div>
+
+        <!-- Order Desk Page -->
+        <div id="page-orders" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Order Desk</h1>
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="showOrderTab('market', this)">Market</button>
+                <button class="tab-btn" onclick="showOrderTab('limit', this)">Limit</button>
+                <button class="tab-btn" onclick="showOrderTab('stoplimit', this)">Stop-Limit</button>
+                <button class="tab-btn" onclick="showOrderTab('trailing', this)">Trailing Stop</button>
+            </div>
+            <div id="order-market" class="card">
+                <div class="form-grid">
+                    <div class="form-group"><label>Asset</label><select id="mkt-asset" class="dynamic-asset-select"></select></div>
+                    <div class="form-group"><label>Side</label><select id="mkt-side"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div>
+                    <div class="form-group"><label>Size</label><input type="number" id="mkt-size" step="0.0001" min="0.0001"></div>
+                </div>
+                <div class="mt-4"><button class="btn btn-success" onclick="submitMarketOrder()">Execute Market Order</button></div>
+            </div>
+            <div id="order-limit" class="card" style="display:none;">
+                <div class="form-grid">
+                    <div class="form-group"><label>Asset</label><select id="lmt-asset" class="dynamic-asset-select"></select></div>
+                    <div class="form-group"><label>Side</label><select id="lmt-side"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div>
+                    <div class="form-group"><label>Size</label><input type="number" id="lmt-size" step="0.0001" min="0.0001"></div>
+                    <div class="form-group"><label>Price ($)</label><input type="number" id="lmt-price" step="0.01" min="0"></div>
+                </div>
+                <div class="mt-4"><button class="btn btn-primary" onclick="submitLimitOrder()">Place Limit Order</button></div>
+            </div>
+            <div id="order-stoplimit" class="card" style="display:none;">
+                <div class="form-grid">
+                    <div class="form-group"><label>Asset</label><select id="sl-asset" class="dynamic-asset-select"></select></div>
+                    <div class="form-group"><label>Side</label><select id="sl-side"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div>
+                    <div class="form-group"><label>Size</label><input type="number" id="sl-size" step="0.0001" min="0.0001"></div>
+                    <div class="form-group"><label>Stop Price ($)</label><input type="number" id="sl-stop" step="0.01" min="0"></div>
+                    <div class="form-group"><label>Limit Price ($)</label><input type="number" id="sl-limit" step="0.01" min="0"></div>
+                </div>
+                <div class="mt-4"><button class="btn btn-primary" onclick="submitStopLimitOrder()">Place Stop-Limit</button></div>
+            </div>
+            <div id="order-trailing" class="card" style="display:none;">
+                <div class="form-grid">
+                    <div class="form-group"><label>Asset</label><select id="ts-asset" class="dynamic-asset-select"></select></div>
+                    <div class="form-group"><label>Side</label><select id="ts-side"><option value="SELL">SELL (Protect Long)</option><option value="BUY">BUY (Protect Short)</option></select></div>
+                    <div class="form-group"><label>Size</label><input type="number" id="ts-size" step="0.0001" min="0.0001"></div>
+                    <div class="form-group"><label>Trail %</label><input type="number" id="ts-trail" step="0.1" min="0.1" value="1.0"></div>
+                </div>
+                <div class="mt-4"><button class="btn btn-primary" onclick="submitTrailingStop()">Place Trailing Stop</button></div>
+            </div>
+        </div>
+
+        <!-- Trade History Page -->
+        <div id="page-history" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Trade History</h1>
+            <div class="card !p-0 overflow-x-auto">
+                <table>
+                    <thead><tr>
+                        <th>Date</th><th>Asset</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>PnL%</th><th>Strategy</th><th>Source</th>
+                    </tr></thead>
+                    <tbody id="history-table"></tbody>
+                </table>
+                <div id="no-history" class="p-8 text-center text-slate-500" style="display:none;">No trade history</div>
+            </div>
+        </div>
+
+        <!-- Analytics Page -->
+        <div id="page-analytics" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Performance Analytics</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div class="card"><div class="metric-label mb-1">Total Trades</div><div id="an-trades" class="metric-value text-white">0</div></div>
+                <div class="card"><div class="metric-label mb-1">Win Rate</div><div id="an-winrate" class="metric-value text-white">0%</div></div>
+                <div class="card"><div class="metric-label mb-1">Profit Factor</div><div id="an-pf" class="metric-value text-white">0</div></div>
+                <div class="card"><div class="metric-label mb-1">Sharpe Ratio</div><div id="an-sharpe" class="metric-value text-white">0</div></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div class="card"><div class="metric-label mb-1">Total PnL</div><div id="an-total-pnl" class="text-xl font-bold pnl-neutral">$0.00</div></div>
+                <div class="card"><div class="metric-label mb-1">Max Drawdown</div><div id="an-max-dd" class="text-xl font-bold pnl-negative">0%</div></div>
+                <div class="card"><div class="metric-label mb-1">Best / Worst</div><div id="an-best-worst" class="text-sm text-slate-400">$0 / $0</div></div>
+            </div>
+            <div class="card">
+                <div class="metric-label mb-3">Equity Curve</div>
+                <canvas id="equity-chart"></canvas>
+            </div>
+        </div>
+    
+        <!-- Config Page -->
+        <div id="page-config" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Configuration Management</h1>
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="showConfigTab('grid', this)">Grid</button>
+                <button class="tab-btn" onclick="showConfigTab('dca', this)">DCA</button>
+                <button class="tab-btn" onclick="showConfigTab('risk', this)">Risk Limits</button>
+            </div>
+            <div id="cfg-grid" class="card">
+                <div class="form-grid">
+                    <div class="form-group"><label>Investment Amount ($)</label><input type="number" id="cfg-grid-investment" step="1"></div>
+                    <div class="form-group"><label>Num Nodes</label><input type="number" id="cfg-grid-nodes" step="1"></div>
+                    <div class="form-group"><label>Mode</label><select id="cfg-grid-mode"><option value="RANGE">Range</option></select></div>
+                    <div class="form-group"><label>Min Step Size</label><input type="number" id="cfg-grid-step" step="0.01"></div>
+                    <div class="form-group"><label>Max Range %</label><input type="number" id="cfg-grid-range" step="0.1"></div>
+                </div>
+            </div>
+            <div id="cfg-dca" class="card" style="display:none;">
+                <div class="form-grid">
+                    <div class="form-group"><label>Base Order Size ($)</label><input type="number" id="cfg-dca-base" step="0.1"></div>
+                    <div class="form-group"><label>Max Safety Orders</label><input type="number" id="cfg-dca-so" step="1"></div>
+                    <div class="form-group"><label>Price Deviation %</label><input type="number" id="cfg-dca-dev" step="0.1"></div>
+                    <div class="form-group"><label>Safety Step Scale</label><input type="number" id="cfg-dca-scale" step="0.1"></div>
+                    <div class="form-group"><label>Take Profit %</label><input type="number" id="cfg-dca-tp" step="0.1"></div>
+                    <div class="form-group"><label>Stop Loss %</label><input type="number" id="cfg-dca-sl" step="0.1"></div>
+                </div>
+            </div>
+            <div id="cfg-risk" class="card" style="display:none;">
+                <div class="form-grid">
+                    <div class="form-group"><label>Max Positions</label><input type="number" id="cfg-risk-maxpos" step="1"></div>
+                    <div class="form-group"><label>Max Notional/Asset ($)</label><input type="number" id="cfg-risk-notional" step="1"></div>
+                    <div class="form-group"><label>Min Notional ($)</label><input type="number" id="cfg-risk-minnot" step="0.1"></div>
+                    <div class="form-group"><label>Max Leverage</label><input type="number" id="cfg-risk-leverage" step="1"></div>
+                </div>
+            </div>
+            <div class="mt-4 flex gap-3">
+                <button class="btn btn-primary" onclick="saveConfig()">Save Config</button>
+                <button class="btn btn-success" onclick="reloadConfig()">Apply Changes</button>
+            </div>
+            <p class="text-xs text-slate-500 mt-3">Backup created automatically on save. Manual reload required to activate changes.</p>
+        </div>
+
+        <!-- Safety Page -->
+        <div id="page-safety" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Safety Features</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div class="card"><div class="metric-label mb-1">Max Positions</div><div id="safe-maxpos" class="metric-value text-white">-</div></div>
+                <div class="card"><div class="metric-label mb-1">Min Notional</div><div id="safe-minnot" class="metric-value text-white">-</div></div>
+                <div class="card"><div class="metric-label mb-1">Max Leverage</div><div id="safe-maxlev" class="metric-value text-white">-</div></div>
+                <div class="card"><div class="metric-label mb-1">Active Positions</div><div id="safe-active" class="metric-value text-white">-</div></div>
+            </div>
+            <div class="card">
+                <div class="metric-label mb-3">Emergency Stop History</div>
+                <div id="estop-history" class="text-sm text-slate-400">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Audit Log Page (ADMIN only) -->
+        <div id="page-audit" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Audit Log</h1>
+            <div class="flex gap-3 mb-4">
+                <input type="text" id="audit-search" placeholder="Search resource/details..." style="max-width:300px;">
+                <select id="audit-action-filter" style="max-width:200px;">
+                    <option value="">All Actions</option>
+                    <option value="LOGIN">Login</option>
+                    <option value="LOGOUT">Logout</option>
+                    <option value="GRID_OPEN">Grid Open</option>
+                    <option value="GRID_CLOSE">Grid Close</option>
+                    <option value="DCA_OPEN">DCA Open</option>
+                    <option value="ORDER_MARKET">Market Order</option>
+                    <option value="ORDER_LIMIT">Limit Order</option>
+                    <option value="EMERGENCY_STOP">Emergency Stop</option>
+                    <option value="CONFIG_SAVE">Config Save</option>
+                    <option value="SIGNAL_RECONCILE">Reconcile</option>
+                </select>
+                <button class="btn btn-primary" onclick="loadAuditLog()">Search</button>
+            </div>
+            <div class="card !p-0 overflow-x-auto">
+                <table>
+                    <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Resource</th><th>OTP</th><th>Details</th></tr></thead>
+                    <tbody id="audit-table"></tbody>
+                </table>
+                <div id="no-audit" class="p-8 text-center text-slate-500" style="display:none;">No audit entries</div>
+            </div>
+            <div class="mt-3 text-xs text-slate-500">Showing last 90 days. <span id="audit-total"></span></div>
+        </div>
+
+        <!-- Reconciliation Page -->
+        <div id="page-reconcile" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Signal Reconciliation</h1>
+            <p class="text-slate-400 text-sm mb-4">Signals flagged below have no matching exchange position. Select and reconcile manually.</p>
+            <div class="card !p-0 overflow-x-auto">
+                <table>
+                    <thead><tr><th>Select</th><th>Asset</th><th>Signal</th><th>Entry</th><th>Timestamp</th><th>Reason</th></tr></thead>
+                    <tbody id="orphan-table"></tbody>
+                </table>
+                <div id="no-orphans" class="p-8 text-center text-green-400" style="display:none;">✅ No orphaned signals detected</div>
+            </div>
+            <div class="mt-4"><button class="btn btn-danger" onclick="reconcileSelected()">Reconcile Selected</button></div>
+        </div>
+
+    
+        <!-- System Monitor Page -->
+        <div id="page-sysmon" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">System Monitoring</h1>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="card"><div class="metric-label mb-1">Uptime</div><div id="sys-uptime" class="metric-value text-white">-</div></div>
+                <div class="card"><div class="metric-label mb-1">Auto Trading</div><div id="sys-autotrade" class="metric-value text-white">-</div></div>
+                <div class="card"><div class="metric-label mb-1">Tasks Healthy</div><div id="sys-healthy" class="metric-value text-green-400">-</div></div>
+            </div>
+            <div class="card !p-0 overflow-x-auto">
+                <table>
+                    <thead><tr><th>Task</th><th>Status</th><th>Last Run</th><th>Errors</th></tr></thead>
+                    <tbody id="sysmon-table"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Alert Config Page (ADMIN only) -->
+        <div id="page-alerts" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Alert Configuration</h1>
+            <div class="card">
+                <div class="form-group">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" id="alert-master" style="width:auto;">
+                        <span class="text-white font-semibold text-lg">Master Enable</span>
+                    </label>
+                    <p class="text-slate-500 text-xs mt-1 ml-8">When disabled, no Telegram notifications are sent.</p>
+                </div>
+                <div class="border-t border-slate-700 my-4"></div>
+                <div class="metric-label mb-3">Notification Groups</div>
+                <div class="space-y-3 ml-2">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" id="alert-trades" style="width:auto;">
+                        <span class="text-slate-300">Trades & Fills</span>
+                        <span class="text-slate-600 text-xs">— Order executions, position opens/closes</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" id="alert-errors" style="width:auto;">
+                        <span class="text-slate-300">Errors & Exceptions</span>
+                        <span class="text-slate-600 text-xs">— API failures, execution errors, crashes</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" id="alert-scans" style="width:auto;">
+                        <span class="text-slate-300">Routine Scans</span>
+                        <span class="text-slate-600 text-xs">— Periodic analysis results, signal detections</span>
+                    </label>
+                </div>
+                <div class="mt-6">
+                    <button class="btn btn-primary" onclick="saveAlertConfig()">Save Alert Preferences</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- OTP Modal -->
+    <div id="otp-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h2 class="text-xl font-bold text-white mb-2">&#x1F510; Confirm Action</h2>
+            <p class="text-slate-400 text-sm mb-4" id="otp-description">Enter the OTP code sent to your Telegram.</p>
+            <div class="form-group"><label>OTP Code</label><input type="text" id="otp-input" placeholder="000000" maxlength="6" style="text-align:center; font-size:1.5rem; letter-spacing:0.3em;"></div>
+            <div id="otp-error" class="text-red-400 text-sm mb-3" style="display:none;"></div>
+            <div class="flex gap-3 mt-4">
+                <button class="btn btn-primary flex-1" id="otp-confirm-btn" onclick="confirmOtpAction()">Confirm</button>
+                <button class="btn btn-secondary flex-1" onclick="closeOtpModal()">Cancel</button>
+            </div>
+            <button class="text-xs text-slate-500 mt-3 w-full text-center hover:text-blue-400" onclick="resendOtp()">Resend OTP</button>
+        </div>
+    </div>
+
+    <!-- Emergency Stop Modal -->
+    <div id="estop-modal" class="modal-overlay">
+        <div class="modal-card" style="border-color:#dc2626;">
+            <h2 class="text-xl font-bold text-red-400 mb-2">&#x26A0; EMERGENCY STOP</h2>
+            <p class="text-slate-300 text-sm mb-4">This will <b>cancel ALL open orders</b> and <b>close ALL positions</b> immediately.</p>
+            <div class="form-group"><label>Type CONFIRM</label><input type="text" id="estop-confirm-input" placeholder="Type CONFIRM" style="text-transform:uppercase;"></div>
+            <div class="form-group"><label>OTP Code</label><input type="text" id="estop-otp-input" placeholder="000000" maxlength="6" style="text-align:center; font-size:1.5rem; letter-spacing:0.3em;"></div>
+            <div id="estop-error" class="text-red-400 text-sm mb-3" style="display:none;"></div>
+            <div class="flex gap-3 mt-4">
+                <button class="btn btn-danger flex-1" onclick="executeEmergencyStop()">EXECUTE STOP</button>
+                <button class="btn btn-secondary flex-1" onclick="closeEstopModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var eventSource = null;
+        var configDefaults = {};
+        var currentUser = null;
+        var pendingAction = null;
+        var availableAssets = [];
+
+        // === AUTH GUARD ===
+        (async function checkAuth() {
+            try {
+                var resp = await fetch('/api/dashboard/auth/me', { credentials: 'include' });
+                if (!resp.ok) { window.location.href = '/login'; return; }
+                currentUser = await resp.json();
+                document.getElementById('user-name').textContent = currentUser.first_name ? (currentUser.first_name + ' ' + (currentUser.last_name || '')) : currentUser.email;
+                document.getElementById('user-role').textContent = currentUser.role;
+                if (currentUser.role === 'ADMIN') document.getElementById('emergency-stop-btn').style.display = 'inline-block';
+                if (currentUser.role === 'ADMIN') document.getElementById('nav-audit').style.display = 'flex';
+                if (currentUser.role === 'ADMIN') { var ae = document.getElementById('nav-alerts'); if(ae) ae.style.display = 'flex'; }
+            } catch (e) { window.location.href = '/login'; }
+        })();
+
+        // Load YAML-driven defaults + dynamic assets
+        (async function loadConfig() {
+            try {
+                var [defResp, assetResp] = await Promise.all([
+                    fetch('/api/dashboard/config/defaults', { credentials: 'include' }),
+                    fetch('/api/dashboard/config/assets', { credentials: 'include' })
+                ]);
+                if (defResp.ok) {
+                    configDefaults = await defResp.json();
+                    var d = configDefaults.dca || {};
+                    document.getElementById('dca-base-size').value = d.base_order_size || 5;
+                    document.getElementById('dca-tp').value = d.take_profit_pct || 1.5;
+                    document.getElementById('dca-sl').value = d.stop_loss_pct || 5;
+                    document.getElementById('dca-max-so').value = d.max_safety_orders || 5;
+                    var g = configDefaults.grid || {};
+                    document.getElementById('grid-investment').value = g.investment_amount || 30;
+                    document.getElementById('grid-nodes').value = g.num_nodes || 10;
+                }
+                if (assetResp.ok) {
+                    var assetData = await assetResp.json();
+                    availableAssets = assetData.assets || [];
+                    document.querySelectorAll('.dynamic-asset-select').forEach(function(sel) {
+                        sel.innerHTML = availableAssets.map(function(a) {
+                            return '<option value="' + a.symbol + '">' + a.symbol + '</option>';
+                        }).join('');
+                    });
+                }
+            } catch (e) { console.error('Config load failed:', e); }
+        })();
+
+        function doLogout() { fetch('/api/dashboard/auth/logout', { method: 'POST', credentials: 'include' }).then(function() { window.location.href = '/login'; }); }
+
+        function showPage(page, el) {
+            document.querySelectorAll('[id^="page-"]').forEach(function(e) { e.style.display = 'none'; });
+            document.getElementById('page-' + page).style.display = 'block';
+            document.querySelectorAll('.sidebar-link').forEach(function(e) { e.classList.remove('active'); });
+            if (el) el.classList.add('active');
+            hideBotForms();
+            if (page === 'history') loadTradeHistory();
+            if (page === 'analytics') loadAnalytics();
+        }
+
+        // === BOT FORMS ===
+        function showBotForm(type) { hideBotForms(); document.getElementById(type + '-form').style.display = 'block'; }
+        function hideBotForms() { document.getElementById('dca-form').style.display = 'none'; document.getElementById('grid-form').style.display = 'none'; }
+
+        // === ORDER DESK TABS ===
+        function showOrderTab(tab, el) {
+            ['market','limit','stoplimit','trailing'].forEach(function(t) { document.getElementById('order-' + t).style.display = 'none'; });
+            document.getElementById('order-' + tab).style.display = 'block';
+            document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            if (el) el.classList.add('active');
+        }
+
+        // === OTP FLOW ===
+        async function requestOtpForAction(endpoint, payload, description) {
+            pendingAction = { endpoint: endpoint, payload: payload };
+            document.getElementById('otp-description').textContent = description;
+            document.getElementById('otp-input').value = '';
+            document.getElementById('otp-error').style.display = 'none';
+            document.getElementById('otp-modal').classList.add('active');
+            try {
+                var resp = await fetch('/api/dashboard/auth/otp/request', { method: 'POST', credentials: 'include' });
+                if (!resp.ok) { var data = await resp.json(); document.getElementById('otp-error').textContent = data.detail || 'Failed to send OTP'; document.getElementById('otp-error').style.display = 'block'; }
+            } catch (e) { document.getElementById('otp-error').textContent = 'Network error sending OTP'; document.getElementById('otp-error').style.display = 'block'; }
+        }
+        function closeOtpModal() { document.getElementById('otp-modal').classList.remove('active'); pendingAction = null; }
+        async function resendOtp() { try { await fetch('/api/dashboard/auth/otp/request', { method: 'POST', credentials: 'include' }); document.getElementById('otp-error').textContent = 'OTP resent'; document.getElementById('otp-error').style.display = 'block'; } catch(e){} }
+        async function confirmOtpAction() {
+            if (!pendingAction) return;
+            var otp = document.getElementById('otp-input').value.trim();
+            if (otp.length !== 6) { document.getElementById('otp-error').textContent = 'Enter 6-digit OTP'; document.getElementById('otp-error').style.display = 'block'; return; }
+            var btn = document.getElementById('otp-confirm-btn'); btn.disabled = true; btn.textContent = 'Executing...';
+            try {
+                var body = Object.assign({}, pendingAction.payload, { otp: otp });
+                var resp = await fetch(pendingAction.endpoint, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                var data = await resp.json();
+                if (resp.ok) { closeOtpModal(); alert(data.message || 'Action completed'); }
+                else { document.getElementById('otp-error').textContent = data.detail || 'Action failed'; document.getElementById('otp-error').style.display = 'block'; }
+            } catch (e) { document.getElementById('otp-error').textContent = 'Network error'; document.getElementById('otp-error').style.display = 'block'; }
+            btn.disabled = false; btn.textContent = 'Confirm';
+        }
+
+        // === WRITE ACTIONS ===
+        function submitDcaOpen() {
+            var payload = { asset: document.getElementById('dca-asset').value, side: document.getElementById('dca-side').value,
+                base_order_size: parseFloat(document.getElementById('dca-base-size').value), take_profit_pct: parseFloat(document.getElementById('dca-tp').value), stop_loss_pct: parseFloat(document.getElementById('dca-sl').value) };
+            requestOtpForAction('/api/dashboard/dca/open', payload, 'Open DCA: ' + payload.side + ' ' + payload.asset);
+        }
+        function submitGridOpen() {
+            var payload = { asset: document.getElementById('grid-asset').value, lower_price: parseFloat(document.getElementById('grid-lower').value),
+                upper_price: parseFloat(document.getElementById('grid-upper').value), investment_amount: parseFloat(document.getElementById('grid-investment').value), num_nodes: parseInt(document.getElementById('grid-nodes').value) };
+            if (payload.lower_price >= payload.upper_price) { alert('Lower must be less than upper'); return; }
+            requestOtpForAction('/api/dashboard/grid/open', payload, 'Open Grid: ' + payload.asset);
+        }
+        function submitMarketOrder() {
+            var payload = { asset: document.getElementById('mkt-asset').value, side: document.getElementById('mkt-side').value, size: parseFloat(document.getElementById('mkt-size').value) };
+            requestOtpForAction('/api/dashboard/order/market', payload, 'Market ' + payload.side + ' ' + payload.size + ' ' + payload.asset);
+        }
+        function submitLimitOrder() {
+            var payload = { asset: document.getElementById('lmt-asset').value, side: document.getElementById('lmt-side').value,
+                size: parseFloat(document.getElementById('lmt-size').value), price: parseFloat(document.getElementById('lmt-price').value) };
+            requestOtpForAction('/api/dashboard/order/limit', payload, 'Limit ' + payload.side + ' ' + payload.size + ' ' + payload.asset + ' @ $' + payload.price);
+        }
+        function submitStopLimitOrder() {
+            var payload = { asset: document.getElementById('sl-asset').value, side: document.getElementById('sl-side').value,
+                size: parseFloat(document.getElementById('sl-size').value), stop_price: parseFloat(document.getElementById('sl-stop').value), limit_price: parseFloat(document.getElementById('sl-limit').value) };
+            requestOtpForAction('/api/dashboard/order/stop-limit', payload, 'Stop-Limit ' + payload.side + ' ' + payload.asset);
+        }
+        function submitTrailingStop() {
+            var payload = { asset: document.getElementById('ts-asset').value, side: document.getElementById('ts-side').value,
+                size: parseFloat(document.getElementById('ts-size').value), trail_pct: parseFloat(document.getElementById('ts-trail').value) };
+            requestOtpForAction('/api/dashboard/order/trailing-stop', payload, 'Trailing Stop ' + payload.side + ' ' + payload.asset + ' (' + payload.trail_pct + '%)');
+        }
+
+        // === EMERGENCY STOP ===
+        function openEmergencyStopModal() {
+            document.getElementById('estop-confirm-input').value = ''; document.getElementById('estop-otp-input').value = '';
+            document.getElementById('estop-error').style.display = 'none'; document.getElementById('estop-modal').classList.add('active');
+            fetch('/api/dashboard/auth/otp/request', { method: 'POST', credentials: 'include' }).catch(function(){});
+        }
+        function closeEstopModal() { document.getElementById('estop-modal').classList.remove('active'); }
+        async function executeEmergencyStop() {
+            var c = document.getElementById('estop-confirm-input').value.trim().toUpperCase();
+            var otp = document.getElementById('estop-otp-input').value.trim();
+            if (c !== 'CONFIRM') { document.getElementById('estop-error').textContent = 'Type CONFIRM'; document.getElementById('estop-error').style.display = 'block'; return; }
+            if (otp.length !== 6) { document.getElementById('estop-error').textContent = 'Enter 6-digit OTP'; document.getElementById('estop-error').style.display = 'block'; return; }
+            try {
+                var resp = await fetch('/api/dashboard/emergency-stop', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ otp: otp, confirm: true }) });
+                var data = await resp.json();
+                if (resp.ok) { closeEstopModal(); alert(data.message); } else { document.getElementById('estop-error').textContent = data.detail; document.getElementById('estop-error').style.display = 'block'; }
+            } catch (e) { document.getElementById('estop-error').textContent = 'Network error'; document.getElementById('estop-error').style.display = 'block'; }
+        }
+
+        // === TRADE HISTORY ===
+        async function loadTradeHistory() {
+            try {
+                var resp = await fetch('/api/dashboard/trade-history?limit=100', { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                var tbody = document.getElementById('history-table');
+                var noHist = document.getElementById('no-history');
+                if (!data.trades.length) { tbody.innerHTML = ''; noHist.style.display = 'block'; return; }
+                noHist.style.display = 'none';
+                tbody.innerHTML = data.trades.map(function(t) {
+                    return '<tr>' +
+                        '<td class="text-slate-400">' + (t.closed_at || t.opened_at || '').substring(0, 19) + '</td>' +
+                        '<td class="font-medium text-white">' + t.asset + '</td>' +
+                        '<td><span class="badge ' + (t.side === 'BUY' ? 'badge-buy' : 'badge-sell') + '">' + t.side + '</span></td>' +
+                        '<td>$' + (t.entry || 0).toLocaleString() + '</td>' +
+                        '<td>$' + (t.exit || 0).toLocaleString() + '</td>' +
+                        '<td class="' + pnlClass(t.pnl) + '">' + formatPnl(t.pnl) + '</td>' +
+                        '<td class="' + pnlClass(t.pnl_pct) + '">' + (t.pnl_pct >= 0 ? '+' : '') + (t.pnl_pct || 0).toFixed(2) + '%</td>' +
+                        '<td class="text-slate-400">' + t.strategy + '</td>' +
+                        '<td class="text-slate-500">' + t.source + '</td></tr>';
+                }).join('');
+            } catch (e) { console.error('History load failed:', e); }
+        }
+
+        // === ANALYTICS ===
+        async function loadAnalytics() {
+            try {
+                var resp = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (!resp.ok) return;
+                var d = await resp.json();
+                document.getElementById('an-trades').textContent = d.total_trades;
+                document.getElementById('an-winrate').textContent = d.win_rate + '%';
+                document.getElementById('an-pf').textContent = d.profit_factor === Infinity ? '∞' : d.profit_factor;
+                document.getElementById('an-sharpe').textContent = d.sharpe_ratio;
+                var tpEl = document.getElementById('an-total-pnl');
+                tpEl.textContent = formatPnl(d.total_pnl); tpEl.className = 'text-xl font-bold ' + pnlClass(d.total_pnl);
+                document.getElementById('an-max-dd').textContent = '-' + d.max_drawdown_pct + '%';
+                document.getElementById('an-best-worst').textContent = formatPnl(d.best_trade) + ' / ' + formatPnl(d.worst_trade);
+                drawEquityCurve(d.equity_curve || []);
+            } catch (e) { console.error('Analytics load failed:', e); }
+        }
+
+        function drawEquityCurve(curve) {
+            var canvas = document.getElementById('equity-chart');
+            var ctx = canvas.getContext('2d');
+            canvas.width = canvas.offsetWidth * 2; canvas.height = 500;
+            ctx.scale(2, 2);
+            var w = canvas.offsetWidth, h = 250;
+            ctx.clearRect(0, 0, w, h);
+            if (!curve.length) { ctx.fillStyle = '#64748b'; ctx.font = '14px monospace'; ctx.fillText('No trade data yet', w/2 - 60, h/2); return; }
+            var min = Math.min.apply(null, curve), max = Math.max.apply(null, curve);
+            var range = max - min || 1;
+            var pad = 20;
+            ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.beginPath();
+            for (var i = 0; i < curve.length; i++) {
+                var x = pad + (i / (curve.length - 1 || 1)) * (w - pad * 2);
+                var y = h - pad - ((curve[i] - min) / range) * (h - pad * 2);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            // Zero line
+            if (min < 0 && max > 0) {
+                var zeroY = h - pad - ((0 - min) / range) * (h - pad * 2);
+                ctx.strokeStyle = '#334155'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+                ctx.beginPath(); ctx.moveTo(pad, zeroY); ctx.lineTo(w - pad, zeroY); ctx.stroke(); ctx.setLineDash([]);
+            }
+        }
+
+        // === DATA RENDERING ===
+        function formatUsd(v) { return '$' + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+        function formatPnl(v) { return (v >= 0 ? '+' : '-') + formatUsd(v); }
+        function pnlClass(v) { return v > 0 ? 'pnl-positive' : v < 0 ? 'pnl-negative' : 'pnl-neutral'; }
+
+        function updateOverview(data) {
+            document.getElementById('ov-balance').textContent = formatUsd(data.balance);
+            document.getElementById('ov-equity').textContent = formatUsd(data.equity);
+            document.getElementById('ov-deployed').textContent = (data.deployed_pct != null ? data.deployed_pct : 0) + '%';
+            var dpEl = document.getElementById('ov-daily-pnl');
+            dpEl.textContent = (data.daily_pnl_pct >= 0 ? '+' : '') + (data.daily_pnl_pct || 0).toFixed(2) + '%';
+            dpEl.className = 'metric-value ' + pnlClass(data.daily_pnl_pct);
+            var rEl = document.getElementById('ov-realized'); rEl.textContent = formatPnl(data.realized_pnl_usd || 0); rEl.className = 'text-xl font-bold ' + pnlClass(data.realized_pnl_usd);
+            var uEl = document.getElementById('ov-unrealized'); uEl.textContent = formatPnl(data.unrealized_pnl_usd || 0); uEl.className = 'text-xl font-bold ' + pnlClass(data.unrealized_pnl_usd);
+            document.getElementById('ov-winrate').textContent = data.win_rate || 'N/A';
+            document.getElementById('sidebar-equity').textContent = formatUsd(data.equity);
+            var spEl = document.getElementById('sidebar-pnl'); spEl.textContent = formatPnl(data.unrealized_pnl_usd || 0); spEl.className = 'font-semibold ' + pnlClass(data.unrealized_pnl_usd);
+        }
+
+        function updatePositions(positions) {
+            var tbody = document.getElementById('positions-table'); var noPos = document.getElementById('no-positions');
+            if (!positions.length) { tbody.innerHTML = ''; noPos.style.display = 'block'; return; }
+            noPos.style.display = 'none';
+            tbody.innerHTML = positions.map(function(p) {
+                return '<tr><td class="font-medium text-white">' + p.asset + '</td>' +
+                    '<td><span class="badge ' + (p.side === 'BUY' ? 'badge-buy' : 'badge-sell') + '">' + p.side + '</span></td>' +
+                    '<td>' + p.size.toFixed(6) + '</td><td>$' + p.entry.toLocaleString() + '</td><td>$' + p.current.toLocaleString() + '</td>' +
+                    '<td class="' + pnlClass(p.upnl) + '">' + formatPnl(p.upnl) + '</td>' +
+                    '<td class="' + pnlClass(p.pnl_pct) + '">' + (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%</td>' +
+                    '<td>$' + (p.margin_used || 0).toFixed(2) + '</td><td>$' + (p.liquidation_px || 0).toLocaleString() + '</td>' +
+                    '<td>' + (p.leverage || 1) + 'x</td><td class="' + pnlClass(p.roe) + '">' + (p.roe || 0).toFixed(2) + '%</td>' +
+                    '<td>$' + (p.sl || 0).toLocaleString() + '</td><td class="text-slate-400">' + p.strategy + '</td></tr>';
+            }).join('');
+        }
+
+        function updateGrids(grids) {
+            var container = document.getElementById('grids-container'); var noGrids = document.getElementById('no-grids');
+            if (!grids.length) { container.innerHTML = ''; noGrids.style.display = 'block'; return; }
+            noGrids.style.display = 'none';
+            container.innerHTML = grids.map(function(g) {
+                return '<div class="card"><div class="flex items-center justify-between mb-3">' +
+                    '<div class="flex items-center gap-2"><span class="badge badge-grid">GRID</span><span class="text-lg font-bold text-white">' + g.asset + '</span></div>' +
+                    '<span class="text-xs text-slate-400">' + g.mode + '</span></div>' +
+                    '<div class="grid grid-cols-2 gap-3 text-sm">' +
+                    '<div><span class="metric-label">Range</span><br>$' + g.lower_price.toLocaleString() + ' - $' + g.upper_price.toLocaleString() + '</div>' +
+                    '<div><span class="metric-label">Step</span><br>$' + g.step_size.toFixed(2) + '</div>' +
+                    '<div><span class="metric-label">Nodes</span><br>' + g.nodes_active + '/' + g.nodes_total + '</div>' +
+                    '<div><span class="metric-label">Cycles</span><br>' + g.cycles + '</div>' +
+                    '<div><span class="metric-label">Investment</span><br>$' + g.investment.toFixed(2) + '</div>' +
+                    '<div><span class="metric-label">Realized PnL</span><br><span class="' + pnlClass(g.realized_pnl) + '">' + formatPnl(g.realized_pnl) + '</span></div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        // === SSE ===
+        function connectSSE() {
+            if (eventSource) eventSource.close();
+            eventSource = new EventSource('/api/dashboard/stream', { withCredentials: true });
+            eventSource.onopen = function() { document.getElementById('connection-status').className = 'connected'; document.getElementById('connection-text').textContent = 'Live'; };
+            eventSource.onmessage = function(event) {
+                try { var data = JSON.parse(event.data); if (data.error) return; updateOverview(data); updatePositions(data.positions || []); updateGrids(data.grids || []); } catch(e) {}
+            };
+            eventSource.onerror = function() { document.getElementById('connection-status').className = 'disconnected'; document.getElementById('connection-text').textContent = 'Reconnecting...'; setTimeout(connectSSE, 5000); };
+        }
+
+        fetch('/api/dashboard/health', { credentials: 'include' }).then(function(r) { return r.json(); }).then(function(data) {
+            var el = document.getElementById('health-checks'); var checks = data.checks || {}; var html = '';
+            for (var k in checks) { var v = checks[k]; html += '<div class="flex items-center gap-2">' + (v ? '&#x2705;' : '&#x274C;') + ' <span class="' + (v ? 'text-green-400' : 'text-red-400') + '">' + k.replace(/_/g, ' ') + '</span></div>'; }
+            el.innerHTML = html;
+        }).catch(function() {});
+
+        connectSSE();
+    
+        // === CONFIG EDITOR ===
+        var fullConfig = {};
+        function showConfigTab(tab, el) {
+            ['grid','dca','risk'].forEach(function(t) { document.getElementById('cfg-' + t).style.display = 'none'; });
+            document.getElementById('cfg-' + tab).style.display = 'block';
+            document.querySelectorAll('#page-config .tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            if (el) el.classList.add('active');
+        }
+        async function loadConfigForEdit() {
+            try {
+                var resp = await fetch('/api/dashboard/config/current', { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                fullConfig = data.config || {};
+                var g = fullConfig.grid || {};
+                document.getElementById('cfg-grid-investment').value = g.investment_amount || 30;
+                document.getElementById('cfg-grid-nodes').value = g.num_nodes || 10;
+                document.getElementById('cfg-grid-step').value = g.min_step_size || 0.5;
+                document.getElementById('cfg-grid-range').value = g.max_range_pct || 10;
+                var d = fullConfig.dca || {};
+                document.getElementById('cfg-dca-base').value = d.base_order_size || 5;
+                document.getElementById('cfg-dca-so').value = d.max_safety_orders || 5;
+                document.getElementById('cfg-dca-dev').value = d.price_deviation_pct || 1.5;
+                document.getElementById('cfg-dca-scale').value = d.safety_order_step_scale || 1.2;
+                document.getElementById('cfg-dca-tp').value = d.take_profit_pct || 1.5;
+                document.getElementById('cfg-dca-sl').value = d.stop_loss_pct || 5;
+                var r = fullConfig.risk || {};
+                document.getElementById('cfg-risk-maxpos').value = r.max_positions || 5;
+                document.getElementById('cfg-risk-notional').value = r.max_notional_per_asset || 100;
+                document.getElementById('cfg-risk-minnot').value = r.min_notional || 2;
+                document.getElementById('cfg-risk-leverage').value = r.max_leverage || 20;
+            } catch(e) { console.error('Config load failed:', e); }
+        }
+        function saveConfig() {
+            fullConfig.grid = fullConfig.grid || {};
+            fullConfig.grid.investment_amount = parseFloat(document.getElementById('cfg-grid-investment').value);
+            fullConfig.grid.num_nodes = parseInt(document.getElementById('cfg-grid-nodes').value);
+            fullConfig.grid.min_step_size = parseFloat(document.getElementById('cfg-grid-step').value);
+            fullConfig.grid.max_range_pct = parseFloat(document.getElementById('cfg-grid-range').value);
+            fullConfig.dca = fullConfig.dca || {};
+            fullConfig.dca.base_order_size = parseFloat(document.getElementById('cfg-dca-base').value);
+            fullConfig.dca.max_safety_orders = parseInt(document.getElementById('cfg-dca-so').value);
+            fullConfig.dca.price_deviation_pct = parseFloat(document.getElementById('cfg-dca-dev').value);
+            fullConfig.dca.safety_order_step_scale = parseFloat(document.getElementById('cfg-dca-scale').value);
+            fullConfig.dca.take_profit_pct = parseFloat(document.getElementById('cfg-dca-tp').value);
+            fullConfig.dca.stop_loss_pct = parseFloat(document.getElementById('cfg-dca-sl').value);
+            fullConfig.risk = fullConfig.risk || {};
+            fullConfig.risk.max_positions = parseInt(document.getElementById('cfg-risk-maxpos').value);
+            fullConfig.risk.max_notional_per_asset = parseFloat(document.getElementById('cfg-risk-notional').value);
+            fullConfig.risk.min_notional = parseFloat(document.getElementById('cfg-risk-minnot').value);
+            fullConfig.risk.max_leverage = parseInt(document.getElementById('cfg-risk-leverage').value);
+            requestOtpForAction('/api/dashboard/config/save', { config: fullConfig }, 'Save configuration changes');
+        }
+        function reloadConfig() {
+            requestOtpForAction('/api/dashboard/config/reload', {}, 'Reload configuration (apply changes)');
+        }
+
+        // === SAFETY PANEL ===
+        async function loadSafetyPanel() {
+            try {
+                var [defResp, ovResp] = await Promise.all([
+                    fetch('/api/dashboard/config/defaults', { credentials: 'include' }),
+                    fetch('/api/dashboard/overview', { credentials: 'include' })
+                ]);
+                if (defResp.ok) {
+                    var d = await defResp.json();
+                    var r = d.risk || {};
+                    document.getElementById('safe-maxpos').textContent = r.max_positions || '-';
+                    document.getElementById('safe-minnot').textContent = '$' + (r.min_notional || 0);
+                    document.getElementById('safe-maxlev').textContent = (r.max_leverage || 20) + 'x';
+                }
+                if (ovResp.ok) {
+                    var ov = await ovResp.json();
+                    document.getElementById('safe-active').textContent = (ov.open_positions || 0) + ' / ' + (ov.active_grids || 0) + ' grids';
+                }
+                // Load emergency stop history from audit
+                var auditResp = await fetch('/api/dashboard/audit-log?action=EMERGENCY_STOP&limit=5', { credentials: 'include' });
+                if (auditResp.ok) {
+                    var auditData = await auditResp.json();
+                    var el = document.getElementById('estop-history');
+                    if (!auditData.entries.length) { el.textContent = 'No emergency stops recorded'; return; }
+                    el.innerHTML = auditData.entries.map(function(e) {
+                        return '<div class="mb-2 pb-2 border-b border-slate-700"><span class="text-red-400 font-semibold">' + e.created_at.substring(0,19) + '</span> by ' + e.user_id.substring(0,8) + '...<br><span class="text-slate-500">' + (e.details || '').substring(0,200) + '</span></div>';
+                    }).join('');
+                }
+            } catch(e) { console.error('Safety load failed:', e); }
+        }
+
+        // === AUDIT LOG ===
+        async function loadAuditLog() {
+            var search = document.getElementById('audit-search').value;
+            var action = document.getElementById('audit-action-filter').value;
+            var params = new URLSearchParams({ limit: '100', offset: '0' });
+            if (search) params.set('search', search);
+            if (action) params.set('action', action);
+            try {
+                var resp = await fetch('/api/dashboard/audit-log?' + params.toString(), { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                var tbody = document.getElementById('audit-table');
+                var noAudit = document.getElementById('no-audit');
+                document.getElementById('audit-total').textContent = 'Total: ' + data.total + ' entries';
+                if (!data.entries.length) { tbody.innerHTML = ''; noAudit.style.display = 'block'; return; }
+                noAudit.style.display = 'none';
+                tbody.innerHTML = data.entries.map(function(e) {
+                    return '<tr><td class="text-slate-400">' + (e.created_at || '').substring(0,19) + '</td>' +
+                        '<td class="text-slate-400">' + (e.user_id || '').substring(0,8) + '</td>' +
+                        '<td class="font-medium text-white">' + e.action + '</td>' +
+                        '<td>' + (e.resource || '') + '</td>' +
+                        '<td>' + (e.otp_verified ? '✅' : '❌') + '</td>' +
+                        '<td class="text-slate-500 text-xs max-w-xs truncate">' + (e.details || '').substring(0,150) + '</td></tr>';
+                }).join('');
+            } catch(e) { console.error('Audit load failed:', e); }
+        }
+
+        // === SIGNAL RECONCILIATION ===
+        async function loadOrphanedSignals() {
+            try {
+                var resp = await fetch('/api/dashboard/signals/orphaned', { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                var tbody = document.getElementById('orphan-table');
+                var noOrph = document.getElementById('no-orphans');
+                if (!data.orphaned.length) { tbody.innerHTML = ''; noOrph.style.display = 'block'; return; }
+                noOrph.style.display = 'none';
+                tbody.innerHTML = data.orphaned.map(function(s) {
+                    return '<tr><td><input type="checkbox" class="orphan-check" value="' + s.id + '"></td>' +
+                        '<td class="font-medium text-white">' + s.asset + '</td>' +
+                        '<td>' + s.signal + '</td>' +
+                        '<td>$' + (s.entry_price || 0).toLocaleString() + '</td>' +
+                        '<td class="text-slate-400">' + (s.timestamp || '').substring(0,19) + '</td>' +
+                        '<td class="text-yellow-400 text-xs">' + s.reason + '</td></tr>';
+                }).join('');
+            } catch(e) { console.error('Orphan detection failed:', e); }
+        }
+        function reconcileSelected() {
+            var ids = [];
+            document.querySelectorAll('.orphan-check:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
+            if (!ids.length) { alert('Select at least one signal to reconcile'); return; }
+            requestOtpForAction('/api/dashboard/signals/reconcile', { signal_ids: ids }, 'Reconcile ' + ids.length + ' orphaned signal(s)');
+        }
+
+        // Override showPage to trigger data loads
+        var _origShowPage = showPage;
+        showPage = function(page, el) {
+            _origShowPage(page, el);
+            if (page === 'config') loadConfigForEdit();
+            if (page === 'safety') loadSafetyPanel();
+            if (page === 'audit') loadAuditLog();
+            if (page === 'reconcile') loadOrphanedSignals();
+        };
+
+    
+        // === SYSTEM MONITOR ===
+        async function loadSystemMonitor() {
+            try {
+                var resp = await fetch('/api/dashboard/system/status', { credentials: 'include' });
+                if (!resp.ok) return;
+                var data = await resp.json();
+                var hrs = Math.floor((data.uptime_sec || 0) / 3600);
+                var mins = Math.floor(((data.uptime_sec || 0) % 3600) / 60);
+                document.getElementById('sys-uptime').textContent = hrs + 'h ' + mins + 'm';
+                document.getElementById('sys-autotrade').textContent = data.auto_trading ? 'ENABLED' : 'DISABLED';
+                document.getElementById('sys-autotrade').className = 'metric-value ' + (data.auto_trading ? 'text-green-400' : 'text-yellow-400');
+                var tasks = data.tasks || {};
+                var healthy = 0, total = 0;
+                var tbody = document.getElementById('sysmon-table');
+                var rows = '';
+                for (var name in tasks) {
+                    var t = tasks[name]; total++;
+                    if (t.status === 'healthy') healthy++;
+                    var statusColor = t.status === 'healthy' ? 'text-green-400' : t.status === 'stale' ? 'text-yellow-400' : t.status === 'degraded' ? 'text-red-400' : 'text-slate-500';
+                    var statusBadge = t.status === 'healthy' ? '&#x2705;' : t.status === 'stale' ? '&#x26A0;' : t.status === 'degraded' ? '&#x274C;' : '&#x2753;';
+                    var lastRun = t.last_run ? t.last_run.substring(0, 19).replace('T', ' ') : 'Never';
+                    rows += '<tr><td class="font-medium text-white">' + name.replace(/_/g, ' ') + '</td>' +
+                        '<td class="' + statusColor + '">' + statusBadge + ' ' + t.status.toUpperCase() + '</td>' +
+                        '<td class="text-slate-400">' + lastRun + '</td>' +
+                        '<td class="' + (t.error_count > 0 ? 'text-red-400' : 'text-slate-500') + '">' + t.error_count + '</td></tr>';
+                }
+                tbody.innerHTML = rows;
+                document.getElementById('sys-healthy').textContent = healthy + '/' + total;
+            } catch(e) { console.error('System monitor load failed:', e); }
+        }
+
+        // === ALERT CONFIG ===
+        async function loadAlertConfig() {
+            try {
+                var resp = await fetch('/api/dashboard/alerts/config', { credentials: 'include' });
+                if (!resp.ok) return;
+                var cfg = await resp.json();
+                document.getElementById('alert-master').checked = cfg.master_enabled !== false;
+                var g = cfg.groups || {};
+                document.getElementById('alert-trades').checked = g.trades_fills !== false;
+                document.getElementById('alert-errors').checked = g.errors_exceptions !== false;
+                document.getElementById('alert-scans').checked = g.routine_scans === true;
+            } catch(e) { console.error('Alert config load failed:', e); }
+        }
+        function saveAlertConfig() {
+            var payload = {
+                master_enabled: document.getElementById('alert-master').checked,
+                trades_fills: document.getElementById('alert-trades').checked,
+                errors_exceptions: document.getElementById('alert-errors').checked,
+                routine_scans: document.getElementById('alert-scans').checked,
+            };
+            requestOtpForAction('/api/dashboard/alerts/config', payload, 'Save alert preferences');
+        }
+
+        // === CHART.JS EQUITY CURVE ===
+        var equityChartInstance = null;
+        function drawEquityCurve(curve) {
+            var canvas = document.getElementById('equity-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (equityChartInstance) { equityChartInstance.destroy(); }
+            if (!curve || !curve.length) return;
+            var labels = curve.map(function(p, i) { return p.trade || (i + 1); });
+            var values = curve.map(function(p) { return typeof p === 'object' ? p.equity : p; });
+            equityChartInstance = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Equity ($)',
+                        data: values,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59,130,246,0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 10 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    },
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false }
+                }
+            });
+        }
+
+        // Override showPage for Phase 5 pages
+        var _prevShowPage = showPage;
+        showPage = function(page, el) {
+            _prevShowPage(page, el);
+            if (page === 'sysmon') loadSystemMonitor();
+            if (page === 'alerts') loadAlertConfig();
+        };
+
+    </script>
+</body>
+</html>
