@@ -52,3 +52,18 @@ resolve
 .vscode/
 .idea/
 .DS_Store
+
+# === MBIO Safety Rules ===
+.env
+*.env
+__pycache__/
+*.pyc
+*.pyo
+backup_*/
+*.backup
+*.backup.*
+data/signals.db
+data/exit_analytics.json
+data/grid_state.json
+data/chroma_db/
+scripts/archived/

@@ -29,8 +29,7 @@ from core.risk_manager import (
     calculate_position_size,
     calculate_trade_plan,
     is_correlation_blocked,
-    is_drawdown_halted,
-)
+    is_drawdown_halted)
 from core.signal_generator import analyze_batch, init_ai_clients
 from core.hunter_protocol import update_hold_tracking, run_hunter_protocol_idle, hunter_monitor_loop
 from core.state import OPEN_POSITIONS, SIGNAL_CACHE, TIER_TIMESTAMPS, reset_daily_pnl_if_new_day
@@ -43,16 +42,14 @@ from monitoring.alert_manager import (
     send_signal, send_execution, send_tp_hit, cmd_dca_chart,
     cmd_open_grid, cmd_grid_status, cmd_close_grid, cmd_trade_history
 ,
-    grid_monitor_task,
-)
+    grid_monitor_task)
 from monitoring.position_tracker import (
     entry_scanner_loop, full_analysis_loop,
     position_monitor_loop, quick_signal_scanner,
     update_trailing_dca, monitor_dca_profit_targets,
     monitor_grid_bots,
     update_trailing_dca, monitor_dca_profit_targets,
-    update_trailing_dca, monitor_dca_profit_targets,
-)
+    update_trailing_dca, monitor_dca_profit_targets)
 from core.strategy_manager import StrategyManager
 from core.strategy_registry import get_strategy_class, list_strategies
 from strategies.institutional_dca import InstitutionalDcaStrategy, PositionState
@@ -91,8 +88,7 @@ api.add_middleware(
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
-)
+    allow_headers=["*"])
 
 
 @api.get("/")
@@ -579,13 +575,43 @@ async def _sync_exchange_positions() -> None:
             from core.dca_lifecycle import activate_auto_dca
             import core.state as _state
             for _asset, _pos in _state.OPEN_POSITIONS.items():
-                # Skip GRID:: namespaced positions — they belong to grid engine, not DCA
-                if is_grid_position(_asset):
+                # Skip positions that belong to an active grid
+                # Grid positions appear as plain coin names (e.g. "BTC") in OPEN_POSITIONS
+                # but are tracked separately in grid_state.json — check there
+                _has_active_grid = False
+                try:
+                    import os, json as _json
+                    # Check both possible paths (host and container)
+                    for _gs_path in ["/app/data/grid_state.json", "data/grid_state.json"]:
+                        if os.path.exists(_gs_path):
+                            with open(_gs_path) as _gf:
+                                _gs_data = _json.load(_gf)
+                            # Handle nested schema: {"grids": {"GRID::BTC": {...}}}
+                            _grid_dict = _gs_data.get("grids", _gs_data)
+                            for _gk, _gv in _grid_dict.items():
+                                if _gk.endswith(f"::{_asset}") and (_gv.get("enabled", False) or _gv.get("active", False)):
+                                    _has_active_grid = True
+                                    break
+                        if _has_active_grid:
+                            break
+                    # Fallback: check OPEN_POSITIONS for GRID:: keys
+                    if not _has_active_grid:
+                        for _opk in _state.OPEN_POSITIONS:
+                            if _opk.startswith("GRID::") and _opk.endswith(_asset):
+                                _has_active_grid = True
+                                break
+                except Exception as _grid_check_err:
+                    logger.debug(f"Grid check for {_asset}: {_grid_check_err}")
+                
+                if _has_active_grid:
+                    logger.info(f"⏭️ Skipping auto-DCA bind: {_asset} has active grid")
                     continue
+                
                 if _asset not in _state.auto_dca_active or not _state.auto_dca_active.get(_asset):
                     _direction = "LONG" if _pos.get("side") == "BUY" else "SHORT"
                     _size = float(_pos.get("size", 0))
                     if _size > 0:
+
                         activate_auto_dca(
                             asset=_asset,
                             direction=_direction,
@@ -593,9 +619,8 @@ async def _sync_exchange_positions() -> None:
                             max_levels=int(_dca_cfg.get("max_levels", 3)),
                             spacing_pct=float(_dca_cfg.get("level_spacing_pct", 1.2)),
                             size_multiplier=float(_dca_cfg.get("size_multiplier", 1.25)),
-                            tp_pct=float(_dca_cfg.get("tp_pct", 1.0)),
-                            sl_pct=float(_dca_cfg.get("sl_pct", 4.0)),
-                        )
+                    tp_pct=float(_dca_cfg.get("tp_pct", 1.0)),
+                            sl_pct=float(_dca_cfg.get("sl_pct", 4.0)))
                         logger.info(f"🔄 Auto-bound Auto-DCA to existing {_asset} {_direction} position (size={_size})")
             _state.save_state()
     except Exception as e:
@@ -751,8 +776,7 @@ async def cmd_open_dca(update, context):
                 spacing_pct=float(_dca_cfg.get("level_spacing_pct", 1.2)),
                 size_multiplier=float(_dca_cfg.get("size_multiplier", 1.25)),
                 tp_pct=float(_dca_cfg.get("tp_pct", 1.0)),
-                sl_pct=float(_dca_cfg.get("sl_pct", 4.0)),
-            )
+                sl_pct=float(_dca_cfg.get("sl_pct", 4.0)))
 
             # === PLACE LIMIT ORDERS FOR DCA LEVELS 1+ ===
             import config_loader as _cfg2
@@ -934,13 +958,13 @@ async def main() -> None:
         # Group orders by asset that have GRID cloid tags
         _grid_assets = {}
         for _ord in _open_orders:
-            _cloid = str(_ord.get("cloid", ""))
-            if "GRID" in _cloid:
-                _coin = _ord.get("coin", "")
-                if _coin and _coin not in _grid_assets:
-                    _grid_assets[_coin] = []
-                if _coin:
-                    _grid_assets[_coin].append(_ord)
+            # Grid order detection via cloid removed — using grid_state.json instead
+            _cloid = ""
+            _coin = _ord.get("coin", "")
+            if _coin and _coin not in _grid_assets:
+                _grid_assets[_coin] = []
+            if _coin:
+                _grid_assets[_coin].append(_ord)
         
         for _asset, _orders in _grid_assets.items():
             _gkey = grid_state_key(_asset)
@@ -955,7 +979,7 @@ async def main() -> None:
                         "strategy_type": "GRID_REVERSAL",
                         "lower_price": min(_prices) * 0.95,
                         "upper_price": max(_prices) * 1.05,
-                        "grid_quantity": 10,
+                        "grid_quantity": int(config.get("grid", {}).get("default_grid_quantity", 10)),
                         "step_size": round((max(_prices) - min(_prices)) / max(len(_prices) - 1, 1), 2),
                         "investment_amount": sum(s * p for s, p in zip(_sizes, _prices)),
                         "nodes": [
@@ -1060,12 +1084,6 @@ async def main() -> None:
         _bg_tasks.append(_t)
         logger.info("📋 Background task started: %s", _task_name)
 
-    # Ensure grid_monitor_task is always scheduled (independent of tuple list)
-    try:
-        asyncio.create_task(grid_monitor_task(), name="grid_monitor_direct")
-        logger.info("📋 Background task started: grid_monitor (direct)")
-    except Exception as _gme:
-        logger.error(f"❌ Failed to start grid_monitor: {_gme}")
 
     # Keep main coroutine alive WITHOUT blocking the event loop
     try:

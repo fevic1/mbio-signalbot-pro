@@ -118,7 +118,7 @@ class HLExecutor:
     def cancel_order(self, coin: str, order_id: int) -> dict:
         """Cancel an open order by ID. Wraps exchange.cancel_order()."""
         try:
-            result = self.exchange.cancel_order(coin=coin, oid=order_id)
+            result = self.exchange.cancel(coin=coin, oid=int(order_id))
             logger.info(f"🗑️ Cancelled order {order_id} for {coin}: {result}")
             return {"success": True, "result": result}
         except Exception as e:
@@ -267,19 +267,17 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
     import asyncio as _aio
     try:
         executor = _get_executor()
-        # Generate strategy-tagged client order ID for exchange-side identification
-        import hashlib, time as _time
         _strategy = kwargs.get("strategy", "SIGNAL")
         _regime = kwargs.get("regime", "AUTO")
-        _tag = f"{_strategy}:{_regime}:{coin}"
-        _cloid_hash = hashlib.sha256(f"{_tag}:{_time.time_ns()}".encode()).hexdigest()[:32]
-        _cloid = f"0x{_cloid_hash}"
         
+        # Delegate to the class method which handles all execution logic
         result = executor.place_order(
-            coin=coin, side=side, size=size, limit_price=limit_px,
+            coin=coin,
+            side=side,
+            size=size,
+            limit_price=limit_px,
             order_type=kwargs.get("order_type", "Limit"),
-            reduce_only=kwargs.get("reduce_only", False),
-            cloid=_cloid
+            reduce_only=kwargs.get("reduce_only", False)
         )
         # Attach strategy metadata to result for downstream consumers
         if result and isinstance(result, dict):

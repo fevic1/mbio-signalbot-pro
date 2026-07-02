@@ -136,18 +136,16 @@ trade_plan:
   tp2_atr_multiplier: 1.8
   tp3_atr_multiplier: 3.5
 trading:
-  correlated_groups:
-  - - BTC
-    - ETH
-  - - SOL
-    - DOGE
-  correlation_block: true
-  entry_min_confidence: 60
-  max_open_positions: 3
-  min_order_value_usd: 40.0
-  tp1_pct: 0.4
-  tp2_pct: 0.35
-  tp3_pct: 0.25
+correlation_groups:
+  - assets: [BTC, ETH, SOL, AVAX]
+    max_positions: 2
+    name: Layer 1 Blockchains
+  - assets: [XRP, DOGE, HYPE, BNB]
+    max_positions: 2
+    name: Altcoins
+  - assets: [BTC, ETH]
+    max_positions: 2
+    name: High Correlation 
 execution:
   max_positions: 3
   min_confidence: 70
@@ -193,8 +191,20 @@ grid:
   max_investment_usd: 500
   default_stop_loss_pct: 10.0
   default_take_profit_pct: 5.0
+  min_margin_usd: 3.0
+  capital_recycle_divisor: 4
   reversal:
     enabled: true
     step_size_override: null
     max_concurrent_orders: 4
     flip_on_fill: true
+execution_precision:
+  BTC: 5
+  ETH: 4
+  SOL: 2
+  XRP: 0
+  DOGE: 0
+  HYPE: 2
+  BNB: 3
+  AVAX: 2
+  LINK: 2

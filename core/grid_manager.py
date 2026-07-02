@@ -7,6 +7,7 @@ Fully isolated via GRID:: namespace. Sync HLExecutor API.
 import logging
 import math
 from typing import Dict, List, Optional
+from core.grid_persistence import save_grid_state
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,9 @@ class GridManager:
         """Create reversal grid configuration with arithmetic node map."""
         price_range = upper_price - lower_price
         step_size = price_range / (grid_quantity - 1) if grid_quantity > 1 else price_range
-        order_value_usd = investment_amount / min(grid_quantity, 4)  # Capital recycled
+        import config_loader as _cfg_mod
+        _grid_cfg = _cfg_mod.get_config().get("grid", {})
+        order_value_usd = investment_amount / min(grid_quantity, int(_grid_cfg.get("capital_recycle_divisor", 4)))
 
         mid_price = (lower_price + upper_price) / 2
 
@@ -55,7 +58,9 @@ class GridManager:
 
             raw_size = order_value_usd / price if price > 0 else 0
             # Enforce $10 minimum notional with margin for rounding loss
-            min_notional = 10.50  # Slight buffer above $10 to survive executor rounding
+            import config_loader as _cfg_mod
+            _dca_cfg = _cfg_mod.get_config().get("dca", {})
+            min_notional = float(_dca_cfg.get("min_notional", 10.0)) * float(_dca_cfg.get("min_notional_buffer", 1.15))
             min_size = min_notional / price if price > 0 else 0
             size = math.ceil(max(raw_size, min_size) * 100000) / 100000
 
@@ -84,6 +89,7 @@ class GridManager:
             "nodes": nodes,
             "completed_cycles": 0,
             "total_realized_pnl": 0.0,
+            "origin": "GRID",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "last_update": None,
         }
@@ -114,7 +120,7 @@ class GridManager:
             # Enforce $10 minimum after rounding
             actual_notional = order_size * order_price
             if actual_notional < 10.0 and order_price > 0:
-                order_size = math.ceil((10.0 / order_price) * 100000) / 100000
+                order_size = math.ceil((float(config.get("dca", {}).get("min_notional", 10.0)) / order_price) * 100000) / 100000
 
             # Skip BUY orders at/above market and SELL orders at/below market
             # These would fill instantly as takers, defeating the grid purpose
@@ -243,7 +249,7 @@ class GridManager:
                             order_price = flipped["price"]
                             actual_notional = order_size * order_price
                             if actual_notional < 10.0 and order_price > 0:
-                                order_size = math.ceil((10.0 / order_price) * 100000) / 100000
+                                order_size = math.ceil((float(config.get("dca", {}).get("min_notional", 10.0)) / order_price) * 100000) / 100000
 
                             try:
                                 res = execute_hl_order(

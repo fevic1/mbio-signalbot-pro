@@ -97,7 +97,7 @@ class RiskManager:
         size = risk_amount / risk_distance
 
         # Hard safety cap: max 50% account value per position
-        max_size = (balance * 0.50) / entry_price
+        max_size = (balance * float(config.get("risk_guard", {}).get("max_position_pct", 0.5))) / entry_price
 
         return max(0.0, min(size, max_size))
 

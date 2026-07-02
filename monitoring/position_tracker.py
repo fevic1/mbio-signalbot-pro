@@ -109,7 +109,7 @@ async def check_and_close_positions(chat_id: str) -> None:
                     await send_tp_hit(asset, "TP2", current_price, entry, chat_id)
                 elif current_price >= pos.get("tp1", float("inf")) and pos.get("sl", 0) < entry and not pos.get("tp1_hit"):
                     # 🏹 PHASE 1: Partial Close 30% at TP1
-                    close_size = size * 0.30
+                    close_size = size * float(config.get("smart_exit", {}).get("tp2_partial_pct", 0.35))
                     remaining_size = size - close_size
                     notional = close_size * current_price
                     
@@ -201,7 +201,7 @@ async def check_and_close_positions(chat_id: str) -> None:
                     await send_tp_hit(asset, "TP2", current_price, entry, chat_id)
                 elif current_price <= pos.get("tp1", float("inf")) and pos.get("sl", float("inf")) > entry and not pos.get("tp1_hit"):
                     # 🏹 PHASE 1: Partial Close 30% at TP1
-                    close_size = size * 0.30
+                    close_size = size * float(config.get("smart_exit", {}).get("tp2_partial_pct", 0.35))
                     remaining_size = size - close_size
                     notional = close_size * current_price
                     
