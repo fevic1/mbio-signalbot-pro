@@ -15,6 +15,9 @@ SIGNAL_CACHE: dict = {}
 TIER_TIMESTAMPS: dict = {"crypto": 0.0}
 LIVE_SIGNALS: dict = {}
 
+# Background task health tracking (populated by main.py task loops)
+BACKGROUND_TASKS: dict = {}
+
 daily_pnl: float = 0.0
 TRADE_HISTORY: list = []
 daily_pnl_reset_date: str = datetime.now(timezone.utc).strftime("%Y-%m-%d")

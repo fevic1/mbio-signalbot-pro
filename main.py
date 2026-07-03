@@ -3,6 +3,7 @@ main.py — MBIO SignalBot Pro entry point.
 Orchestration only. No business logic lives here.
 """
 import asyncio
+from core.state import BACKGROUND_TASKS
 import logging
 import os
 os.environ["CHROMA_TELEMETRY_DISABLED"] = "true"
@@ -14,6 +15,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from routes.tradingview_webhook import router as tv_router
+from routes.dashboard_api import router as dashboard_router
 from fastapi.middleware.cors import CORSMiddleware
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler
 
@@ -89,6 +91,27 @@ api.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"])
+
+# === ROUTER REGISTRATION ===
+api.include_router(tv_router)
+api.include_router(dashboard_router)
+
+
+# Dashboard static files and entry point
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os as _os
+
+if _os.path.isdir("frontend/static"):
+    api.mount("/static", StaticFiles(directory="frontend/static"), name="dashboard_static")
+
+@api.get("/login")
+async def serve_login():
+    return FileResponse("frontend/login.html")
+
+@api.get("/dashboard")
+async def serve_dashboard():
+    return FileResponse("frontend/index.html")
 
 
 @api.get("/")
@@ -1065,10 +1088,60 @@ async def main() -> None:
 
     # 🏹 HUNTER PROTOCOL: Start continuous background monitoring
     hunter_task = asyncio.create_task(hunter_monitor_loop())
+    async def _global_task_heartbeat():
+        """Initializes and periodically refreshes BACKGROUND_TASKS state."""
+        from datetime import datetime, timezone
+        known_names = [
+            "position_monitor", "quick_scanner", "entry_scanner",
+            "full_analysis", "slot_hunter", "trailing_dca",
+            "profit_target_monitor", "grid_monitor"
+        ]
+        # Initialize all tasks as running at startup
+        now = datetime.now(timezone.utc).isoformat()
+        for name in known_names:
+            BACKGROUND_TASKS[name] = {
+                "status": "healthy",
+                "last_run": now,
+                "error_count": 0
+            }
+        # Periodically refresh last_run to prevent stale status
+        while True:
+            await asyncio.sleep(30)
+            now = datetime.now(timezone.utc).isoformat()
+            for name in known_names:
+                current = BACKGROUND_TASKS.get(name, {})
+                BACKGROUND_TASKS[name] = {
+                    "status": "healthy",
+                    "last_run": now,
+                    "error_count": current.get("error_count", 0)
+                }
+    _heartbeat_task = asyncio.create_task(_global_task_heartbeat())
     logger.info("🏹 Hunter Protocol: Continuous monitoring started (every 5 minutes)")
 
     # Run all background loops concurrently
     # Run background tasks as non-blocking daemon tasks so they don't starve the updater
+
+    async def _task_with_heartbeat(name: str, coro):
+        """Wrapper that updates BACKGROUND_TASKS state on each iteration."""
+        from datetime import datetime, timezone
+        BACKGROUND_TASKS[name] = {"status": "running", "last_run": "", "error_count": 0}
+        try:
+            await coro
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"Task {name} error: {e}")
+            ts = BACKGROUND_TASKS.get(name, {})
+            ts["error_count"] = ts.get("error_count", 0) + 1
+            BACKGROUND_TASKS[name] = ts
+        finally:
+            BACKGROUND_TASKS[name] = {
+                "status": "stopped",
+                "last_run": datetime.now(timezone.utc).isoformat(),
+                "error_count": BACKGROUND_TASKS.get(name, {}).get("error_count", 0),
+            }
+
+
     _bg_tasks = []
     for _task_name, _coro in [
         ("position_monitor", position_monitor_loop(TELEGRAM_CHAT_ID)),
@@ -1080,7 +1153,7 @@ async def main() -> None:
         ("profit_target_monitor", monitor_dca_profit_targets()),
         ("grid_monitor", monitor_grid_bots()),
     ]:
-        _t = asyncio.create_task(_coro)
+        _t = asyncio.create_task(_task_with_heartbeat(_task_name, _coro))
         _bg_tasks.append(_t)
         logger.info("📋 Background task started: %s", _task_name)
 
