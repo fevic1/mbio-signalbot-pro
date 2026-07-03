@@ -4,932 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MBIO SignalBot Pro — Dashboard</title>
-    <script src="https://cdn.tailwindcss.com">
-        // === POSITIONS SORT/FILTER (Client-side only) ===
-        var _positionsCache = [];
-        var _sortCol = 'upnl';
-        var _sortAsc = false;
-        var _filterAsset = '';
-
-        function sortPositions(col) {
-            if (_sortCol === col) { _sortAsc = !_sortAsc; } else { _sortCol = col; _sortAsc = false; }
-            // Update header visual
-            document.querySelectorAll('#positions-table th.sortable').forEach(function(th) {
-                th.classList.remove('active');
-                var icon = th.querySelector('.sort-icon');
-                if (icon) icon.textContent = '▲▼';
-            });
-            var activeTh = document.querySelector('#positions-table th[onclick*="'' + col + ''"]');
-            if (activeTh) {
-                activeTh.classList.add('active');
-                var icon = activeTh.querySelector('.sort-icon');
-                if (icon) icon.textContent = _sortAsc ? '▲' : '▼';
-            }
-            renderFilteredPositions();
-        }
-
-        function filterPositions() {
-            _filterAsset = document.getElementById('pos-asset-filter')?.value || '';
-            renderFilteredPositions();
-        }
-
-        function renderFilteredPositions() {
-            var filtered = _positionsCache.slice();
-            // Apply asset filter
-            if (_filterAsset) {
-                filtered = filtered.filter(function(p) { return p.asset === _filterAsset; });
-            }
-            // Apply sort
-            filtered.sort(function(a, b) {
-                var va = a[_sortCol], vb = b[_sortCol];
-                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
-                if (va < vb) return _sortAsc ? -1 : 1;
-                if (va > vb) return _sortAsc ? 1 : -1;
-                return 0;
-            });
-            // Render using existing updatePositions logic
-            var tb = document.getElementById('positions-table');
-            var np = document.getElementById('no-positions');
-            if (!tb) return;
-            if (!filtered.length) { tb.innerHTML = ''; if(np) np.style.display = 'block'; return; }
-            if(np) np.style.display = 'none';
-            tb.innerHTML = filtered.map(function(p) {
-                return '<tr><td class="font-medium text-white">' + p.asset + '</td>' +
-                    '<td><span class="badge ' + (p.side === 'BUY' ? 'badge-buy' : 'badge-sell') + '">' + p.side + '</span></td>' +
-                    '<td>' + p.size.toFixed(6) + '</td>' +
-                    '<td>$' + p.entry.toLocaleString() + '</td>' +
-                    '<td>$' + p.current.toLocaleString() + '</td>' +
-                    '<td class="' + pnlClass(p.upnl) + '">' + formatPnl(p.upnl) + '</td>' +
-                    '<td class="' + pnlClass(p.pnl_pct) + '">' + (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%</td>' +
-                    '<td>$' + (p.margin_used || 0).toFixed(2) + '</td>' +
-                    '<td>$' + (p.liquidation_px || 0).toLocaleString() + '</td>' +
-                    '<td>' + (p.leverage || 1) + 'x</td>' +
-                    '<td class="' + pnlClass(p.roe) + '">' + (p.roe || 0).toFixed(2) + '%</td>' +
-                    '<td>$' + (p.sl || 0).toLocaleString() + '</td>' +
-                    '<td class="text-slate-400">' + p.strategy + '</td></tr>';
-            }).join('');
-        }
-
-        // Wrap existing updatePositions to cache data and populate filter
-        var _origUpdatePositions = updatePositions;
-        updatePositions = function(positions) {
-            _positionsCache = positions || [];
-            // Populate asset filter dropdown if empty
-            var filterEl = document.getElementById('pos-asset-filter');
-            if (filterEl && filterEl.options.length <= 1) {
-                var assets = {};
-                _positionsCache.forEach(function(p) { assets[p.asset] = true; });
-                Object.keys(assets).sort().forEach(function(a) {
-                    var opt = document.createElement('option');
-                    opt.value = a; opt.textContent = a;
-                    filterEl.appendChild(opt);
-                });
-            }
-            renderFilteredPositions();
-        };
-
-    
-        // === ACTIVE BOT CARDS ===
-        var _botsCache = { grids: [], dcas: [] };
-
-        function renderBotCards(grids, positions) {
-            var container = document.getElementById('bots-container');
-            var section = document.getElementById('active-bots-section');
-            var countBadge = document.getElementById('bot-count-badge');
-            
-            if (!container || !section) return;
-
-            // Combine grids and DCA positions into bot list
-            var bots = [];
-            
-            // Add Grids
-            if (grids && grids.length > 0) {
-                grids.forEach(function(g) {
-                    bots.push({
-                        type: 'GRID',
-                        asset: g.asset,
-                        pnl: g.realized_pnl || 0,
-                        status: 'running',
-                        details: g.nodes_active + '/' + g.nodes_total + ' nodes',
-                        investment: g.investment || 0,
-                        mode: g.mode
-                    });
-                });
-            }
-            
-            // Add DCA Positions (simple heuristic: non-grid positions with strategy=DCA)
-            if (positions && positions.length > 0) {
-                positions.forEach(function(p) {
-                    if (p.strategy && p.strategy.toUpperCase().includes('DCA')) {
-                        bots.push({
-                            type: 'DCA',
-                            asset: p.asset,
-                            pnl: p.upnl || 0,
-                            status: 'running',
-                            details: p.side + ' ' + p.size.toFixed(4),
-                            investment: p.size * p.entry,
-                            mode: p.side
-                        });
-                    }
-                });
-            }
-
-            // Update visibility
-            if (bots.length === 0) {
-                section.style.display = 'none';
-                return;
-            }
-            section.style.display = 'block';
-            countBadge.textContent = bots.length + ' Active';
-
-            // Render cards
-            container.innerHTML = bots.map(function(b) {
-                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
-                var icon = b.type === 'GRID' ? '&#x1F532;' : '&#x1F4C8;';
-                var colorClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
-                
-                return '<div class="card ' + colorClass + ' relative overflow-hidden">' +
-                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
-                    '<div class="flex items-center justify-between mb-2">' +
-                        '<div class="flex items-center gap-2">' +
-                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
-                            '<span class="font-bold text-white">' + b.asset + '</span>' +
-                        '</div>' +
-                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
-                    '</div>' +
-                    '<div class="mb-2">' +
-                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
-                        '<div class="text-xs text-slate-500">Realized PnL</div>' +
-                    '</div>' +
-                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
-                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
-                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
-        }
-
-        // Wrap updateOverview to capture grid/position data for bot cards
-        var _origUpdateOverview = updateOverview;
-        updateOverview = function(data) {
-            _origUpdateOverview(data);
-            // Pass grids and positions to bot renderer
-            renderBotCards(data.grids || [], data.positions || []);
-        };
-
-    
-        // === DAILY PNL BAR CHART ===
-        var dailyPnlChartInstance = null;
-
-        function renderDailyPnlChart(equityCurve) {
-            var canvas = document.getElementById('daily-pnl-chart');
-            if (!canvas || typeof Chart === 'undefined') return;
-            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
-            if (!equityCurve || equityCurve.length < 2) return;
-
-            // Compute daily PnL as delta between consecutive equity points
-            var labels = [];
-            var values = [];
-            var colors = [];
-            for (var i = 1; i < equityCurve.length; i++) {
-                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
-                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
-                var delta = curr - prev;
-                labels.push('T' + (i));
-                values.push(parseFloat(delta.toFixed(2)));
-                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
-            }
-
-            dailyPnlChartInstance = new Chart(canvas, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Daily PnL ($)',
-                        data: values,
-                        backgroundColor: colors,
-                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
-                        borderWidth: 1,
-                        borderRadius: 3,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            callbacks: {
-                                label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
-                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
-                    }
-                }
-            });
-        }
-
-        // Wrap loadAnalytics to also render daily PnL chart
-        var _origLoadAnalytics = loadAnalytics;
-        loadAnalytics = async function() {
-            await _origLoadAnalytics();
-            // Re-fetch analytics data for daily PnL chart
-            try {
-                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
-                if (r.ok) {
-                    var d = await r.json();
-                    renderDailyPnlChart(d.equity_curve || []);
-                }
-            } catch(e) { console.error('Daily PnL chart:', e); }
-        };
-
-    
-        // === MONTHLY RETURNS HEATMAP ===
-        function renderMonthlyHeatmap(monthlyReturns) {
-            var container = document.getElementById('monthly-heatmap');
-            var noData = document.getElementById('no-monthly-data');
-            if (!container) return;
-
-            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
-                container.style.display = 'none';
-                if (noData) noData.style.display = 'block';
-                return;
-            }
-            container.style.display = 'grid';
-            if (noData) noData.style.display = 'none';
-
-            // Sort months chronologically
-            var months = Object.keys(monthlyReturns).sort();
-
-            container.innerHTML = months.map(function(month) {
-                var ret = monthlyReturns[month];
-                // Color mapping: green gradient for profit, red gradient for loss
-                var bgColor, textColor;
-                if (ret > 0) {
-                    var intensity = Math.min(Math.abs(ret) / 20, 1); // Cap at 20% for full color
-                    var g = Math.round(100 + intensity * 155); // 100-255 green channel
-                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
-                    textColor = '#4ade80';
-                } else if (ret < 0) {
-                    var intensity = Math.min(Math.abs(ret) / 20, 1);
-                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
-                    textColor = '#f87171';
-                } else {
-                    bgColor = 'rgba(100, 116, 139, 0.2)';
-                    textColor = '#94a3b8';
-                }
-
-                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
-                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
-                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
-                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
-            }).join('');
-        }
-
-        // Wrap loadAnalytics to also render monthly heatmap
-        var _origLoadAnalytics2 = typeof _origLoadAnalytics !== 'undefined' ? _origLoadAnalytics : loadAnalytics;
-        if (typeof _origLoadAnalytics === 'undefined') {
-            // If daily PnL wrapper hasn't been applied yet, wrap directly
-            _origLoadAnalytics = loadAnalytics;
-        }
-        loadAnalytics = async function() {
-            await _origLoadAnalytics();
-            // Fetch analytics data for heatmap
-            try {
-                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
-                if (r.ok) {
-                    var d = await r.json();
-                    renderMonthlyHeatmap(d.monthly_returns || {});
-                }
-            } catch(e) { console.error('Monthly heatmap:', e); }
-        };
-
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js">
-        // === POSITIONS SORT/FILTER (Client-side only) ===
-        var _positionsCache = [];
-        var _sortCol = 'upnl';
-        var _sortAsc = false;
-        var _filterAsset = '';
-
-        function sortPositions(col) {
-            if (_sortCol === col) { _sortAsc = !_sortAsc; } else { _sortCol = col; _sortAsc = false; }
-            // Update header visual
-            document.querySelectorAll('#positions-table th.sortable').forEach(function(th) {
-                th.classList.remove('active');
-                var icon = th.querySelector('.sort-icon');
-                if (icon) icon.textContent = '▲▼';
-            });
-            var activeTh = document.querySelector('#positions-table th[onclick*="'' + col + ''"]');
-            if (activeTh) {
-                activeTh.classList.add('active');
-                var icon = activeTh.querySelector('.sort-icon');
-                if (icon) icon.textContent = _sortAsc ? '▲' : '▼';
-            }
-            renderFilteredPositions();
-        }
-
-        function filterPositions() {
-            _filterAsset = document.getElementById('pos-asset-filter')?.value || '';
-            renderFilteredPositions();
-        }
-
-        function renderFilteredPositions() {
-            var filtered = _positionsCache.slice();
-            // Apply asset filter
-            if (_filterAsset) {
-                filtered = filtered.filter(function(p) { return p.asset === _filterAsset; });
-            }
-            // Apply sort
-            filtered.sort(function(a, b) {
-                var va = a[_sortCol], vb = b[_sortCol];
-                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
-                if (va < vb) return _sortAsc ? -1 : 1;
-                if (va > vb) return _sortAsc ? 1 : -1;
-                return 0;
-            });
-            // Render using existing updatePositions logic
-            var tb = document.getElementById('positions-table');
-            var np = document.getElementById('no-positions');
-            if (!tb) return;
-            if (!filtered.length) { tb.innerHTML = ''; if(np) np.style.display = 'block'; return; }
-            if(np) np.style.display = 'none';
-            tb.innerHTML = filtered.map(function(p) {
-                return '<tr><td class="font-medium text-white">' + p.asset + '</td>' +
-                    '<td><span class="badge ' + (p.side === 'BUY' ? 'badge-buy' : 'badge-sell') + '">' + p.side + '</span></td>' +
-                    '<td>' + p.size.toFixed(6) + '</td>' +
-                    '<td>$' + p.entry.toLocaleString() + '</td>' +
-                    '<td>$' + p.current.toLocaleString() + '</td>' +
-                    '<td class="' + pnlClass(p.upnl) + '">' + formatPnl(p.upnl) + '</td>' +
-                    '<td class="' + pnlClass(p.pnl_pct) + '">' + (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%</td>' +
-                    '<td>$' + (p.margin_used || 0).toFixed(2) + '</td>' +
-                    '<td>$' + (p.liquidation_px || 0).toLocaleString() + '</td>' +
-                    '<td>' + (p.leverage || 1) + 'x</td>' +
-                    '<td class="' + pnlClass(p.roe) + '">' + (p.roe || 0).toFixed(2) + '%</td>' +
-                    '<td>$' + (p.sl || 0).toLocaleString() + '</td>' +
-                    '<td class="text-slate-400">' + p.strategy + '</td></tr>';
-            }).join('');
-        }
-
-        // Wrap existing updatePositions to cache data and populate filter
-        var _origUpdatePositions = updatePositions;
-        updatePositions = function(positions) {
-            _positionsCache = positions || [];
-            // Populate asset filter dropdown if empty
-            var filterEl = document.getElementById('pos-asset-filter');
-            if (filterEl && filterEl.options.length <= 1) {
-                var assets = {};
-                _positionsCache.forEach(function(p) { assets[p.asset] = true; });
-                Object.keys(assets).sort().forEach(function(a) {
-                    var opt = document.createElement('option');
-                    opt.value = a; opt.textContent = a;
-                    filterEl.appendChild(opt);
-                });
-            }
-            renderFilteredPositions();
-        };
-
-    
-        // === ACTIVE BOT CARDS ===
-        var _botsCache = { grids: [], dcas: [] };
-
-        function renderBotCards(grids, positions) {
-            var container = document.getElementById('bots-container');
-            var section = document.getElementById('active-bots-section');
-            var countBadge = document.getElementById('bot-count-badge');
-            
-            if (!container || !section) return;
-
-            // Combine grids and DCA positions into bot list
-            var bots = [];
-            
-            // Add Grids
-            if (grids && grids.length > 0) {
-                grids.forEach(function(g) {
-                    bots.push({
-                        type: 'GRID',
-                        asset: g.asset,
-                        pnl: g.realized_pnl || 0,
-                        status: 'running',
-                        details: g.nodes_active + '/' + g.nodes_total + ' nodes',
-                        investment: g.investment || 0,
-                        mode: g.mode
-                    });
-                });
-            }
-            
-            // Add DCA Positions (simple heuristic: non-grid positions with strategy=DCA)
-            if (positions && positions.length > 0) {
-                positions.forEach(function(p) {
-                    if (p.strategy && p.strategy.toUpperCase().includes('DCA')) {
-                        bots.push({
-                            type: 'DCA',
-                            asset: p.asset,
-                            pnl: p.upnl || 0,
-                            status: 'running',
-                            details: p.side + ' ' + p.size.toFixed(4),
-                            investment: p.size * p.entry,
-                            mode: p.side
-                        });
-                    }
-                });
-            }
-
-            // Update visibility
-            if (bots.length === 0) {
-                section.style.display = 'none';
-                return;
-            }
-            section.style.display = 'block';
-            countBadge.textContent = bots.length + ' Active';
-
-            // Render cards
-            container.innerHTML = bots.map(function(b) {
-                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
-                var icon = b.type === 'GRID' ? '&#x1F532;' : '&#x1F4C8;';
-                var colorClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
-                
-                return '<div class="card ' + colorClass + ' relative overflow-hidden">' +
-                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
-                    '<div class="flex items-center justify-between mb-2">' +
-                        '<div class="flex items-center gap-2">' +
-                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
-                            '<span class="font-bold text-white">' + b.asset + '</span>' +
-                        '</div>' +
-                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
-                    '</div>' +
-                    '<div class="mb-2">' +
-                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
-                        '<div class="text-xs text-slate-500">Realized PnL</div>' +
-                    '</div>' +
-                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
-                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
-                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
-        }
-
-        // Wrap updateOverview to capture grid/position data for bot cards
-        var _origUpdateOverview = updateOverview;
-        updateOverview = function(data) {
-            _origUpdateOverview(data);
-            // Pass grids and positions to bot renderer
-            renderBotCards(data.grids || [], data.positions || []);
-        };
-
-    
-        // === DAILY PNL BAR CHART ===
-        var dailyPnlChartInstance = null;
-
-        function renderDailyPnlChart(equityCurve) {
-            var canvas = document.getElementById('daily-pnl-chart');
-            if (!canvas || typeof Chart === 'undefined') return;
-            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
-            if (!equityCurve || equityCurve.length < 2) return;
-
-            // Compute daily PnL as delta between consecutive equity points
-            var labels = [];
-            var values = [];
-            var colors = [];
-            for (var i = 1; i < equityCurve.length; i++) {
-                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
-                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
-                var delta = curr - prev;
-                labels.push('T' + (i));
-                values.push(parseFloat(delta.toFixed(2)));
-                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
-            }
-
-            dailyPnlChartInstance = new Chart(canvas, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Daily PnL ($)',
-                        data: values,
-                        backgroundColor: colors,
-                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
-                        borderWidth: 1,
-                        borderRadius: 3,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            callbacks: {
-                                label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
-                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
-                    }
-                }
-            });
-        }
-
-        // Wrap loadAnalytics to also render daily PnL chart
-        var _origLoadAnalytics = loadAnalytics;
-        loadAnalytics = async function() {
-            await _origLoadAnalytics();
-            // Re-fetch analytics data for daily PnL chart
-            try {
-                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
-                if (r.ok) {
-                    var d = await r.json();
-                    renderDailyPnlChart(d.equity_curve || []);
-                }
-            } catch(e) { console.error('Daily PnL chart:', e); }
-        };
-
-    
-        // === MONTHLY RETURNS HEATMAP ===
-        function renderMonthlyHeatmap(monthlyReturns) {
-            var container = document.getElementById('monthly-heatmap');
-            var noData = document.getElementById('no-monthly-data');
-            if (!container) return;
-
-            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
-                container.style.display = 'none';
-                if (noData) noData.style.display = 'block';
-                return;
-            }
-            container.style.display = 'grid';
-            if (noData) noData.style.display = 'none';
-
-            // Sort months chronologically
-            var months = Object.keys(monthlyReturns).sort();
-
-            container.innerHTML = months.map(function(month) {
-                var ret = monthlyReturns[month];
-                // Color mapping: green gradient for profit, red gradient for loss
-                var bgColor, textColor;
-                if (ret > 0) {
-                    var intensity = Math.min(Math.abs(ret) / 20, 1); // Cap at 20% for full color
-                    var g = Math.round(100 + intensity * 155); // 100-255 green channel
-                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
-                    textColor = '#4ade80';
-                } else if (ret < 0) {
-                    var intensity = Math.min(Math.abs(ret) / 20, 1);
-                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
-                    textColor = '#f87171';
-                } else {
-                    bgColor = 'rgba(100, 116, 139, 0.2)';
-                    textColor = '#94a3b8';
-                }
-
-                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
-                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
-                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
-                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
-            }).join('');
-        }
-
-        // Wrap loadAnalytics to also render monthly heatmap
-        var _origLoadAnalytics2 = typeof _origLoadAnalytics !== 'undefined' ? _origLoadAnalytics : loadAnalytics;
-        if (typeof _origLoadAnalytics === 'undefined') {
-            // If daily PnL wrapper hasn't been applied yet, wrap directly
-            _origLoadAnalytics = loadAnalytics;
-        }
-        loadAnalytics = async function() {
-            await _origLoadAnalytics();
-            // Fetch analytics data for heatmap
-            try {
-                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
-                if (r.ok) {
-                    var d = await r.json();
-                    renderMonthlyHeatmap(d.monthly_returns || {});
-                }
-            } catch(e) { console.error('Monthly heatmap:', e); }
-        };
-
-    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: { extend: { colors: { slate: { 850: '#1a2332', 950: '#0b1120' } } } }
         }
-    
-        // === POSITIONS SORT/FILTER (Client-side only) ===
-        var _positionsCache = [];
-        var _sortCol = 'upnl';
-        var _sortAsc = false;
-        var _filterAsset = '';
-
-        function sortPositions(col) {
-            if (_sortCol === col) { _sortAsc = !_sortAsc; } else { _sortCol = col; _sortAsc = false; }
-            // Update header visual
-            document.querySelectorAll('#positions-table th.sortable').forEach(function(th) {
-                th.classList.remove('active');
-                var icon = th.querySelector('.sort-icon');
-                if (icon) icon.textContent = '▲▼';
-            });
-            var activeTh = document.querySelector('#positions-table th[onclick*="'' + col + ''"]');
-            if (activeTh) {
-                activeTh.classList.add('active');
-                var icon = activeTh.querySelector('.sort-icon');
-                if (icon) icon.textContent = _sortAsc ? '▲' : '▼';
-            }
-            renderFilteredPositions();
-        }
-
-        function filterPositions() {
-            _filterAsset = document.getElementById('pos-asset-filter')?.value || '';
-            renderFilteredPositions();
-        }
-
-        function renderFilteredPositions() {
-            var filtered = _positionsCache.slice();
-            // Apply asset filter
-            if (_filterAsset) {
-                filtered = filtered.filter(function(p) { return p.asset === _filterAsset; });
-            }
-            // Apply sort
-            filtered.sort(function(a, b) {
-                var va = a[_sortCol], vb = b[_sortCol];
-                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
-                if (va < vb) return _sortAsc ? -1 : 1;
-                if (va > vb) return _sortAsc ? 1 : -1;
-                return 0;
-            });
-            // Render using existing updatePositions logic
-            var tb = document.getElementById('positions-table');
-            var np = document.getElementById('no-positions');
-            if (!tb) return;
-            if (!filtered.length) { tb.innerHTML = ''; if(np) np.style.display = 'block'; return; }
-            if(np) np.style.display = 'none';
-            tb.innerHTML = filtered.map(function(p) {
-                return '<tr><td class="font-medium text-white">' + p.asset + '</td>' +
-                    '<td><span class="badge ' + (p.side === 'BUY' ? 'badge-buy' : 'badge-sell') + '">' + p.side + '</span></td>' +
-                    '<td>' + p.size.toFixed(6) + '</td>' +
-                    '<td>$' + p.entry.toLocaleString() + '</td>' +
-                    '<td>$' + p.current.toLocaleString() + '</td>' +
-                    '<td class="' + pnlClass(p.upnl) + '">' + formatPnl(p.upnl) + '</td>' +
-                    '<td class="' + pnlClass(p.pnl_pct) + '">' + (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%</td>' +
-                    '<td>$' + (p.margin_used || 0).toFixed(2) + '</td>' +
-                    '<td>$' + (p.liquidation_px || 0).toLocaleString() + '</td>' +
-                    '<td>' + (p.leverage || 1) + 'x</td>' +
-                    '<td class="' + pnlClass(p.roe) + '">' + (p.roe || 0).toFixed(2) + '%</td>' +
-                    '<td>$' + (p.sl || 0).toLocaleString() + '</td>' +
-                    '<td class="text-slate-400">' + p.strategy + '</td></tr>';
-            }).join('');
-        }
-
-        // Wrap existing updatePositions to cache data and populate filter
-        var _origUpdatePositions = updatePositions;
-        updatePositions = function(positions) {
-            _positionsCache = positions || [];
-            // Populate asset filter dropdown if empty
-            var filterEl = document.getElementById('pos-asset-filter');
-            if (filterEl && filterEl.options.length <= 1) {
-                var assets = {};
-                _positionsCache.forEach(function(p) { assets[p.asset] = true; });
-                Object.keys(assets).sort().forEach(function(a) {
-                    var opt = document.createElement('option');
-                    opt.value = a; opt.textContent = a;
-                    filterEl.appendChild(opt);
-                });
-            }
-            renderFilteredPositions();
-        };
-
-    
-        // === ACTIVE BOT CARDS ===
-        var _botsCache = { grids: [], dcas: [] };
-
-        function renderBotCards(grids, positions) {
-            var container = document.getElementById('bots-container');
-            var section = document.getElementById('active-bots-section');
-            var countBadge = document.getElementById('bot-count-badge');
-            
-            if (!container || !section) return;
-
-            // Combine grids and DCA positions into bot list
-            var bots = [];
-            
-            // Add Grids
-            if (grids && grids.length > 0) {
-                grids.forEach(function(g) {
-                    bots.push({
-                        type: 'GRID',
-                        asset: g.asset,
-                        pnl: g.realized_pnl || 0,
-                        status: 'running',
-                        details: g.nodes_active + '/' + g.nodes_total + ' nodes',
-                        investment: g.investment || 0,
-                        mode: g.mode
-                    });
-                });
-            }
-            
-            // Add DCA Positions (simple heuristic: non-grid positions with strategy=DCA)
-            if (positions && positions.length > 0) {
-                positions.forEach(function(p) {
-                    if (p.strategy && p.strategy.toUpperCase().includes('DCA')) {
-                        bots.push({
-                            type: 'DCA',
-                            asset: p.asset,
-                            pnl: p.upnl || 0,
-                            status: 'running',
-                            details: p.side + ' ' + p.size.toFixed(4),
-                            investment: p.size * p.entry,
-                            mode: p.side
-                        });
-                    }
-                });
-            }
-
-            // Update visibility
-            if (bots.length === 0) {
-                section.style.display = 'none';
-                return;
-            }
-            section.style.display = 'block';
-            countBadge.textContent = bots.length + ' Active';
-
-            // Render cards
-            container.innerHTML = bots.map(function(b) {
-                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
-                var icon = b.type === 'GRID' ? '&#x1F532;' : '&#x1F4C8;';
-                var colorClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
-                
-                return '<div class="card ' + colorClass + ' relative overflow-hidden">' +
-                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
-                    '<div class="flex items-center justify-between mb-2">' +
-                        '<div class="flex items-center gap-2">' +
-                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
-                            '<span class="font-bold text-white">' + b.asset + '</span>' +
-                        '</div>' +
-                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
-                    '</div>' +
-                    '<div class="mb-2">' +
-                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
-                        '<div class="text-xs text-slate-500">Realized PnL</div>' +
-                    '</div>' +
-                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
-                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
-                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
-        }
-
-        // Wrap updateOverview to capture grid/position data for bot cards
-        var _origUpdateOverview = updateOverview;
-        updateOverview = function(data) {
-            _origUpdateOverview(data);
-            // Pass grids and positions to bot renderer
-            renderBotCards(data.grids || [], data.positions || []);
-        };
-
-    
-        // === DAILY PNL BAR CHART ===
-        var dailyPnlChartInstance = null;
-
-        function renderDailyPnlChart(equityCurve) {
-            var canvas = document.getElementById('daily-pnl-chart');
-            if (!canvas || typeof Chart === 'undefined') return;
-            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
-            if (!equityCurve || equityCurve.length < 2) return;
-
-            // Compute daily PnL as delta between consecutive equity points
-            var labels = [];
-            var values = [];
-            var colors = [];
-            for (var i = 1; i < equityCurve.length; i++) {
-                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
-                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
-                var delta = curr - prev;
-                labels.push('T' + (i));
-                values.push(parseFloat(delta.toFixed(2)));
-                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
-            }
-
-            dailyPnlChartInstance = new Chart(canvas, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Daily PnL ($)',
-                        data: values,
-                        backgroundColor: colors,
-                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
-                        borderWidth: 1,
-                        borderRadius: 3,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            callbacks: {
-                                label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
-                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
-                    }
-                }
-            });
-        }
-
-        // Wrap loadAnalytics to also render daily PnL chart
-        var _origLoadAnalytics = loadAnalytics;
-        loadAnalytics = async function() {
-            await _origLoadAnalytics();
-            // Re-fetch analytics data for daily PnL chart
-            try {
-                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
-                if (r.ok) {
-                    var d = await r.json();
-                    renderDailyPnlChart(d.equity_curve || []);
-                }
-            } catch(e) { console.error('Daily PnL chart:', e); }
-        };
-
-    
-        // === MONTHLY RETURNS HEATMAP ===
-        function renderMonthlyHeatmap(monthlyReturns) {
-            var container = document.getElementById('monthly-heatmap');
-            var noData = document.getElementById('no-monthly-data');
-            if (!container) return;
-
-            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
-                container.style.display = 'none';
-                if (noData) noData.style.display = 'block';
-                return;
-            }
-            container.style.display = 'grid';
-            if (noData) noData.style.display = 'none';
-
-            // Sort months chronologically
-            var months = Object.keys(monthlyReturns).sort();
-
-            container.innerHTML = months.map(function(month) {
-                var ret = monthlyReturns[month];
-                // Color mapping: green gradient for profit, red gradient for loss
-                var bgColor, textColor;
-                if (ret > 0) {
-                    var intensity = Math.min(Math.abs(ret) / 20, 1); // Cap at 20% for full color
-                    var g = Math.round(100 + intensity * 155); // 100-255 green channel
-                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
-                    textColor = '#4ade80';
-                } else if (ret < 0) {
-                    var intensity = Math.min(Math.abs(ret) / 20, 1);
-                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
-                    textColor = '#f87171';
-                } else {
-                    bgColor = 'rgba(100, 116, 139, 0.2)';
-                    textColor = '#94a3b8';
-                }
-
-                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
-                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
-                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
-                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
-            }).join('');
-        }
-
-        // Wrap loadAnalytics to also render monthly heatmap
-        var _origLoadAnalytics2 = typeof _origLoadAnalytics !== 'undefined' ? _origLoadAnalytics : loadAnalytics;
-        if (typeof _origLoadAnalytics === 'undefined') {
-            // If daily PnL wrapper hasn't been applied yet, wrap directly
-            _origLoadAnalytics = loadAnalytics;
-        }
-        loadAnalytics = async function() {
-            await _origLoadAnalytics();
-            // Fetch analytics data for heatmap
-            try {
-                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
-                if (r.ok) {
-                    var d = await r.json();
-                    renderMonthlyHeatmap(d.monthly_returns || {});
-                }
-            } catch(e) { console.error('Monthly heatmap:', e); }
-        };
-
     </script>
     <style>
         body { background: #0b1120; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; }
-        .card { background: #1a2332; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; }
+        .card { background: #1a2332; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+        .card:hover { border-color: #334155; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .metric-label { color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
         .metric-value { font-size: 1.5rem; font-weight: 700; }
         .pnl-positive { color: #4ade80; } .pnl-negative { color: #f87171; } .pnl-neutral { color: #94a3b8; }
@@ -965,35 +51,24 @@
         .tab-bar { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #1e293b; }
         .tab-btn { padding: 10px 20px; color: #94a3b8; cursor: pointer; border: none; background: none; font-family: inherit; font-size: 0.85rem; border-bottom: 2px solid transparent; transition: all 0.2s; }
         .tab-btn:hover { color: #e2e8f0; } .tab-btn.active { color: #60a5fa; border-bottom-color: #3b82f6; }
-        @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
-        .animate-slide-in { animation: slideIn 0.3s ease-out; }
-    
-        .card { transition: border-color 0.2s ease, box-shadow 0.2s ease; }
-        .card:hover { border-color: #334155; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
         .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #334155; border-radius: 24px; transition: 0.3s; }
         .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
         .toggle-switch input:checked + .toggle-slider { background: #2563eb; }
         .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
-    
         th.sortable { cursor: pointer; user-select: none; transition: color 0.2s; }
         th.sortable:hover { color: #60a5fa; }
         th.sortable .sort-icon { margin-left: 4px; font-size: 0.6rem; opacity: 0.4; }
         th.sortable.active .sort-icon { opacity: 1; color: #60a5fa; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+        .animate-slide-in { animation: slideIn 0.3s ease-out; }
     </style>
 </head>
 <body class="flex h-screen overflow-hidden">
-    <!-- Toast Container -->
     <div id="toast-container" class="fixed top-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none"></div>
-
     <aside class="w-64 flex-shrink-0 border-r border-slate-800 flex flex-col">
-        <div class="p-6 border-b border-slate-800">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-xl">&#x1F916;</div>
-                <span class="text-xl font-bold tracking-tight text-white">MBIO</span>
-            </div>
-        </div>
+        <div class="p-6 border-b border-slate-800"><div class="flex items-center gap-3"><div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-xl">&#x1F916;</div><span class="text-xl font-bold tracking-tight text-white">MBIO</span></div></div>
         <nav class="flex-1 p-4 space-y-1">
             <div class="sidebar-link active" onclick="showPage('dashboard', this)">&#x1F4CA; Dashboard</div>
             <div class="sidebar-link" onclick="showPage('positions', this)">&#x1F4C8; Positions</div>
@@ -1019,7 +94,6 @@
         </div>
     </aside>
     <main class="flex-1 overflow-y-auto p-8">
-        <!-- Dashboard -->
         <div id="page-dashboard">
             <div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-bold text-white">Dashboard Overview</h1><button id="emergency-stop-btn" class="btn btn-danger" style="display:none;" onclick="openEmergencyStopModal()">&#x26A0; EMERGENCY STOP</button></div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -1034,52 +108,16 @@
                 <div class="card"><div class="metric-label mb-1">Win Rate</div><div id="ov-winrate" class="text-xl font-bold text-white">N/A</div></div>
             </div>
             <div class="card"><div class="metric-label mb-3">System Health</div><div id="health-checks" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm"></div></div>
-            <!-- Active Bots Section -->
-            <div id="active-bots-section" class="mt-6" style="display:none;">
-                <div class="flex items-center justify-between mb-3">
-                    <h2 class="text-lg font-bold text-white">Active Bots</h2>
-                    <span id="bot-count-badge" class="badge badge-grid">0 Active</span>
-                </div>
-                <div id="bots-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-            </div>
-            <!-- Recent Trades Feed -->
             <div class="card mt-6">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="metric-label">Recent Trades</div>
-                    <button onclick="exportTradesToCSV()" class="text-xs text-blue-400 hover:text-blue-300">Export CSV</button>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-xs">
-                        <thead><tr class="text-slate-500 border-b border-slate-700"><th class="text-left py-2">Time</th><th class="text-left py-2">Asset</th><th class="text-left py-2">Side</th><th class="text-right py-2">PnL</th></tr></thead>
-                        <tbody id="recent-trades-body"><tr><td colspan="4" class="text-center py-4 text-slate-500">Loading...</td></tr></tbody>
-                    </table>
-                </div>
+                <div class="flex items-center justify-between mb-3"><div class="metric-label">Recent Trades</div><button onclick="exportTradesToCSV()" class="text-xs text-blue-400 hover:text-blue-300">Export CSV</button></div>
+                <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500 border-b border-slate-700"><th class="text-left py-2">Time</th><th class="text-left py-2">Asset</th><th class="text-left py-2">Side</th><th class="text-right py-2">PnL</th></tr></thead><tbody id="recent-trades-body"><tr><td colspan="4" class="text-center py-4 text-slate-500">Loading...</td></tr></tbody></table></div>
             </div>
         </div>
-        <!-- Positions -->
-        <div id="page-positions" style="display:none;"><div class="flex items-center justify-between mb-6">
-                <h1 class="text-2xl font-bold text-white">Open Positions</h1>
-                <select id="pos-asset-filter" onchange="filterPositions()" style="max-width:180px;">
-                    <option value="">All Assets</option>
-                </select>
-            </div><div class="card !p-0 overflow-x-auto"><table><thead><tr>
-<th class="sortable" onclick="sortPositions('asset')">Asset <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('side')">Side <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('size')">Size <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('entry')">Entry <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('current')">Current <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('upnl')">uPnL <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('pnl_pct')">PnL% <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('margin_used')">Margin <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('liquidation_px')">Liq Px <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('leverage')">Leverage <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('roe')">ROE <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('sl')">SL <span class="sort-icon">▲▼</span></th>
-<th class="sortable" onclick="sortPositions('strategy')">Strategy <span class="sort-icon">▲▼</span></th>
-</tr></thead><tbody id="positions-table"></tbody></table><div id="no-positions" class="p-8 text-center text-slate-500" style="display:none;">No open positions</div></div></div>
-        <!-- Grids -->
+        <div id="page-positions" style="display:none;">
+            <div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-bold text-white">Open Positions</h1><select id="pos-asset-filter" onchange="filterPositions()" style="max-width:180px;"><option value="">All Assets</option></select></div>
+            <div class="card !p-0 overflow-x-auto"><table><thead><tr><th class="sortable" onclick="sortPositions('asset')">Asset <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('side')">Side <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('size')">Size <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('entry')">Entry <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('current')">Current <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('upnl')">uPnL <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('pnl_pct')">PnL% <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('margin_used')">Margin <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('liquidation_px')">Liq Px <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('leverage')">Leverage <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('roe')">ROE <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('sl')">SL <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('strategy')">Strategy <span class="sort-icon">&#x25B2;&#x25BC;</span></th></tr></thead><tbody id="positions-table"></tbody></table><div id="no-positions" class="p-8 text-center text-slate-500" style="display:none;">No open positions</div></div>
+        </div>
         <div id="page-grids" style="display:none;"><h1 class="text-2xl font-bold text-white mb-6">Active Grids</h1><div id="grids-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div><div id="no-grids" class="card text-center text-slate-500 py-8" style="display:none;">No active grids</div></div>
-        <!-- Create Bot -->
         <div id="page-create" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Create New Bot</h1>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -1089,7 +127,6 @@
             <div id="dca-form" class="card" style="display:none;"><div class="flex items-center justify-between mb-4"><h2 class="text-xl font-bold text-white">Configure DCA Bot</h2><button class="btn btn-secondary" onclick="hideBotForms()">Cancel</button></div><div class="form-grid"><div class="form-group"><label>Asset</label><select id="dca-asset" class="dynamic-asset-select"></select></div><div class="form-group"><label>Side</label><select id="dca-side"><option value="BUY">LONG</option><option value="SELL">SHORT</option></select></div><div class="form-group"><label>Base Size ($)</label><input type="number" id="dca-base-size" step="0.1"></div><div class="form-group"><label>TP %</label><input type="number" id="dca-tp" step="0.1"></div><div class="form-group"><label>SL %</label><input type="number" id="dca-sl" step="0.1"></div><div class="form-group"><label>Max SO</label><input type="number" id="dca-max-so" step="1"></div></div><div class="mt-4"><button class="btn btn-primary" onclick="submitDcaOpen()">Open DCA Bot</button></div></div>
             <div id="grid-form" class="card" style="display:none;"><div class="flex items-center justify-between mb-4"><h2 class="text-xl font-bold text-white">Configure Grid Bot</h2><button class="btn btn-secondary" onclick="hideBotForms()">Cancel</button></div><div class="form-grid"><div class="form-group"><label>Asset</label><select id="grid-asset" class="dynamic-asset-select"></select></div><div class="form-group"><label>Investment ($)</label><input type="number" id="grid-investment" step="1"></div><div class="form-group"><label>Lower Price</label><input type="number" id="grid-lower" step="0.01"></div><div class="form-group"><label>Upper Price</label><input type="number" id="grid-upper" step="0.01"></div><div class="form-group"><label>Nodes</label><input type="number" id="grid-nodes" step="1"></div><div class="form-group"><label>Mode</label><select id="grid-mode"><option value="RANGE">Range</option></select></div></div><div class="mt-4"><button class="btn btn-primary" onclick="submitGridOpen()">Open Grid Bot</button></div></div>
         </div>
-        <!-- Order Desk -->
         <div id="page-orders" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Order Desk</h1>
             <div class="tab-bar"><button class="tab-btn active" onclick="showOrderTab('market',this)">Market</button><button class="tab-btn" onclick="showOrderTab('limit',this)">Limit</button><button class="tab-btn" onclick="showOrderTab('stoplimit',this)">Stop-Limit</button><button class="tab-btn" onclick="showOrderTab('trailing',this)">Trailing</button></div>
@@ -1097,23 +134,9 @@
             <div id="order-limit" class="card" style="display:none;"><div class="form-grid"><div class="form-group"><label>Asset</label><select id="lmt-asset" class="dynamic-asset-select"></select></div><div class="form-group"><label>Side</label><select id="lmt-side"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div><div class="form-group"><label>Size</label><input type="number" id="lmt-size" step="0.0001"></div><div class="form-group"><label>Price</label><input type="number" id="lmt-price" step="0.01"></div></div><div class="mt-4"><button class="btn btn-primary" onclick="submitLimitOrder()">Place Limit Order</button></div></div>
             <div id="order-stoplimit" class="card" style="display:none;"><div class="form-grid"><div class="form-group"><label>Asset</label><select id="sl-asset" class="dynamic-asset-select"></select></div><div class="form-group"><label>Side</label><select id="sl-side"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div><div class="form-group"><label>Size</label><input type="number" id="sl-size" step="0.0001"></div><div class="form-group"><label>Stop Price</label><input type="number" id="sl-stop" step="0.01"></div><div class="form-group"><label>Limit Price</label><input type="number" id="sl-limit" step="0.01"></div></div><div class="mt-4"><button class="btn btn-primary" onclick="submitStopLimitOrder()">Place Stop-Limit</button></div></div>
             <div id="order-trailing" class="card" style="display:none;"><div class="form-grid"><div class="form-group"><label>Asset</label><select id="ts-asset" class="dynamic-asset-select"></select></div><div class="form-group"><label>Side</label><select id="ts-side"><option value="SELL">SELL</option><option value="BUY">BUY</option></select></div><div class="form-group"><label>Size</label><input type="number" id="ts-size" step="0.0001"></div><div class="form-group"><label>Trail %</label><input type="number" id="ts-trail" step="0.1" value="1.0"></div></div><div class="mt-4"><button class="btn btn-primary" onclick="submitTrailingStop()">Place Trailing Stop</button></div></div>
-            <!-- Position Size Calculator -->
-            <div class="card mt-6">
-                <div class="metric-label mb-3">Position Size Calculator</div>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="form-group"><label>USD Amount</label><input type="number" id="calc-usd" step="1" placeholder="100" oninput="calculatePositionSize()"></div>
-                    <div class="form-group"><label>Price ($)</label><input type="number" id="calc-price" step="0.01" placeholder="60000" oninput="calculatePositionSize()"></div>
-                    <div class="form-group"><label>Leverage</label><input type="number" id="calc-leverage" step="1" value="1" min="1" max="50" oninput="calculatePositionSize()"></div>
-                    <div class="form-group"><label>Result</label><div id="calc-result" class="text-white font-bold pt-2 hidden">-</div></div>
-                </div>
-            </div>
+            <div class="card mt-6"><div class="metric-label mb-3">Position Size Calculator</div><div class="grid grid-cols-1 md:grid-cols-4 gap-4"><div class="form-group"><label>USD Amount</label><input type="number" id="calc-usd" step="1" placeholder="100" oninput="calculatePositionSize()"></div><div class="form-group"><label>Price ($)</label><input type="number" id="calc-price" step="0.01" placeholder="60000" oninput="calculatePositionSize()"></div><div class="form-group"><label>Leverage</label><input type="number" id="calc-leverage" step="1" value="1" min="1" max="50" oninput="calculatePositionSize()"></div><div class="form-group"><label>Result</label><div id="calc-result" class="text-white font-bold pt-2 hidden">-</div></div></div></div>
         </div>
-        <!-- Trade History -->
-        <div id="page-history" style="display:none;">
-            <div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-bold text-white">Trade History</h1><button onclick="exportTradesToCSV()" class="btn btn-primary">Export CSV</button></div>
-            <div class="card !p-0 overflow-x-auto"><table><thead><tr><th>Date</th><th>Asset</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>PnL%</th><th>Strategy</th><th>Source</th></tr></thead><tbody id="history-table"></tbody></table><div id="no-history" class="p-8 text-center text-slate-500" style="display:none;">No trade history</div></div>
-        </div>
-        <!-- Analytics -->
+        <div id="page-history" style="display:none;"><div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-bold text-white">Trade History</h1><button onclick="exportTradesToCSV()" class="btn btn-primary">Export CSV</button></div><div class="card !p-0 overflow-x-auto"><table><thead><tr><th>Date</th><th>Asset</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>PnL%</th><th>Strategy</th><th>Source</th></tr></thead><tbody id="history-table"></tbody></table><div id="no-history" class="p-8 text-center text-slate-500" style="display:none;">No trade history</div></div></div>
         <div id="page-analytics" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Performance Analytics</h1>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -1128,17 +151,7 @@
                 <div class="card"><div class="metric-label mb-1">Best / Worst</div><div id="an-best-worst" class="text-sm text-slate-400">$0 / $0</div></div>
             </div>
             <div class="card"><div class="metric-label mb-3">Equity Curve</div><canvas id="equity-chart" style="max-height:300px;"></canvas></div>
-            <div class="card mt-6">
-                <div class="metric-label mb-3">Daily PnL</div>
-                <canvas id="daily-pnl-chart" style="max-height:250px;"></canvas>
-            </div>
-            <div class="card mt-6">
-                <div class="metric-label mb-3">Monthly Returns</div>
-                <div id="monthly-heatmap" class="grid gap-1" style="grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));"></div>
-                <div id="no-monthly-data" class="text-center text-slate-500 py-4" style="display:none;">No monthly data available</div>
-            </div>
         </div>
-        <!-- Config -->
         <div id="page-config" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Configuration Management</h1>
             <div class="tab-bar"><button class="tab-btn active" onclick="showConfigTab('grid',this)">Grid</button><button class="tab-btn" onclick="showConfigTab('dca',this)">DCA</button><button class="tab-btn" onclick="showConfigTab('risk',this)">Risk</button></div>
@@ -1148,7 +161,6 @@
             <div class="mt-4 flex gap-3"><button class="btn btn-primary" onclick="saveConfig()">Save Config</button><button class="btn btn-success" onclick="reloadConfig()">Apply Changes</button></div>
             <p class="text-xs text-slate-500 mt-3">Backup created on save. Manual reload required to activate.</p>
         </div>
-        <!-- Safety -->
         <div id="page-safety" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Safety Features</h1>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -1159,21 +171,18 @@
             </div>
             <div class="card"><div class="metric-label mb-3">Emergency Stop History</div><div id="estop-history" class="text-sm text-slate-400">Loading...</div></div>
         </div>
-        <!-- Audit Log -->
         <div id="page-audit" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Audit Log</h1>
             <div class="flex gap-3 mb-4"><input type="text" id="audit-search" placeholder="Search..." style="max-width:300px;"><select id="audit-action-filter" style="max-width:200px;"><option value="">All</option><option value="LOGIN">Login</option><option value="GRID_OPEN">Grid Open</option><option value="ORDER_MARKET">Market</option><option value="EMERGENCY_STOP">E-Stop</option><option value="CONFIG_SAVE">Config</option></select><button class="btn btn-primary" onclick="loadAuditLog()">Search</button></div>
             <div class="card !p-0 overflow-x-auto"><table><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Resource</th><th>OTP</th><th>Details</th></tr></thead><tbody id="audit-table"></tbody></table><div id="no-audit" class="p-8 text-center text-slate-500" style="display:none;">No entries</div></div>
             <div class="mt-3 text-xs text-slate-500">90-day retention. <span id="audit-total"></span></div>
         </div>
-        <!-- Reconcile -->
         <div id="page-reconcile" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Signal Reconciliation</h1>
             <p class="text-slate-400 text-sm mb-4">Orphaned signals have no matching exchange position. Select and reconcile manually.</p>
             <div class="card !p-0 overflow-x-auto"><table><thead><tr><th>Select</th><th>Asset</th><th>Signal</th><th>Entry</th><th>Timestamp</th><th>Reason</th></tr></thead><tbody id="orphan-table"></tbody></table><div id="no-orphans" class="p-8 text-center text-green-400" style="display:none;">&#x2705; No orphaned signals</div></div>
             <div class="mt-4"><button class="btn btn-danger" onclick="reconcileSelected()">Reconcile Selected</button></div>
         </div>
-        <!-- System Monitor -->
         <div id="page-sysmon" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">System Monitoring</h1>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -1183,7 +192,6 @@
             </div>
             <div class="card !p-0 overflow-x-auto"><table><thead><tr><th>Task</th><th>Status</th><th>Last Run</th><th>Errors</th></tr></thead><tbody id="sysmon-table"></tbody></table></div>
         </div>
-        <!-- Alerts -->
         <div id="page-alerts" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Alert Configuration</h1>
             <div class="card">
@@ -1191,395 +199,69 @@
                 <div class="border-t border-slate-700 my-4"></div>
                 <div class="metric-label mb-3">Notification Groups</div>
                 <div class="space-y-3 ml-2">
-                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-trades" style="width:auto;"><span class="text-slate-300">📈 Trades & Fills</span><span class="text-slate-600 text-xs ml-8">Order executions, position opens/closes</span></label>
-                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-errors" style="width:auto;"><span class="text-slate-300">⚠️ Errors & Exceptions</span><span class="text-slate-600 text-xs ml-8">API failures, execution errors, crashes</span></label>
-                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-scans" style="width:auto;"><span class="text-slate-300">🔄 Routine Scans</span></label>
-                    <span class="text-slate-600 text-xs ml-8">Periodic analysis results, signal detections</span>
+                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-trades" style="width:auto;"><span class="text-slate-300">&#x1F4C8; Trades & Fills</span><span class="text-slate-600 text-xs ml-8">Order executions, position opens/closes</span></label>
+                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-errors" style="width:auto;"><span class="text-slate-300">&#x26A0;&#xFE0F; Errors & Exceptions</span><span class="text-slate-600 text-xs ml-8">API failures, execution errors, crashes</span></label>
+                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-scans" style="width:auto;"><span class="text-slate-300">&#x1F504; Routine Scans</span><span class="text-slate-600 text-xs ml-8">Periodic analysis results, signal detections</span></label>
                 </div>
                 <div class="mt-6"><button class="btn btn-primary" onclick="saveAlertConfig()">Save Preferences</button></div>
             </div>
         </div>
     </main>
-    <!-- OTP Modal -->
     <div id="otp-modal" class="modal-overlay"><div class="modal-card"><h2 class="text-xl font-bold text-white mb-2">&#x1F510; Confirm Action</h2><p class="text-slate-400 text-sm mb-4" id="otp-description">Enter OTP from Telegram.</p><div class="form-group"><label>OTP Code</label><input type="text" id="otp-input" placeholder="000000" maxlength="6" style="text-align:center;font-size:1.5rem;letter-spacing:0.3em;"></div><div id="otp-error" class="text-red-400 text-sm mb-3" style="display:none;"></div><div class="flex gap-3 mt-4"><button class="btn btn-primary flex-1" id="otp-confirm-btn" onclick="confirmOtpAction()">Confirm</button><button class="btn btn-secondary flex-1" onclick="closeOtpModal()">Cancel</button></div><button class="text-xs text-slate-500 mt-3 w-full text-center hover:text-blue-400" onclick="resendOtp()">Resend OTP</button></div></div>
-    <!-- Emergency Stop Modal -->
     <div id="estop-modal" class="modal-overlay"><div class="modal-card" style="border-color:#dc2626;"><h2 class="text-xl font-bold text-red-400 mb-2">&#x26A0; EMERGENCY STOP</h2><p class="text-slate-300 text-sm mb-4">Cancel ALL orders + close ALL positions immediately.</p><div class="form-group"><label>Type CONFIRM</label><input type="text" id="estop-confirm-input" placeholder="CONFIRM" style="text-transform:uppercase;"></div><div class="form-group"><label>OTP</label><input type="text" id="estop-otp-input" placeholder="000000" maxlength="6" style="text-align:center;font-size:1.5rem;letter-spacing:0.3em;"></div><div id="estop-error" class="text-red-400 text-sm mb-3" style="display:none;"></div><div class="flex gap-3 mt-4"><button class="btn btn-danger flex-1" onclick="executeEmergencyStop()">EXECUTE</button><button class="btn btn-secondary flex-1" onclick="closeEstopModal()">Cancel</button></div></div></div>
     <script>
         var eventSource=null,configDefaults={},currentUser=null,pendingAction=null,availableAssets=[],fullConfig={},equityChartInstance=null;
-        // Auth
         (async function(){try{var r=await fetch('/api/dashboard/auth/me',{credentials:'include'});if(!r.ok){window.location.href='/login';return;}currentUser=await r.json();document.getElementById('user-name').textContent=currentUser.first_name?(currentUser.first_name+' '+(currentUser.last_name||'')):currentUser.email;document.getElementById('user-role').textContent=currentUser.role;if(currentUser.role==='ADMIN'){document.getElementById('emergency-stop-btn').style.display='inline-block';document.getElementById('nav-audit').style.display='flex';var ae=document.getElementById('nav-alerts');if(ae)ae.style.display='flex';}}catch(e){window.location.href='/login';}})();
-        // Config + Assets
         (async function(){try{var[dr,ar]=await Promise.all([fetch('/api/dashboard/config/defaults',{credentials:'include'}),fetch('/api/dashboard/config/assets',{credentials:'include'})]);if(dr.ok){configDefaults=await dr.json();var d=configDefaults.dca||{};document.getElementById('dca-base-size').value=d.base_order_size||5;document.getElementById('dca-tp').value=d.take_profit_pct||1.5;document.getElementById('dca-sl').value=d.stop_loss_pct||5;document.getElementById('dca-max-so').value=d.max_safety_orders||5;var g=configDefaults.grid||{};document.getElementById('grid-investment').value=g.investment_amount||30;document.getElementById('grid-nodes').value=g.num_nodes||10;}if(ar.ok){var ad=await ar.json();availableAssets=ad.assets||[];document.querySelectorAll('.dynamic-asset-select').forEach(function(s){s.innerHTML=availableAssets.map(function(a){return'<option value="'+a.symbol+'">'+a.symbol+'</option>';}).join('');});}}catch(e){console.error('Config load:',e);}})();
         function doLogout(){fetch('/api/dashboard/auth/logout',{method:'POST',credentials:'include'}).then(function(){window.location.href='/login';});}
-        // Navigation
         function showPage(p,el){document.querySelectorAll('[id^="page-"]').forEach(function(e){e.style.display='none';});document.getElementById('page-'+p).style.display='block';document.querySelectorAll('.sidebar-link').forEach(function(e){e.classList.remove('active');});if(el)el.classList.add('active');hideBotForms();if(p==='history')loadTradeHistory();if(p==='analytics')loadAnalytics();if(p==='config')loadConfigForEdit();if(p==='safety')loadSafetyPanel();if(p==='audit')loadAuditLog();if(p==='reconcile')loadOrphanedSignals();if(p==='sysmon')loadSystemMonitor();if(p==='alerts')loadAlertConfig();if(p==='dashboard')loadRecentTrades();}
         function showBotForm(t){hideBotForms();document.getElementById(t+'-form').style.display='block';}
         function hideBotForms(){document.getElementById('dca-form').style.display='none';document.getElementById('grid-form').style.display='none';}
         function showOrderTab(t,el){['market','limit','stoplimit','trailing'].forEach(function(x){document.getElementById('order-'+x).style.display='none';});document.getElementById('order-'+t).style.display='block';document.querySelectorAll('#page-orders .tab-btn').forEach(function(b){b.classList.remove('active');});if(el)el.classList.add('active');}
         function showConfigTab(t,el){['grid','dca','risk'].forEach(function(x){document.getElementById('cfg-'+x).style.display='none';});document.getElementById('cfg-'+t).style.display='block';document.querySelectorAll('#page-config .tab-btn').forEach(function(b){b.classList.remove('active');});if(el)el.classList.add('active');}
-        // Toast System
         function showToast(message,type,duration){type=type||'info';duration=duration||3000;var container=document.getElementById('toast-container');if(!container)return;var colors={success:'bg-green-600 border-green-500',error:'bg-red-600 border-red-500',warning:'bg-yellow-600 border-yellow-500',info:'bg-blue-600 border-blue-500'};var icons={success:'\u2705',error:'\u274C',warning:'\u26A0',info:'\uD83D\uDCE2'};var toast=document.createElement('div');toast.className='pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border '+colors[type]+' text-white min-w-[300px] animate-slide-in';toast.innerHTML='<span class="text-xl">'+icons[type]+'</span><span class="flex-1 font-medium text-sm">'+message+'</span><button onclick="this.parentElement.remove()" class="text-white/70 hover:text-white">&times;</button>';container.appendChild(toast);setTimeout(function(){toast.style.opacity='0';toast.style.transform='translateX(100%)';setTimeout(function(){toast.remove();},300);},duration);}
-        // OTP Flow
         async function requestOtpForAction(ep,payload,desc){pendingAction={endpoint:ep,payload:payload};document.getElementById('otp-description').textContent=desc;document.getElementById('otp-input').value='';document.getElementById('otp-error').style.display='none';document.getElementById('otp-modal').classList.add('active');try{var r=await fetch('/api/dashboard/auth/otp/request',{method:'POST',credentials:'include'});if(!r.ok){var d=await r.json();showToast(d.detail||'Failed to send OTP','error');}}catch(e){showToast('Network error sending OTP','error');}}
         function closeOtpModal(){document.getElementById('otp-modal').classList.remove('active');pendingAction=null;}
         async function resendOtp(){try{await fetch('/api/dashboard/auth/otp/request',{method:'POST',credentials:'include'});showToast('OTP resent to Telegram','info');}catch(e){}}
         async function confirmOtpAction(){if(!pendingAction)return;var otp=document.getElementById('otp-input').value.trim();if(otp.length!==6){showToast('Enter 6-digit OTP','error');return;}var btn=document.getElementById('otp-confirm-btn');btn.disabled=true;btn.textContent='Executing...';try{var body=Object.assign({},pendingAction.payload,{otp:otp});var r=await fetch(pendingAction.endpoint,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});var d=await r.json();if(r.ok){closeOtpModal();showToast(d.message||'Action completed successfully','success');}else{showToast(d.detail||'Action failed','error');}}catch(e){showToast('Network error occurred','error');}btn.disabled=false;btn.textContent='Confirm';}
-        // Write Actions
         function submitDcaOpen(){requestOtpForAction('/api/dashboard/dca/open',{asset:document.getElementById('dca-asset').value,side:document.getElementById('dca-side').value,base_order_size:parseFloat(document.getElementById('dca-base-size').value),take_profit_pct:parseFloat(document.getElementById('dca-tp').value),stop_loss_pct:parseFloat(document.getElementById('dca-sl').value)},'Open DCA Bot');}
         function submitGridOpen(){var lp=parseFloat(document.getElementById('grid-lower').value),up=parseFloat(document.getElementById('grid-upper').value);if(lp>=up){showToast('Lower price must be less than upper','warning');return;}requestOtpForAction('/api/dashboard/grid/open',{asset:document.getElementById('grid-asset').value,lower_price:lp,upper_price:up,investment_amount:parseFloat(document.getElementById('grid-investment').value),num_nodes:parseInt(document.getElementById('grid-nodes').value)},'Open Grid Bot');}
         function submitMarketOrder(){requestOtpForAction('/api/dashboard/order/market',{asset:document.getElementById('mkt-asset').value,side:document.getElementById('mkt-side').value,size:parseFloat(document.getElementById('mkt-size').value)},'Market Order');}
         function submitLimitOrder(){requestOtpForAction('/api/dashboard/order/limit',{asset:document.getElementById('lmt-asset').value,side:document.getElementById('lmt-side').value,size:parseFloat(document.getElementById('lmt-size').value),price:parseFloat(document.getElementById('lmt-price').value)},'Limit Order');}
         function submitStopLimitOrder(){requestOtpForAction('/api/dashboard/order/stop-limit',{asset:document.getElementById('sl-asset').value,side:document.getElementById('sl-side').value,size:parseFloat(document.getElementById('sl-size').value),stop_price:parseFloat(document.getElementById('sl-stop').value),limit_price:parseFloat(document.getElementById('sl-limit').value)},'Stop-Limit Order');}
         function submitTrailingStop(){requestOtpForAction('/api/dashboard/order/trailing-stop',{asset:document.getElementById('ts-asset').value,side:document.getElementById('ts-side').value,size:parseFloat(document.getElementById('ts-size').value),trail_pct:parseFloat(document.getElementById('ts-trail').value)},'Trailing Stop');}
-        // Emergency Stop
         function openEmergencyStopModal(){document.getElementById('estop-confirm-input').value='';document.getElementById('estop-otp-input').value='';document.getElementById('estop-error').style.display='none';document.getElementById('estop-modal').classList.add('active');fetch('/api/dashboard/auth/otp/request',{method:'POST',credentials:'include'}).catch(function(){});}
         function closeEstopModal(){document.getElementById('estop-modal').classList.remove('active');}
         async function executeEmergencyStop(){var c=document.getElementById('estop-confirm-input').value.trim().toUpperCase(),o=document.getElementById('estop-otp-input').value.trim();if(c!=='CONFIRM'){document.getElementById('estop-error').textContent='Type CONFIRM';document.getElementById('estop-error').style.display='block';return;}if(o.length!==6){document.getElementById('estop-error').textContent='6-digit OTP required';document.getElementById('estop-error').style.display='block';return;}try{var r=await fetch('/api/dashboard/emergency-stop',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({otp:o,confirm:true})});var d=await r.json();if(r.ok){closeEstopModal();showToast(d.message,'warning');}else{document.getElementById('estop-error').textContent=d.detail;document.getElementById('estop-error').style.display='block';}}catch(e){document.getElementById('estop-error').textContent='Network error';document.getElementById('estop-error').style.display='block';}}
-        // Config Editor
         async function loadConfigForEdit(){try{var r=await fetch('/api/dashboard/config/current',{credentials:'include'});if(!r.ok)return;var d=await r.json();fullConfig=d.config||{};var g=fullConfig.grid||{};document.getElementById('cfg-grid-investment').value=g.investment_amount||30;document.getElementById('cfg-grid-nodes').value=g.num_nodes||10;document.getElementById('cfg-grid-step').value=g.min_step_size||0.5;document.getElementById('cfg-grid-range').value=g.max_range_pct||10;var dc=fullConfig.dca||{};document.getElementById('cfg-dca-base').value=dc.base_order_size||5;document.getElementById('cfg-dca-so').value=dc.max_safety_orders||5;document.getElementById('cfg-dca-dev').value=dc.price_deviation_pct||1.5;document.getElementById('cfg-dca-scale').value=dc.safety_order_step_scale||1.2;document.getElementById('cfg-dca-tp').value=dc.take_profit_pct||1.5;document.getElementById('cfg-dca-sl').value=dc.stop_loss_pct||5;var rk=fullConfig.risk||{};document.getElementById('cfg-risk-maxpos').value=rk.max_positions||5;document.getElementById('cfg-risk-notional').value=rk.max_notional_per_asset||100;document.getElementById('cfg-risk-minnot').value=rk.min_notional||2;document.getElementById('cfg-risk-leverage').value=rk.max_leverage||20;}catch(e){console.error('Config edit load:',e);}}
         function saveConfig(){fullConfig.grid=fullConfig.grid||{};fullConfig.grid.investment_amount=parseFloat(document.getElementById('cfg-grid-investment').value);fullConfig.grid.num_nodes=parseInt(document.getElementById('cfg-grid-nodes').value);fullConfig.grid.min_step_size=parseFloat(document.getElementById('cfg-grid-step').value);fullConfig.grid.max_range_pct=parseFloat(document.getElementById('cfg-grid-range').value);fullConfig.dca=fullConfig.dca||{};fullConfig.dca.base_order_size=parseFloat(document.getElementById('cfg-dca-base').value);fullConfig.dca.max_safety_orders=parseInt(document.getElementById('cfg-dca-so').value);fullConfig.dca.price_deviation_pct=parseFloat(document.getElementById('cfg-dca-dev').value);fullConfig.dca.safety_order_step_scale=parseFloat(document.getElementById('cfg-dca-scale').value);fullConfig.dca.take_profit_pct=parseFloat(document.getElementById('cfg-dca-tp').value);fullConfig.dca.stop_loss_pct=parseFloat(document.getElementById('cfg-dca-sl').value);fullConfig.risk=fullConfig.risk||{};fullConfig.risk.max_positions=parseInt(document.getElementById('cfg-risk-maxpos').value);fullConfig.risk.max_notional_per_asset=parseFloat(document.getElementById('cfg-risk-notional').value);fullConfig.risk.min_notional=parseFloat(document.getElementById('cfg-risk-minnot').value);fullConfig.risk.max_leverage=parseInt(document.getElementById('cfg-risk-leverage').value);requestOtpForAction('/api/dashboard/config/save',{config:fullConfig},'Save configuration changes');}
         function reloadConfig(){requestOtpForAction('/api/dashboard/config/reload',{},'Reload configuration (apply changes)');}
-        // Safety Panel
         async function loadSafetyPanel(){try{var[dr,or]=await Promise.all([fetch('/api/dashboard/config/defaults',{credentials:'include'}),fetch('/api/dashboard/overview',{credentials:'include'})]);if(dr.ok){var d=await dr.json();var r=d.risk||{};var mp=document.getElementById('safe-maxpos');mp.textContent=r.max_positions||'-';mp.className='metric-value text-blue-400';var mn=document.getElementById('safe-minnot');mn.textContent='$'+(r.min_notional||0);mn.className='metric-value text-emerald-400';var ml=document.getElementById('safe-maxlev');ml.textContent=(r.max_leverage||20)+'x';ml.className='metric-value text-amber-400';}if(or.ok){var o=await or.json();document.getElementById('safe-active').textContent=(o.open_positions||0)+' / '+(o.active_grids||0)+' grids';}var ar=await fetch('/api/dashboard/audit-log?action=EMERGENCY_STOP&limit=5',{credentials:'include'});if(ar.ok){var ad=await ar.json();var el=document.getElementById('estop-history');if(!ad.entries.length){el.textContent='No emergency stops recorded';return;}el.innerHTML=ad.entries.map(function(e){return'<div class="mb-2 pb-2 border-b border-slate-700"><span class="text-red-400 font-semibold">'+e.created_at.substring(0,19)+'</span><br><span class="text-slate-500 text-xs">'+(e.details||'').substring(0,200)+'</span></div>';}).join('');}}catch(e){console.error('Safety:',e);}}
-        // Audit Log
         async function loadAuditLog(){var s=document.getElementById('audit-search').value,a=document.getElementById('audit-action-filter').value,p=new URLSearchParams({limit:'100',offset:'0'});if(s)p.set('search',s);if(a)p.set('action',a);try{var r=await fetch('/api/dashboard/audit-log?'+p.toString(),{credentials:'include'});if(!r.ok)return;var d=await r.json();var tb=document.getElementById('audit-table');document.getElementById('audit-total').textContent='Total: '+d.total;if(!d.entries.length){tb.innerHTML='';document.getElementById('no-audit').style.display='block';return;}document.getElementById('no-audit').style.display='none';tb.innerHTML=d.entries.map(function(e){return'<tr><td class="text-slate-400">'+(e.created_at||'').substring(0,19)+'</td><td class="text-slate-400">'+(e.user_id||'').substring(0,8)+'</td><td class="font-medium text-white">'+e.action+'</td><td>'+(e.resource||'')+'</td><td>'+(e.otp_verified?'\u2705':'\u274C')+'</td><td class="text-slate-500 text-xs max-w-xs truncate">'+(e.details||'').substring(0,150)+'</td></tr>';}).join('');}catch(e){console.error('Audit:',e);}}
-        // Signal Reconciliation
         async function loadOrphanedSignals(){try{var r=await fetch('/api/dashboard/signals/orphaned',{credentials:'include'});if(!r.ok)return;var d=await r.json();var tb=document.getElementById('orphan-table');if(!d.orphaned.length){tb.innerHTML='';document.getElementById('no-orphans').style.display='block';return;}document.getElementById('no-orphans').style.display='none';tb.innerHTML=d.orphaned.map(function(s){return'<tr><td><input type="checkbox" class="orphan-check" value="'+s.id+'"></td><td class="font-medium text-white">'+s.asset+'</td><td>'+s.signal+'</td><td>$'+(s.entry_price||0).toLocaleString()+'</td><td class="text-slate-400">'+(s.timestamp||'').substring(0,19)+'</td><td class="text-yellow-400 text-xs">'+s.reason+'</td></tr>';}).join('');}catch(e){console.error('Orphans:',e);}}
         function reconcileSelected(){var ids=[];document.querySelectorAll('.orphan-check:checked').forEach(function(c){ids.push(parseInt(c.value));});if(!ids.length){showToast('Select at least one signal','warning');return;}requestOtpForAction('/api/dashboard/signals/reconcile',{signal_ids:ids},'Reconcile '+ids.length+' orphaned signal(s)');}
-        // System Monitor
         async function loadSystemMonitor(){try{var r=await fetch('/api/dashboard/system/status',{credentials:'include'});if(!r.ok)return;var d=await r.json();var h=Math.floor((d.uptime_sec||0)/3600),m=Math.floor(((d.uptime_sec||0)%3600)/60);document.getElementById('sys-uptime').textContent=h+'h '+m+'m';document.getElementById('sys-autotrade').textContent=d.auto_trading?'ENABLED':'DISABLED';document.getElementById('sys-autotrade').className='metric-value '+(d.auto_trading?'text-green-400':'text-yellow-400');var tasks=d.tasks||{},healthy=0,total=0,rows='';for(var n in tasks){var t=tasks[n];total++;if(t.status==='healthy')healthy++;var sc=t.status==='healthy'?'text-green-400':t.status==='stale'?'text-yellow-400':t.status==='degraded'?'text-red-400':'text-slate-500';var sb=t.status==='healthy'?'\u2705':t.status==='stale'?'\u26A0':t.status==='degraded'?'\u274C':'\u2753';rows+='<tr><td class="font-medium text-white">'+n.replace(/_/g,' ')+'</td><td class="'+sc+'">'+sb+' '+t.status.toUpperCase()+'</td><td class="text-slate-400">'+(t.last_run?t.last_run.substring(0,19).replace('T',' '):'Never')+'</td><td class="'+(t.error_count>0?'text-red-400':'text-slate-500')+'">'+t.error_count+'</td></tr>';}document.getElementById('sysmon-table').innerHTML=rows;document.getElementById('sys-healthy').textContent=healthy+'/'+total;}catch(e){console.error('SysMon:',e);}}
-        // Alert Config
         async function loadAlertConfig(){try{var r=await fetch('/api/dashboard/alerts/config',{credentials:'include'});if(!r.ok)return;var c=await r.json();document.getElementById('alert-master').checked=c.master_enabled!==false;var g=c.groups||{};document.getElementById('alert-trades').checked=g.trades_fills!==false;document.getElementById('alert-errors').checked=g.errors_exceptions!==false;document.getElementById('alert-scans').checked=g.routine_scans===true;}catch(e){console.error('Alerts:',e);}}
         function saveAlertConfig(){requestOtpForAction('/api/dashboard/alerts/config',{master_enabled:document.getElementById('alert-master').checked,trades_fills:document.getElementById('alert-trades').checked,errors_exceptions:document.getElementById('alert-errors').checked,routine_scans:document.getElementById('alert-scans').checked},'Save alert preferences');}
-        // Recent Trades
         async function loadRecentTrades(){try{var r=await fetch('/api/dashboard/trade-history?limit=10',{credentials:'include'});if(!r.ok)return;var d=await r.json();var tb=document.getElementById('recent-trades-body');if(!tb)return;if(!d.trades||d.trades.length===0){tb.innerHTML='<tr><td colspan="4" class="text-center py-4 text-slate-500">No recent trades</td></tr>';return;}tb.innerHTML=d.trades.map(function(t){var time=(t.closed_at||t.opened_at||'').substring(11,19);var pc=t.pnl>=0?'text-green-400':'text-red-400';return'<tr class="border-b border-slate-800/50"><td class="py-2 text-slate-400">'+time+'</td><td class="py-2 font-medium">'+t.asset+'</td><td class="py-2"><span class="badge '+(t.side==='BUY'?'badge-buy':'badge-sell')+'">'+t.side+'</span></td><td class="py-2 text-right '+pc+'">'+formatPnl(t.pnl)+'</td></tr>';}).join('');}catch(e){console.error('Recent trades:',e);}}
-        // Trade History
         async function loadTradeHistory(){try{var r=await fetch('/api/dashboard/trade-history?limit=100',{credentials:'include'});if(!r.ok)return;var d=await r.json();var tb=document.getElementById('history-table');if(!d.trades.length){tb.innerHTML='';document.getElementById('no-history').style.display='block';return;}document.getElementById('no-history').style.display='none';tb.innerHTML=d.trades.map(function(t){return'<tr><td class="text-slate-400">'+(t.closed_at||t.opened_at||'').substring(0,19)+'</td><td class="font-medium text-white">'+t.asset+'</td><td><span class="badge '+(t.side==='BUY'?'badge-buy':'badge-sell')+'">'+t.side+'</span></td><td>$'+(t.entry||0).toLocaleString()+'</td><td>$'+(t.exit||0).toLocaleString()+'</td><td class="'+pnlClass(t.pnl)+'">'+formatPnl(t.pnl)+'</td><td class="'+pnlClass(t.pnl_pct)+'">'+(t.pnl_pct>=0?'+':'')+(t.pnl_pct||0).toFixed(2)+'%</td><td class="text-slate-400">'+t.strategy+'</td><td class="text-slate-500">'+t.source+'</td></tr>';}).join('');}catch(e){console.error('History:',e);}}
-        // CSV Export
         function exportTradesToCSV(){fetch('/api/dashboard/trade-history?limit=1000',{credentials:'include'}).then(function(r){return r.json();}).then(function(data){if(!data.trades||data.trades.length===0){showToast('No trades to export','warning');return;}var headers=['Date','Asset','Side','Entry','Exit','PnL','PnL%','Strategy','Source'];var rows=data.trades.map(function(t){return[t.closed_at||t.opened_at||'',t.asset,t.side,t.entry||0,t.exit||0,t.pnl||0,(t.pnl_pct||0).toFixed(2)+'%',t.strategy,t.source];});var csv=headers.join(',')+'\n';rows.forEach(function(row){csv+=row.map(function(f){return'"'+String(f).replace(/"/g,'""')+'"';}).join(',')+'\n';});var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});var url=URL.createObjectURL(blob);var link=document.createElement('a');link.setAttribute('href',url);link.setAttribute('download','mbio_trades_'+new Date().toISOString().slice(0,10)+'.csv');link.style.visibility='hidden';document.body.appendChild(link);link.click();document.body.removeChild(link);showToast('Trade history exported','success');}).catch(function(e){console.error('Export failed:',e);showToast('Export failed','error');});}
-        // Analytics
         async function loadAnalytics(){try{var r=await fetch('/api/dashboard/analytics',{credentials:'include'});if(!r.ok)return;var d=await r.json();document.getElementById('an-trades').textContent=d.total_trades;document.getElementById('an-winrate').textContent=d.win_rate+'%';document.getElementById('an-pf').textContent=d.profit_factor===Infinity?'\u221E':d.profit_factor;document.getElementById('an-sharpe').textContent=d.sharpe_ratio;var tp=document.getElementById('an-total-pnl');tp.textContent=formatPnl(d.total_pnl);tp.className='text-xl font-bold '+pnlClass(d.total_pnl);document.getElementById('an-max-dd').textContent='-'+d.max_drawdown_pct+'%';document.getElementById('an-best-worst').textContent=formatPnl(d.best_trade)+' / '+formatPnl(d.worst_trade);drawEquityCurve(d.equity_curve||[]);}catch(e){console.error('Analytics:',e);}}
-        // Chart.js Equity Curve
         function drawEquityCurve(curve){var canvas=document.getElementById('equity-chart');if(!canvas||typeof Chart==='undefined')return;if(equityChartInstance){equityChartInstance.destroy();}if(!curve||!curve.length)return;var labels=curve.map(function(p,i){return p.trade||(i+1);});var values=curve.map(function(p){return typeof p==='object'?p.equity:p;});equityChartInstance=new Chart(canvas,{type:'line',data:{labels:labels,datasets:[{label:'Equity ($)',data:values,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.3,pointRadius:2,pointHoverRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},scales:{x:{display:true,grid:{color:'#1e293b'},ticks:{color:'#64748b',maxTicksLimit:10}},y:{display:true,grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:function(v){return'$'+v.toFixed(2);}}}},interaction:{mode:'nearest',axis:'x',intersect:false}}});}
-        // Position Size Calculator
         function calculatePositionSize(){var usd=parseFloat(document.getElementById('calc-usd')?.value||0);var price=parseFloat(document.getElementById('calc-price')?.value||0);var lev=parseFloat(document.getElementById('calc-leverage')?.value||1);if(usd>0&&price>0){var size=(usd*lev)/price;var el=document.getElementById('calc-result');if(el){el.textContent=size.toFixed(6)+' units';el.classList.remove('hidden');}}}
-        // Helpers
+        var _positionsCache=[];var _sortCol='upnl';var _sortAsc=false;var _filterAsset='';
+        function sortPositions(col){if(_sortCol===col){_sortAsc=!_sortAsc;}else{_sortCol=col;_sortAsc=false;}document.querySelectorAll('#positions-table th.sortable').forEach(function(th){th.classList.remove('active');var icon=th.querySelector('.sort-icon');if(icon)icon.textContent='\u25B2\u25BC';});var activeTh=document.querySelector('#positions-table th[onclick*="\''+col+'\'"]');if(activeTh){activeTh.classList.add('active');var icon=activeTh.querySelector('.sort-icon');if(icon)icon.textContent=_sortAsc?'\u25B2':'\u25BC';}renderFilteredPositions();}
+        function filterPositions(){_filterAsset=document.getElementById('pos-asset-filter')?.value||'';renderFilteredPositions();}
+        function renderFilteredPositions(){var filtered=_positionsCache.slice();if(_filterAsset){filtered=filtered.filter(function(p){return p.asset===_filterAsset;});}filtered.sort(function(a,b){var va=a[_sortCol],vb=b[_sortCol];if(typeof va==='string'){va=va.toLowerCase();vb=(vb||'').toLowerCase();}if(va<vb)return _sortAsc?-1:1;if(va>vb)return _sortAsc?1:-1;return 0;});var tb=document.getElementById('positions-table');var np=document.getElementById('no-positions');if(!tb)return;if(!filtered.length){tb.innerHTML='';if(np)np.style.display='block';return;}if(np)np.style.display='none';tb.innerHTML=filtered.map(function(p){return'<tr><td class="font-medium text-white">'+p.asset+'</td><td><span class="badge '+(p.side==='BUY'?'badge-buy':'badge-sell')+'">'+p.side+'</span></td><td>'+p.size.toFixed(6)+'</td><td>$'+p.entry.toLocaleString()+'</td><td>$'+p.current.toLocaleString()+'</td><td class="'+pnlClass(p.upnl)+'">'+formatPnl(p.upnl)+'</td><td class="'+pnlClass(p.pnl_pct)+'">'+(p.pnl_pct>=0?'+':'')+p.pnl_pct.toFixed(2)+'%</td><td>$'+(p.margin_used||0).toFixed(2)+'</td><td>$'+(p.liquidation_px||0).toLocaleString()+'</td><td>'+(p.leverage||1)+'x</td><td class="'+pnlClass(p.roe)+'">'+(p.roe||0).toFixed(2)+'%</td><td>$'+(p.sl||0).toLocaleString()+'</td><td class="text-slate-400">'+p.strategy+'</td></tr>';}).join('');}
         function formatUsd(v){return'$'+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
         function formatPnl(v){return(v>=0?'+':'-')+formatUsd(v);}
         function pnlClass(v){return v>0?'pnl-positive':v<0?'pnl-negative':'pnl-neutral';}
-        // SSE Updates
         function updateOverview(d){document.getElementById('ov-balance').textContent=formatUsd(d.balance);document.getElementById('ov-equity').textContent=formatUsd(d.equity);document.getElementById('ov-deployed').textContent=(d.deployed_pct!=null?d.deployed_pct:0)+'%';var dp=document.getElementById('ov-daily-pnl');dp.textContent=(d.daily_pnl_pct>=0?'+':'')+(d.daily_pnl_pct||0).toFixed(2)+'%';dp.className='metric-value '+pnlClass(d.daily_pnl_pct);var re=document.getElementById('ov-realized');re.textContent=formatPnl(d.realized_pnl_usd||0);re.className='text-xl font-bold '+pnlClass(d.realized_pnl_usd);var ue=document.getElementById('ov-unrealized');ue.textContent=formatPnl(d.unrealized_pnl_usd||0);ue.className='text-xl font-bold '+pnlClass(d.unrealized_pnl_usd);document.getElementById('ov-winrate').textContent=d.win_rate||'N/A';document.getElementById('sidebar-equity').textContent=formatUsd(d.equity);var sp=document.getElementById('sidebar-pnl');sp.textContent=formatPnl(d.unrealized_pnl_usd||0);sp.className='font-semibold '+pnlClass(d.unrealized_pnl_usd);}
-        function updatePositions(positions){var tb=document.getElementById('positions-table'),np=document.getElementById('no-positions');if(!positions.length){tb.innerHTML='';np.style.display='block';return;}np.style.display='none';tb.innerHTML=positions.map(function(p){return'<tr><td class="font-medium text-white">'+p.asset+'</td><td><span class="badge '+(p.side==='BUY'?'badge-buy':'badge-sell')+'">'+p.side+'</span></td><td>'+p.size.toFixed(6)+'</td><td>$'+p.entry.toLocaleString()+'</td><td>$'+p.current.toLocaleString()+'</td><td class="'+pnlClass(p.upnl)+'">'+formatPnl(p.upnl)+'</td><td class="'+pnlClass(p.pnl_pct)+'">'+(p.pnl_pct>=0?'+':'')+p.pnl_pct.toFixed(2)+'%</td><td>$'+(p.margin_used||0).toFixed(2)+'</td><td>$'+(p.liquidation_px||0).toLocaleString()+'</td><td>'+(p.leverage||1)+'x</td><td class="'+pnlClass(p.roe)+'">'+(p.roe||0).toFixed(2)+'%</td><td>$'+(p.sl||0).toLocaleString()+'</td><td class="text-slate-400">'+p.strategy+'</td></tr>';}).join('');}
+        function updatePositions(positions){_positionsCache=positions||[];var filterEl=document.getElementById('pos-asset-filter');if(filterEl&&filterEl.options.length<=1){var assets={};_positionsCache.forEach(function(p){assets[p.asset]=true;});Object.keys(assets).sort().forEach(function(a){var opt=document.createElement('option');opt.value=a;opt.textContent=a;filterEl.appendChild(opt);});}renderFilteredPositions();}
         function updateGrids(grids){var c=document.getElementById('grids-container'),ng=document.getElementById('no-grids');if(!grids.length){c.innerHTML='';ng.style.display='block';return;}ng.style.display='none';c.innerHTML=grids.map(function(g){return'<div class="card"><div class="flex items-center justify-between mb-3"><div class="flex items-center gap-2"><span class="badge badge-grid">GRID</span><span class="text-lg font-bold text-white">'+g.asset+'</span></div><span class="text-xs text-slate-400">'+g.mode+'</span></div><div class="grid grid-cols-2 gap-3 text-sm"><div><span class="metric-label">Range</span><br>$'+g.lower_price.toLocaleString()+' - $'+g.upper_price.toLocaleString()+'</div><div><span class="metric-label">Nodes</span><br>'+g.nodes_active+'/'+g.nodes_total+'</div><div><span class="metric-label">Cycles</span><br>'+g.cycles+'</div><div><span class="metric-label">PnL</span><br><span class="'+pnlClass(g.realized_pnl)+'">'+formatPnl(g.realized_pnl)+'</span></div></div></div>';}).join('');}
         function connectSSE(){if(eventSource)eventSource.close();eventSource=new EventSource('/api/dashboard/stream',{withCredentials:true});eventSource.onopen=function(){document.getElementById('connection-status').className='connected';document.getElementById('connection-text').textContent='Live';};eventSource.onmessage=function(e){try{var d=JSON.parse(e.data);if(d.error)return;updateOverview(d);updatePositions(d.positions||[]);updateGrids(d.grids||[]);}catch(ex){}};eventSource.onerror=function(){document.getElementById('connection-status').className='disconnected';document.getElementById('connection-text').textContent='Reconnecting...';setTimeout(connectSSE,5000);};}
-        // Health
         fetch('/api/dashboard/health',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){var el=document.getElementById('health-checks'),checks=d.checks||{},html='';for(var k in checks){var v=checks[k];html+='<div class="flex items-center gap-2">'+(v?'\u2705':'\u274C')+' <span class="'+(v?'text-green-400':'text-red-400')+'">'+k.replace(/_/g,' ')+'</span></div>';}el.innerHTML=html;}).catch(function(){});
         connectSSE();
-    
-        // === POSITIONS SORT/FILTER (Client-side only) ===
-        var _positionsCache = [];
-        var _sortCol = 'upnl';
-        var _sortAsc = false;
-        var _filterAsset = '';
-
-        function sortPositions(col) {
-            if (_sortCol === col) { _sortAsc = !_sortAsc; } else { _sortCol = col; _sortAsc = false; }
-            // Update header visual
-            document.querySelectorAll('#positions-table th.sortable').forEach(function(th) {
-                th.classList.remove('active');
-                var icon = th.querySelector('.sort-icon');
-                if (icon) icon.textContent = '▲▼';
-            });
-            var activeTh = document.querySelector('#positions-table th[onclick*="'' + col + ''"]');
-            if (activeTh) {
-                activeTh.classList.add('active');
-                var icon = activeTh.querySelector('.sort-icon');
-                if (icon) icon.textContent = _sortAsc ? '▲' : '▼';
-            }
-            renderFilteredPositions();
-        }
-
-        function filterPositions() {
-            _filterAsset = document.getElementById('pos-asset-filter')?.value || '';
-            renderFilteredPositions();
-        }
-
-        function renderFilteredPositions() {
-            var filtered = _positionsCache.slice();
-            // Apply asset filter
-            if (_filterAsset) {
-                filtered = filtered.filter(function(p) { return p.asset === _filterAsset; });
-            }
-            // Apply sort
-            filtered.sort(function(a, b) {
-                var va = a[_sortCol], vb = b[_sortCol];
-                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
-                if (va < vb) return _sortAsc ? -1 : 1;
-                if (va > vb) return _sortAsc ? 1 : -1;
-                return 0;
-            });
-            // Render using existing updatePositions logic
-            var tb = document.getElementById('positions-table');
-            var np = document.getElementById('no-positions');
-            if (!tb) return;
-            if (!filtered.length) { tb.innerHTML = ''; if(np) np.style.display = 'block'; return; }
-            if(np) np.style.display = 'none';
-            tb.innerHTML = filtered.map(function(p) {
-                return '<tr><td class="font-medium text-white">' + p.asset + '</td>' +
-                    '<td><span class="badge ' + (p.side === 'BUY' ? 'badge-buy' : 'badge-sell') + '">' + p.side + '</span></td>' +
-                    '<td>' + p.size.toFixed(6) + '</td>' +
-                    '<td>$' + p.entry.toLocaleString() + '</td>' +
-                    '<td>$' + p.current.toLocaleString() + '</td>' +
-                    '<td class="' + pnlClass(p.upnl) + '">' + formatPnl(p.upnl) + '</td>' +
-                    '<td class="' + pnlClass(p.pnl_pct) + '">' + (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%</td>' +
-                    '<td>$' + (p.margin_used || 0).toFixed(2) + '</td>' +
-                    '<td>$' + (p.liquidation_px || 0).toLocaleString() + '</td>' +
-                    '<td>' + (p.leverage || 1) + 'x</td>' +
-                    '<td class="' + pnlClass(p.roe) + '">' + (p.roe || 0).toFixed(2) + '%</td>' +
-                    '<td>$' + (p.sl || 0).toLocaleString() + '</td>' +
-                    '<td class="text-slate-400">' + p.strategy + '</td></tr>';
-            }).join('');
-        }
-
-        // Wrap existing updatePositions to cache data and populate filter
-        var _origUpdatePositions = updatePositions;
-        updatePositions = function(positions) {
-            _positionsCache = positions || [];
-            // Populate asset filter dropdown if empty
-            var filterEl = document.getElementById('pos-asset-filter');
-            if (filterEl && filterEl.options.length <= 1) {
-                var assets = {};
-                _positionsCache.forEach(function(p) { assets[p.asset] = true; });
-                Object.keys(assets).sort().forEach(function(a) {
-                    var opt = document.createElement('option');
-                    opt.value = a; opt.textContent = a;
-                    filterEl.appendChild(opt);
-                });
-            }
-            renderFilteredPositions();
-        };
-
-    
-        // === ACTIVE BOT CARDS ===
-        var _botsCache = { grids: [], dcas: [] };
-
-        function renderBotCards(grids, positions) {
-            var container = document.getElementById('bots-container');
-            var section = document.getElementById('active-bots-section');
-            var countBadge = document.getElementById('bot-count-badge');
-            
-            if (!container || !section) return;
-
-            // Combine grids and DCA positions into bot list
-            var bots = [];
-            
-            // Add Grids
-            if (grids && grids.length > 0) {
-                grids.forEach(function(g) {
-                    bots.push({
-                        type: 'GRID',
-                        asset: g.asset,
-                        pnl: g.realized_pnl || 0,
-                        status: 'running',
-                        details: g.nodes_active + '/' + g.nodes_total + ' nodes',
-                        investment: g.investment || 0,
-                        mode: g.mode
-                    });
-                });
-            }
-            
-            // Add DCA Positions (simple heuristic: non-grid positions with strategy=DCA)
-            if (positions && positions.length > 0) {
-                positions.forEach(function(p) {
-                    if (p.strategy && p.strategy.toUpperCase().includes('DCA')) {
-                        bots.push({
-                            type: 'DCA',
-                            asset: p.asset,
-                            pnl: p.upnl || 0,
-                            status: 'running',
-                            details: p.side + ' ' + p.size.toFixed(4),
-                            investment: p.size * p.entry,
-                            mode: p.side
-                        });
-                    }
-                });
-            }
-
-            // Update visibility
-            if (bots.length === 0) {
-                section.style.display = 'none';
-                return;
-            }
-            section.style.display = 'block';
-            countBadge.textContent = bots.length + ' Active';
-
-            // Render cards
-            container.innerHTML = bots.map(function(b) {
-                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
-                var icon = b.type === 'GRID' ? '&#x1F532;' : '&#x1F4C8;';
-                var colorClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
-                
-                return '<div class="card ' + colorClass + ' relative overflow-hidden">' +
-                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
-                    '<div class="flex items-center justify-between mb-2">' +
-                        '<div class="flex items-center gap-2">' +
-                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
-                            '<span class="font-bold text-white">' + b.asset + '</span>' +
-                        '</div>' +
-                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
-                    '</div>' +
-                    '<div class="mb-2">' +
-                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
-                        '<div class="text-xs text-slate-500">Realized PnL</div>' +
-                    '</div>' +
-                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
-                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
-                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
-        }
-
-        // Wrap updateOverview to capture grid/position data for bot cards
-        var _origUpdateOverview = updateOverview;
-        updateOverview = function(data) {
-            _origUpdateOverview(data);
-            // Pass grids and positions to bot renderer
-            renderBotCards(data.grids || [], data.positions || []);
-        };
-
-    
-        // === DAILY PNL BAR CHART ===
-        var dailyPnlChartInstance = null;
-
-        function renderDailyPnlChart(equityCurve) {
-            var canvas = document.getElementById('daily-pnl-chart');
-            if (!canvas || typeof Chart === 'undefined') return;
-            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
-            if (!equityCurve || equityCurve.length < 2) return;
-
-            // Compute daily PnL as delta between consecutive equity points
-            var labels = [];
-            var values = [];
-            var colors = [];
-            for (var i = 1; i < equityCurve.length; i++) {
-                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
-                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
-                var delta = curr - prev;
-                labels.push('T' + (i));
-                values.push(parseFloat(delta.toFixed(2)));
-                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
-            }
-
-            dailyPnlChartInstance = new Chart(canvas, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Daily PnL ($)',
-                        data: values,
-                        backgroundColor: colors,
-                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
-                        borderWidth: 1,
-                        borderRadius: 3,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            callbacks: {
-                                label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
-                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
-                    }
-                }
-            });
-        }
-
-        // Wrap loadAnalytics to also render daily PnL chart
-        var _origLoadAnalytics = loadAnalytics;
-        loadAnalytics = async function() {
-            await _origLoadAnalytics();
-            // Re-fetch analytics data for daily PnL chart
-            try {
-                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
-                if (r.ok) {
-                    var d = await r.json();
-                    renderDailyPnlChart(d.equity_curve || []);
-                }
-            } catch(e) { console.error('Daily PnL chart:', e); }
-        };
-
-    
-        // === MONTHLY RETURNS HEATMAP ===
-        function renderMonthlyHeatmap(monthlyReturns) {
-            var container = document.getElementById('monthly-heatmap');
-            var noData = document.getElementById('no-monthly-data');
-            if (!container) return;
-
-            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
-                container.style.display = 'none';
-                if (noData) noData.style.display = 'block';
-                return;
-            }
-            container.style.display = 'grid';
-            if (noData) noData.style.display = 'none';
-
-            // Sort months chronologically
-            var months = Object.keys(monthlyReturns).sort();
-
-            container.innerHTML = months.map(function(month) {
-                var ret = monthlyReturns[month];
-                // Color mapping: green gradient for profit, red gradient for loss
-                var bgColor, textColor;
-                if (ret > 0) {
-                    var intensity = Math.min(Math.abs(ret) / 20, 1); // Cap at 20% for full color
-                    var g = Math.round(100 + intensity * 155); // 100-255 green channel
-                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
-                    textColor = '#4ade80';
-                } else if (ret < 0) {
-                    var intensity = Math.min(Math.abs(ret) / 20, 1);
-                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
-                    textColor = '#f87171';
-                } else {
-                    bgColor = 'rgba(100, 116, 139, 0.2)';
-                    textColor = '#94a3b8';
-                }
-
-                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
-                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
-                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
-                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
-            }).join('');
-        }
-
-        // Wrap loadAnalytics to also render monthly heatmap
-        var _origLoadAnalytics2 = typeof _origLoadAnalytics !== 'undefined' ? _origLoadAnalytics : loadAnalytics;
-        if (typeof _origLoadAnalytics === 'undefined') {
-            // If daily PnL wrapper hasn't been applied yet, wrap directly
-            _origLoadAnalytics = loadAnalytics;
-        }
-        loadAnalytics = async function() {
-            await _origLoadAnalytics();
-            // Fetch analytics data for heatmap
-            try {
-                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
-                if (r.ok) {
-                    var d = await r.json();
-                    renderMonthlyHeatmap(d.monthly_returns || {});
-                }
-            } catch(e) { console.error('Monthly heatmap:', e); }
-        };
-
     </script>
 </body>
 </html>
