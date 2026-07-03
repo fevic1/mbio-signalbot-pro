@@ -4,13 +4,928 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MBIO SignalBot Pro — Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com">
+        // === POSITIONS SORT/FILTER (Client-side only) ===
+        var _positionsCache = [];
+        var _sortCol = 'upnl';
+        var _sortAsc = false;
+        var _filterAsset = '';
+
+        function sortPositions(col) {
+            if (_sortCol === col) { _sortAsc = !_sortAsc; } else { _sortCol = col; _sortAsc = false; }
+            // Update header visual
+            document.querySelectorAll('#positions-table th.sortable').forEach(function(th) {
+                th.classList.remove('active');
+                var icon = th.querySelector('.sort-icon');
+                if (icon) icon.textContent = '▲▼';
+            });
+            var activeTh = document.querySelector('#positions-table th[onclick*="'' + col + ''"]');
+            if (activeTh) {
+                activeTh.classList.add('active');
+                var icon = activeTh.querySelector('.sort-icon');
+                if (icon) icon.textContent = _sortAsc ? '▲' : '▼';
+            }
+            renderFilteredPositions();
+        }
+
+        function filterPositions() {
+            _filterAsset = document.getElementById('pos-asset-filter')?.value || '';
+            renderFilteredPositions();
+        }
+
+        function renderFilteredPositions() {
+            var filtered = _positionsCache.slice();
+            // Apply asset filter
+            if (_filterAsset) {
+                filtered = filtered.filter(function(p) { return p.asset === _filterAsset; });
+            }
+            // Apply sort
+            filtered.sort(function(a, b) {
+                var va = a[_sortCol], vb = b[_sortCol];
+                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+                if (va < vb) return _sortAsc ? -1 : 1;
+                if (va > vb) return _sortAsc ? 1 : -1;
+                return 0;
+            });
+            // Render using existing updatePositions logic
+            var tb = document.getElementById('positions-table');
+            var np = document.getElementById('no-positions');
+            if (!tb) return;
+            if (!filtered.length) { tb.innerHTML = ''; if(np) np.style.display = 'block'; return; }
+            if(np) np.style.display = 'none';
+            tb.innerHTML = filtered.map(function(p) {
+                return '<tr><td class="font-medium text-white">' + p.asset + '</td>' +
+                    '<td><span class="badge ' + (p.side === 'BUY' ? 'badge-buy' : 'badge-sell') + '">' + p.side + '</span></td>' +
+                    '<td>' + p.size.toFixed(6) + '</td>' +
+                    '<td>$' + p.entry.toLocaleString() + '</td>' +
+                    '<td>$' + p.current.toLocaleString() + '</td>' +
+                    '<td class="' + pnlClass(p.upnl) + '">' + formatPnl(p.upnl) + '</td>' +
+                    '<td class="' + pnlClass(p.pnl_pct) + '">' + (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%</td>' +
+                    '<td>$' + (p.margin_used || 0).toFixed(2) + '</td>' +
+                    '<td>$' + (p.liquidation_px || 0).toLocaleString() + '</td>' +
+                    '<td>' + (p.leverage || 1) + 'x</td>' +
+                    '<td class="' + pnlClass(p.roe) + '">' + (p.roe || 0).toFixed(2) + '%</td>' +
+                    '<td>$' + (p.sl || 0).toLocaleString() + '</td>' +
+                    '<td class="text-slate-400">' + p.strategy + '</td></tr>';
+            }).join('');
+        }
+
+        // Wrap existing updatePositions to cache data and populate filter
+        var _origUpdatePositions = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCache = positions || [];
+            // Populate asset filter dropdown if empty
+            var filterEl = document.getElementById('pos-asset-filter');
+            if (filterEl && filterEl.options.length <= 1) {
+                var assets = {};
+                _positionsCache.forEach(function(p) { assets[p.asset] = true; });
+                Object.keys(assets).sort().forEach(function(a) {
+                    var opt = document.createElement('option');
+                    opt.value = a; opt.textContent = a;
+                    filterEl.appendChild(opt);
+                });
+            }
+            renderFilteredPositions();
+        };
+
+    
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], dcas: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            
+            if (!container || !section) return;
+
+            // Combine grids and DCA positions into bot list
+            var bots = [];
+            
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID',
+                        asset: g.asset,
+                        pnl: g.realized_pnl || 0,
+                        status: 'running',
+                        details: g.nodes_active + '/' + g.nodes_total + ' nodes',
+                        investment: g.investment || 0,
+                        mode: g.mode
+                    });
+                });
+            }
+            
+            // Add DCA Positions (simple heuristic: non-grid positions with strategy=DCA)
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().includes('DCA')) {
+                        bots.push({
+                            type: 'DCA',
+                            asset: p.asset,
+                            pnl: p.upnl || 0,
+                            status: 'running',
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry,
+                            mode: p.side
+                        });
+                    }
+                });
+            }
+
+            // Update visibility
+            if (bots.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            // Render cards
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '&#x1F532;' : '&#x1F4C8;';
+                var colorClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                
+                return '<div class="card ' + colorClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">Realized PnL</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to capture grid/position data for bot cards
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            // Pass grids and positions to bot renderer
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            // Compute daily PnL as delta between consecutive equity points
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + (i));
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Wrap loadAnalytics to also render daily PnL chart
+        var _origLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _origLoadAnalytics();
+            // Re-fetch analytics data for daily PnL chart
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            // Sort months chronologically
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                // Color mapping: green gradient for profit, red gradient for loss
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1); // Cap at 20% for full color
+                    var g = Math.round(100 + intensity * 155); // 100-255 green channel
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Wrap loadAnalytics to also render monthly heatmap
+        var _origLoadAnalytics2 = typeof _origLoadAnalytics !== 'undefined' ? _origLoadAnalytics : loadAnalytics;
+        if (typeof _origLoadAnalytics === 'undefined') {
+            // If daily PnL wrapper hasn't been applied yet, wrap directly
+            _origLoadAnalytics = loadAnalytics;
+        }
+        loadAnalytics = async function() {
+            await _origLoadAnalytics();
+            // Fetch analytics data for heatmap
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js">
+        // === POSITIONS SORT/FILTER (Client-side only) ===
+        var _positionsCache = [];
+        var _sortCol = 'upnl';
+        var _sortAsc = false;
+        var _filterAsset = '';
+
+        function sortPositions(col) {
+            if (_sortCol === col) { _sortAsc = !_sortAsc; } else { _sortCol = col; _sortAsc = false; }
+            // Update header visual
+            document.querySelectorAll('#positions-table th.sortable').forEach(function(th) {
+                th.classList.remove('active');
+                var icon = th.querySelector('.sort-icon');
+                if (icon) icon.textContent = '▲▼';
+            });
+            var activeTh = document.querySelector('#positions-table th[onclick*="'' + col + ''"]');
+            if (activeTh) {
+                activeTh.classList.add('active');
+                var icon = activeTh.querySelector('.sort-icon');
+                if (icon) icon.textContent = _sortAsc ? '▲' : '▼';
+            }
+            renderFilteredPositions();
+        }
+
+        function filterPositions() {
+            _filterAsset = document.getElementById('pos-asset-filter')?.value || '';
+            renderFilteredPositions();
+        }
+
+        function renderFilteredPositions() {
+            var filtered = _positionsCache.slice();
+            // Apply asset filter
+            if (_filterAsset) {
+                filtered = filtered.filter(function(p) { return p.asset === _filterAsset; });
+            }
+            // Apply sort
+            filtered.sort(function(a, b) {
+                var va = a[_sortCol], vb = b[_sortCol];
+                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+                if (va < vb) return _sortAsc ? -1 : 1;
+                if (va > vb) return _sortAsc ? 1 : -1;
+                return 0;
+            });
+            // Render using existing updatePositions logic
+            var tb = document.getElementById('positions-table');
+            var np = document.getElementById('no-positions');
+            if (!tb) return;
+            if (!filtered.length) { tb.innerHTML = ''; if(np) np.style.display = 'block'; return; }
+            if(np) np.style.display = 'none';
+            tb.innerHTML = filtered.map(function(p) {
+                return '<tr><td class="font-medium text-white">' + p.asset + '</td>' +
+                    '<td><span class="badge ' + (p.side === 'BUY' ? 'badge-buy' : 'badge-sell') + '">' + p.side + '</span></td>' +
+                    '<td>' + p.size.toFixed(6) + '</td>' +
+                    '<td>$' + p.entry.toLocaleString() + '</td>' +
+                    '<td>$' + p.current.toLocaleString() + '</td>' +
+                    '<td class="' + pnlClass(p.upnl) + '">' + formatPnl(p.upnl) + '</td>' +
+                    '<td class="' + pnlClass(p.pnl_pct) + '">' + (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%</td>' +
+                    '<td>$' + (p.margin_used || 0).toFixed(2) + '</td>' +
+                    '<td>$' + (p.liquidation_px || 0).toLocaleString() + '</td>' +
+                    '<td>' + (p.leverage || 1) + 'x</td>' +
+                    '<td class="' + pnlClass(p.roe) + '">' + (p.roe || 0).toFixed(2) + '%</td>' +
+                    '<td>$' + (p.sl || 0).toLocaleString() + '</td>' +
+                    '<td class="text-slate-400">' + p.strategy + '</td></tr>';
+            }).join('');
+        }
+
+        // Wrap existing updatePositions to cache data and populate filter
+        var _origUpdatePositions = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCache = positions || [];
+            // Populate asset filter dropdown if empty
+            var filterEl = document.getElementById('pos-asset-filter');
+            if (filterEl && filterEl.options.length <= 1) {
+                var assets = {};
+                _positionsCache.forEach(function(p) { assets[p.asset] = true; });
+                Object.keys(assets).sort().forEach(function(a) {
+                    var opt = document.createElement('option');
+                    opt.value = a; opt.textContent = a;
+                    filterEl.appendChild(opt);
+                });
+            }
+            renderFilteredPositions();
+        };
+
+    
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], dcas: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            
+            if (!container || !section) return;
+
+            // Combine grids and DCA positions into bot list
+            var bots = [];
+            
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID',
+                        asset: g.asset,
+                        pnl: g.realized_pnl || 0,
+                        status: 'running',
+                        details: g.nodes_active + '/' + g.nodes_total + ' nodes',
+                        investment: g.investment || 0,
+                        mode: g.mode
+                    });
+                });
+            }
+            
+            // Add DCA Positions (simple heuristic: non-grid positions with strategy=DCA)
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().includes('DCA')) {
+                        bots.push({
+                            type: 'DCA',
+                            asset: p.asset,
+                            pnl: p.upnl || 0,
+                            status: 'running',
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry,
+                            mode: p.side
+                        });
+                    }
+                });
+            }
+
+            // Update visibility
+            if (bots.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            // Render cards
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '&#x1F532;' : '&#x1F4C8;';
+                var colorClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                
+                return '<div class="card ' + colorClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">Realized PnL</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to capture grid/position data for bot cards
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            // Pass grids and positions to bot renderer
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            // Compute daily PnL as delta between consecutive equity points
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + (i));
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Wrap loadAnalytics to also render daily PnL chart
+        var _origLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _origLoadAnalytics();
+            // Re-fetch analytics data for daily PnL chart
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            // Sort months chronologically
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                // Color mapping: green gradient for profit, red gradient for loss
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1); // Cap at 20% for full color
+                    var g = Math.round(100 + intensity * 155); // 100-255 green channel
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Wrap loadAnalytics to also render monthly heatmap
+        var _origLoadAnalytics2 = typeof _origLoadAnalytics !== 'undefined' ? _origLoadAnalytics : loadAnalytics;
+        if (typeof _origLoadAnalytics === 'undefined') {
+            // If daily PnL wrapper hasn't been applied yet, wrap directly
+            _origLoadAnalytics = loadAnalytics;
+        }
+        loadAnalytics = async function() {
+            await _origLoadAnalytics();
+            // Fetch analytics data for heatmap
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
+    </script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: { extend: { colors: { slate: { 850: '#1a2332', 950: '#0b1120' } } } }
         }
+    
+        // === POSITIONS SORT/FILTER (Client-side only) ===
+        var _positionsCache = [];
+        var _sortCol = 'upnl';
+        var _sortAsc = false;
+        var _filterAsset = '';
+
+        function sortPositions(col) {
+            if (_sortCol === col) { _sortAsc = !_sortAsc; } else { _sortCol = col; _sortAsc = false; }
+            // Update header visual
+            document.querySelectorAll('#positions-table th.sortable').forEach(function(th) {
+                th.classList.remove('active');
+                var icon = th.querySelector('.sort-icon');
+                if (icon) icon.textContent = '▲▼';
+            });
+            var activeTh = document.querySelector('#positions-table th[onclick*="'' + col + ''"]');
+            if (activeTh) {
+                activeTh.classList.add('active');
+                var icon = activeTh.querySelector('.sort-icon');
+                if (icon) icon.textContent = _sortAsc ? '▲' : '▼';
+            }
+            renderFilteredPositions();
+        }
+
+        function filterPositions() {
+            _filterAsset = document.getElementById('pos-asset-filter')?.value || '';
+            renderFilteredPositions();
+        }
+
+        function renderFilteredPositions() {
+            var filtered = _positionsCache.slice();
+            // Apply asset filter
+            if (_filterAsset) {
+                filtered = filtered.filter(function(p) { return p.asset === _filterAsset; });
+            }
+            // Apply sort
+            filtered.sort(function(a, b) {
+                var va = a[_sortCol], vb = b[_sortCol];
+                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+                if (va < vb) return _sortAsc ? -1 : 1;
+                if (va > vb) return _sortAsc ? 1 : -1;
+                return 0;
+            });
+            // Render using existing updatePositions logic
+            var tb = document.getElementById('positions-table');
+            var np = document.getElementById('no-positions');
+            if (!tb) return;
+            if (!filtered.length) { tb.innerHTML = ''; if(np) np.style.display = 'block'; return; }
+            if(np) np.style.display = 'none';
+            tb.innerHTML = filtered.map(function(p) {
+                return '<tr><td class="font-medium text-white">' + p.asset + '</td>' +
+                    '<td><span class="badge ' + (p.side === 'BUY' ? 'badge-buy' : 'badge-sell') + '">' + p.side + '</span></td>' +
+                    '<td>' + p.size.toFixed(6) + '</td>' +
+                    '<td>$' + p.entry.toLocaleString() + '</td>' +
+                    '<td>$' + p.current.toLocaleString() + '</td>' +
+                    '<td class="' + pnlClass(p.upnl) + '">' + formatPnl(p.upnl) + '</td>' +
+                    '<td class="' + pnlClass(p.pnl_pct) + '">' + (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%</td>' +
+                    '<td>$' + (p.margin_used || 0).toFixed(2) + '</td>' +
+                    '<td>$' + (p.liquidation_px || 0).toLocaleString() + '</td>' +
+                    '<td>' + (p.leverage || 1) + 'x</td>' +
+                    '<td class="' + pnlClass(p.roe) + '">' + (p.roe || 0).toFixed(2) + '%</td>' +
+                    '<td>$' + (p.sl || 0).toLocaleString() + '</td>' +
+                    '<td class="text-slate-400">' + p.strategy + '</td></tr>';
+            }).join('');
+        }
+
+        // Wrap existing updatePositions to cache data and populate filter
+        var _origUpdatePositions = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCache = positions || [];
+            // Populate asset filter dropdown if empty
+            var filterEl = document.getElementById('pos-asset-filter');
+            if (filterEl && filterEl.options.length <= 1) {
+                var assets = {};
+                _positionsCache.forEach(function(p) { assets[p.asset] = true; });
+                Object.keys(assets).sort().forEach(function(a) {
+                    var opt = document.createElement('option');
+                    opt.value = a; opt.textContent = a;
+                    filterEl.appendChild(opt);
+                });
+            }
+            renderFilteredPositions();
+        };
+
+    
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], dcas: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            
+            if (!container || !section) return;
+
+            // Combine grids and DCA positions into bot list
+            var bots = [];
+            
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID',
+                        asset: g.asset,
+                        pnl: g.realized_pnl || 0,
+                        status: 'running',
+                        details: g.nodes_active + '/' + g.nodes_total + ' nodes',
+                        investment: g.investment || 0,
+                        mode: g.mode
+                    });
+                });
+            }
+            
+            // Add DCA Positions (simple heuristic: non-grid positions with strategy=DCA)
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().includes('DCA')) {
+                        bots.push({
+                            type: 'DCA',
+                            asset: p.asset,
+                            pnl: p.upnl || 0,
+                            status: 'running',
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry,
+                            mode: p.side
+                        });
+                    }
+                });
+            }
+
+            // Update visibility
+            if (bots.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            // Render cards
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '&#x1F532;' : '&#x1F4C8;';
+                var colorClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                
+                return '<div class="card ' + colorClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">Realized PnL</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to capture grid/position data for bot cards
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            // Pass grids and positions to bot renderer
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            // Compute daily PnL as delta between consecutive equity points
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + (i));
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Wrap loadAnalytics to also render daily PnL chart
+        var _origLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _origLoadAnalytics();
+            // Re-fetch analytics data for daily PnL chart
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            // Sort months chronologically
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                // Color mapping: green gradient for profit, red gradient for loss
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1); // Cap at 20% for full color
+                    var g = Math.round(100 + intensity * 155); // 100-255 green channel
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Wrap loadAnalytics to also render monthly heatmap
+        var _origLoadAnalytics2 = typeof _origLoadAnalytics !== 'undefined' ? _origLoadAnalytics : loadAnalytics;
+        if (typeof _origLoadAnalytics === 'undefined') {
+            // If daily PnL wrapper hasn't been applied yet, wrap directly
+            _origLoadAnalytics = loadAnalytics;
+        }
+        loadAnalytics = async function() {
+            await _origLoadAnalytics();
+            // Fetch analytics data for heatmap
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
     </script>
     <style>
         body { background: #0b1120; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; }
@@ -52,6 +967,20 @@
         .tab-btn:hover { color: #e2e8f0; } .tab-btn.active { color: #60a5fa; border-bottom-color: #3b82f6; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
         .animate-slide-in { animation: slideIn 0.3s ease-out; }
+    
+        .card { transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+        .card:hover { border-color: #334155; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #334155; border-radius: 24px; transition: 0.3s; }
+        .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+        .toggle-switch input:checked + .toggle-slider { background: #2563eb; }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+    
+        th.sortable { cursor: pointer; user-select: none; transition: color 0.2s; }
+        th.sortable:hover { color: #60a5fa; }
+        th.sortable .sort-icon { margin-left: 4px; font-size: 0.6rem; opacity: 0.4; }
+        th.sortable.active .sort-icon { opacity: 1; color: #60a5fa; }
     </style>
 </head>
 <body class="flex h-screen overflow-hidden">
@@ -105,6 +1034,14 @@
                 <div class="card"><div class="metric-label mb-1">Win Rate</div><div id="ov-winrate" class="text-xl font-bold text-white">N/A</div></div>
             </div>
             <div class="card"><div class="metric-label mb-3">System Health</div><div id="health-checks" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm"></div></div>
+            <!-- Active Bots Section -->
+            <div id="active-bots-section" class="mt-6" style="display:none;">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-lg font-bold text-white">Active Bots</h2>
+                    <span id="bot-count-badge" class="badge badge-grid">0 Active</span>
+                </div>
+                <div id="bots-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </div>
             <!-- Recent Trades Feed -->
             <div class="card mt-6">
                 <div class="flex items-center justify-between mb-3">
@@ -120,7 +1057,26 @@
             </div>
         </div>
         <!-- Positions -->
-        <div id="page-positions" style="display:none;"><h1 class="text-2xl font-bold text-white mb-6">Open Positions</h1><div class="card !p-0 overflow-x-auto"><table><thead><tr><th>Asset</th><th>Side</th><th>Size</th><th>Entry</th><th>Current</th><th>uPnL</th><th>PnL%</th><th>Margin</th><th>Liq Px</th><th>Leverage</th><th>ROE</th><th>SL</th><th>Strategy</th></tr></thead><tbody id="positions-table"></tbody></table><div id="no-positions" class="p-8 text-center text-slate-500" style="display:none;">No open positions</div></div></div>
+        <div id="page-positions" style="display:none;"><div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold text-white">Open Positions</h1>
+                <select id="pos-asset-filter" onchange="filterPositions()" style="max-width:180px;">
+                    <option value="">All Assets</option>
+                </select>
+            </div><div class="card !p-0 overflow-x-auto"><table><thead><tr>
+<th class="sortable" onclick="sortPositions('asset')">Asset <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('side')">Side <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('size')">Size <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('entry')">Entry <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('current')">Current <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('upnl')">uPnL <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('pnl_pct')">PnL% <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('margin_used')">Margin <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('liquidation_px')">Liq Px <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('leverage')">Leverage <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('roe')">ROE <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('sl')">SL <span class="sort-icon">▲▼</span></th>
+<th class="sortable" onclick="sortPositions('strategy')">Strategy <span class="sort-icon">▲▼</span></th>
+</tr></thead><tbody id="positions-table"></tbody></table><div id="no-positions" class="p-8 text-center text-slate-500" style="display:none;">No open positions</div></div></div>
         <!-- Grids -->
         <div id="page-grids" style="display:none;"><h1 class="text-2xl font-bold text-white mb-6">Active Grids</h1><div id="grids-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div><div id="no-grids" class="card text-center text-slate-500 py-8" style="display:none;">No active grids</div></div>
         <!-- Create Bot -->
@@ -172,6 +1128,15 @@
                 <div class="card"><div class="metric-label mb-1">Best / Worst</div><div id="an-best-worst" class="text-sm text-slate-400">$0 / $0</div></div>
             </div>
             <div class="card"><div class="metric-label mb-3">Equity Curve</div><canvas id="equity-chart" style="max-height:300px;"></canvas></div>
+            <div class="card mt-6">
+                <div class="metric-label mb-3">Daily PnL</div>
+                <canvas id="daily-pnl-chart" style="max-height:250px;"></canvas>
+            </div>
+            <div class="card mt-6">
+                <div class="metric-label mb-3">Monthly Returns</div>
+                <div id="monthly-heatmap" class="grid gap-1" style="grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));"></div>
+                <div id="no-monthly-data" class="text-center text-slate-500 py-4" style="display:none;">No monthly data available</div>
+            </div>
         </div>
         <!-- Config -->
         <div id="page-config" style="display:none;">
@@ -222,13 +1187,14 @@
         <div id="page-alerts" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Alert Configuration</h1>
             <div class="card">
-                <div class="form-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-master" style="width:auto;"><span class="text-white font-semibold text-lg">Master Enable</span></label></div>
+                <div class="form-group"><label class="flex items-center gap-4 cursor-pointer"><div class="toggle-switch"><input type="checkbox" id="alert-master"><span class="toggle-slider"></span></div><span class="text-white font-semibold text-lg">Master Enable</span></label></div>
                 <div class="border-t border-slate-700 my-4"></div>
                 <div class="metric-label mb-3">Notification Groups</div>
                 <div class="space-y-3 ml-2">
-                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-trades" style="width:auto;"><span class="text-slate-300">Trades & Fills</span></label>
-                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-errors" style="width:auto;"><span class="text-slate-300">Errors & Exceptions</span></label>
-                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-scans" style="width:auto;"><span class="text-slate-300">Routine Scans</span></label>
+                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-trades" style="width:auto;"><span class="text-slate-300">📈 Trades & Fills</span><span class="text-slate-600 text-xs ml-8">Order executions, position opens/closes</span></label>
+                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-errors" style="width:auto;"><span class="text-slate-300">⚠️ Errors & Exceptions</span><span class="text-slate-600 text-xs ml-8">API failures, execution errors, crashes</span></label>
+                    <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="alert-scans" style="width:auto;"><span class="text-slate-300">🔄 Routine Scans</span></label>
+                    <span class="text-slate-600 text-xs ml-8">Periodic analysis results, signal detections</span>
                 </div>
                 <div class="mt-6"><button class="btn btn-primary" onclick="saveAlertConfig()">Save Preferences</button></div>
             </div>
@@ -274,7 +1240,7 @@
         function saveConfig(){fullConfig.grid=fullConfig.grid||{};fullConfig.grid.investment_amount=parseFloat(document.getElementById('cfg-grid-investment').value);fullConfig.grid.num_nodes=parseInt(document.getElementById('cfg-grid-nodes').value);fullConfig.grid.min_step_size=parseFloat(document.getElementById('cfg-grid-step').value);fullConfig.grid.max_range_pct=parseFloat(document.getElementById('cfg-grid-range').value);fullConfig.dca=fullConfig.dca||{};fullConfig.dca.base_order_size=parseFloat(document.getElementById('cfg-dca-base').value);fullConfig.dca.max_safety_orders=parseInt(document.getElementById('cfg-dca-so').value);fullConfig.dca.price_deviation_pct=parseFloat(document.getElementById('cfg-dca-dev').value);fullConfig.dca.safety_order_step_scale=parseFloat(document.getElementById('cfg-dca-scale').value);fullConfig.dca.take_profit_pct=parseFloat(document.getElementById('cfg-dca-tp').value);fullConfig.dca.stop_loss_pct=parseFloat(document.getElementById('cfg-dca-sl').value);fullConfig.risk=fullConfig.risk||{};fullConfig.risk.max_positions=parseInt(document.getElementById('cfg-risk-maxpos').value);fullConfig.risk.max_notional_per_asset=parseFloat(document.getElementById('cfg-risk-notional').value);fullConfig.risk.min_notional=parseFloat(document.getElementById('cfg-risk-minnot').value);fullConfig.risk.max_leverage=parseInt(document.getElementById('cfg-risk-leverage').value);requestOtpForAction('/api/dashboard/config/save',{config:fullConfig},'Save configuration changes');}
         function reloadConfig(){requestOtpForAction('/api/dashboard/config/reload',{},'Reload configuration (apply changes)');}
         // Safety Panel
-        async function loadSafetyPanel(){try{var[dr,or]=await Promise.all([fetch('/api/dashboard/config/defaults',{credentials:'include'}),fetch('/api/dashboard/overview',{credentials:'include'})]);if(dr.ok){var d=await dr.json();var r=d.risk||{};document.getElementById('safe-maxpos').textContent=r.max_positions||'-';document.getElementById('safe-minnot').textContent='$'+(r.min_notional||0);document.getElementById('safe-maxlev').textContent=(r.max_leverage||20)+'x';}if(or.ok){var o=await or.json();document.getElementById('safe-active').textContent=(o.open_positions||0)+' / '+(o.active_grids||0)+' grids';}var ar=await fetch('/api/dashboard/audit-log?action=EMERGENCY_STOP&limit=5',{credentials:'include'});if(ar.ok){var ad=await ar.json();var el=document.getElementById('estop-history');if(!ad.entries.length){el.textContent='No emergency stops recorded';return;}el.innerHTML=ad.entries.map(function(e){return'<div class="mb-2 pb-2 border-b border-slate-700"><span class="text-red-400 font-semibold">'+e.created_at.substring(0,19)+'</span><br><span class="text-slate-500 text-xs">'+(e.details||'').substring(0,200)+'</span></div>';}).join('');}}catch(e){console.error('Safety:',e);}}
+        async function loadSafetyPanel(){try{var[dr,or]=await Promise.all([fetch('/api/dashboard/config/defaults',{credentials:'include'}),fetch('/api/dashboard/overview',{credentials:'include'})]);if(dr.ok){var d=await dr.json();var r=d.risk||{};var mp=document.getElementById('safe-maxpos');mp.textContent=r.max_positions||'-';mp.className='metric-value text-blue-400';var mn=document.getElementById('safe-minnot');mn.textContent='$'+(r.min_notional||0);mn.className='metric-value text-emerald-400';var ml=document.getElementById('safe-maxlev');ml.textContent=(r.max_leverage||20)+'x';ml.className='metric-value text-amber-400';}if(or.ok){var o=await or.json();document.getElementById('safe-active').textContent=(o.open_positions||0)+' / '+(o.active_grids||0)+' grids';}var ar=await fetch('/api/dashboard/audit-log?action=EMERGENCY_STOP&limit=5',{credentials:'include'});if(ar.ok){var ad=await ar.json();var el=document.getElementById('estop-history');if(!ad.entries.length){el.textContent='No emergency stops recorded';return;}el.innerHTML=ad.entries.map(function(e){return'<div class="mb-2 pb-2 border-b border-slate-700"><span class="text-red-400 font-semibold">'+e.created_at.substring(0,19)+'</span><br><span class="text-slate-500 text-xs">'+(e.details||'').substring(0,200)+'</span></div>';}).join('');}}catch(e){console.error('Safety:',e);}}
         // Audit Log
         async function loadAuditLog(){var s=document.getElementById('audit-search').value,a=document.getElementById('audit-action-filter').value,p=new URLSearchParams({limit:'100',offset:'0'});if(s)p.set('search',s);if(a)p.set('action',a);try{var r=await fetch('/api/dashboard/audit-log?'+p.toString(),{credentials:'include'});if(!r.ok)return;var d=await r.json();var tb=document.getElementById('audit-table');document.getElementById('audit-total').textContent='Total: '+d.total;if(!d.entries.length){tb.innerHTML='';document.getElementById('no-audit').style.display='block';return;}document.getElementById('no-audit').style.display='none';tb.innerHTML=d.entries.map(function(e){return'<tr><td class="text-slate-400">'+(e.created_at||'').substring(0,19)+'</td><td class="text-slate-400">'+(e.user_id||'').substring(0,8)+'</td><td class="font-medium text-white">'+e.action+'</td><td>'+(e.resource||'')+'</td><td>'+(e.otp_verified?'\u2705':'\u274C')+'</td><td class="text-slate-500 text-xs max-w-xs truncate">'+(e.details||'').substring(0,150)+'</td></tr>';}).join('');}catch(e){console.error('Audit:',e);}}
         // Signal Reconciliation
@@ -309,6 +1275,311 @@
         // Health
         fetch('/api/dashboard/health',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){var el=document.getElementById('health-checks'),checks=d.checks||{},html='';for(var k in checks){var v=checks[k];html+='<div class="flex items-center gap-2">'+(v?'\u2705':'\u274C')+' <span class="'+(v?'text-green-400':'text-red-400')+'">'+k.replace(/_/g,' ')+'</span></div>';}el.innerHTML=html;}).catch(function(){});
         connectSSE();
+    
+        // === POSITIONS SORT/FILTER (Client-side only) ===
+        var _positionsCache = [];
+        var _sortCol = 'upnl';
+        var _sortAsc = false;
+        var _filterAsset = '';
+
+        function sortPositions(col) {
+            if (_sortCol === col) { _sortAsc = !_sortAsc; } else { _sortCol = col; _sortAsc = false; }
+            // Update header visual
+            document.querySelectorAll('#positions-table th.sortable').forEach(function(th) {
+                th.classList.remove('active');
+                var icon = th.querySelector('.sort-icon');
+                if (icon) icon.textContent = '▲▼';
+            });
+            var activeTh = document.querySelector('#positions-table th[onclick*="'' + col + ''"]');
+            if (activeTh) {
+                activeTh.classList.add('active');
+                var icon = activeTh.querySelector('.sort-icon');
+                if (icon) icon.textContent = _sortAsc ? '▲' : '▼';
+            }
+            renderFilteredPositions();
+        }
+
+        function filterPositions() {
+            _filterAsset = document.getElementById('pos-asset-filter')?.value || '';
+            renderFilteredPositions();
+        }
+
+        function renderFilteredPositions() {
+            var filtered = _positionsCache.slice();
+            // Apply asset filter
+            if (_filterAsset) {
+                filtered = filtered.filter(function(p) { return p.asset === _filterAsset; });
+            }
+            // Apply sort
+            filtered.sort(function(a, b) {
+                var va = a[_sortCol], vb = b[_sortCol];
+                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+                if (va < vb) return _sortAsc ? -1 : 1;
+                if (va > vb) return _sortAsc ? 1 : -1;
+                return 0;
+            });
+            // Render using existing updatePositions logic
+            var tb = document.getElementById('positions-table');
+            var np = document.getElementById('no-positions');
+            if (!tb) return;
+            if (!filtered.length) { tb.innerHTML = ''; if(np) np.style.display = 'block'; return; }
+            if(np) np.style.display = 'none';
+            tb.innerHTML = filtered.map(function(p) {
+                return '<tr><td class="font-medium text-white">' + p.asset + '</td>' +
+                    '<td><span class="badge ' + (p.side === 'BUY' ? 'badge-buy' : 'badge-sell') + '">' + p.side + '</span></td>' +
+                    '<td>' + p.size.toFixed(6) + '</td>' +
+                    '<td>$' + p.entry.toLocaleString() + '</td>' +
+                    '<td>$' + p.current.toLocaleString() + '</td>' +
+                    '<td class="' + pnlClass(p.upnl) + '">' + formatPnl(p.upnl) + '</td>' +
+                    '<td class="' + pnlClass(p.pnl_pct) + '">' + (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%</td>' +
+                    '<td>$' + (p.margin_used || 0).toFixed(2) + '</td>' +
+                    '<td>$' + (p.liquidation_px || 0).toLocaleString() + '</td>' +
+                    '<td>' + (p.leverage || 1) + 'x</td>' +
+                    '<td class="' + pnlClass(p.roe) + '">' + (p.roe || 0).toFixed(2) + '%</td>' +
+                    '<td>$' + (p.sl || 0).toLocaleString() + '</td>' +
+                    '<td class="text-slate-400">' + p.strategy + '</td></tr>';
+            }).join('');
+        }
+
+        // Wrap existing updatePositions to cache data and populate filter
+        var _origUpdatePositions = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCache = positions || [];
+            // Populate asset filter dropdown if empty
+            var filterEl = document.getElementById('pos-asset-filter');
+            if (filterEl && filterEl.options.length <= 1) {
+                var assets = {};
+                _positionsCache.forEach(function(p) { assets[p.asset] = true; });
+                Object.keys(assets).sort().forEach(function(a) {
+                    var opt = document.createElement('option');
+                    opt.value = a; opt.textContent = a;
+                    filterEl.appendChild(opt);
+                });
+            }
+            renderFilteredPositions();
+        };
+
+    
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], dcas: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            
+            if (!container || !section) return;
+
+            // Combine grids and DCA positions into bot list
+            var bots = [];
+            
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID',
+                        asset: g.asset,
+                        pnl: g.realized_pnl || 0,
+                        status: 'running',
+                        details: g.nodes_active + '/' + g.nodes_total + ' nodes',
+                        investment: g.investment || 0,
+                        mode: g.mode
+                    });
+                });
+            }
+            
+            // Add DCA Positions (simple heuristic: non-grid positions with strategy=DCA)
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().includes('DCA')) {
+                        bots.push({
+                            type: 'DCA',
+                            asset: p.asset,
+                            pnl: p.upnl || 0,
+                            status: 'running',
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry,
+                            mode: p.side
+                        });
+                    }
+                });
+            }
+
+            // Update visibility
+            if (bots.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            // Render cards
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '&#x1F532;' : '&#x1F4C8;';
+                var colorClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                
+                return '<div class="card ' + colorClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">Realized PnL</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to capture grid/position data for bot cards
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            // Pass grids and positions to bot renderer
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            // Compute daily PnL as delta between consecutive equity points
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + (i));
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Wrap loadAnalytics to also render daily PnL chart
+        var _origLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _origLoadAnalytics();
+            // Re-fetch analytics data for daily PnL chart
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            // Sort months chronologically
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                // Color mapping: green gradient for profit, red gradient for loss
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1); // Cap at 20% for full color
+                    var g = Math.round(100 + intensity * 155); // 100-255 green channel
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Wrap loadAnalytics to also render monthly heatmap
+        var _origLoadAnalytics2 = typeof _origLoadAnalytics !== 'undefined' ? _origLoadAnalytics : loadAnalytics;
+        if (typeof _origLoadAnalytics === 'undefined') {
+            // If daily PnL wrapper hasn't been applied yet, wrap directly
+            _origLoadAnalytics = loadAnalytics;
+        }
+        loadAnalytics = async function() {
+            await _origLoadAnalytics();
+            // Fetch analytics data for heatmap
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
     </script>
 </body>
 </html>
