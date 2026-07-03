@@ -4,13 +4,1057 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MBIO SignalBot Pro — Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com">
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], positions: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            if (!container || !section) return;
+
+            var bots = [];
+
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID', asset: g.asset, pnl: g.realized_pnl || 0,
+                        details: (g.nodes_active||0) + '/' + (g.nodes_total||0) + ' nodes',
+                        investment: g.investment || 0, mode: g.mode || 'RANGE',
+                        cycles: g.cycles || 0
+                    });
+                });
+            }
+
+            // Add DCA Positions
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().indexOf('DCA') !== -1) {
+                        bots.push({
+                            type: 'DCA', asset: p.asset, pnl: p.upnl || 0,
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry, mode: p.side,
+                            cycles: 0
+                        });
+                    }
+                });
+            }
+
+            if (bots.length === 0) { section.style.display = 'none'; return; }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '\u{1F532}' : '\u{1F4C8}';
+                var borderClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                return '<div class="card ' + borderClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + (b.type === 'GRID' ? 'Realized PnL' : 'Unrealized PnL') + '</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to pass grid/position data to bot renderer
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + i);
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false, callbacks: { label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); } } }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics2 = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics2();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
+    
+        // === GRID BOT VISUALIZER (Canvas) ===
+        var _gridsCache = [];
+        var _positionsCacheForViz = [];
+
+        function showGridsTab(tab) {
+            var cardsContainer = document.getElementById('grids-container');
+            var noGrids = document.getElementById('no-grids');
+            var vizContainer = document.getElementById('grids-viz-container');
+            var btnCards = document.getElementById('grids-tab-cards');
+            var btnViz = document.getElementById('grids-tab-viz');
+            if (!vizContainer) return;
+            if (tab === 'viz') {
+                if (cardsContainer) cardsContainer.style.display = 'none';
+                if (noGrids) noGrids.style.display = 'none';
+                vizContainer.style.display = 'block';
+                if (btnCards) btnCards.className = 'btn btn-secondary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-primary text-xs';
+                renderGridVisualizer();
+            } else {
+                vizContainer.style.display = 'none';
+                if (cardsContainer) cardsContainer.style.display = 'grid';
+                if (btnCards) btnCards.className = 'btn btn-primary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-secondary text-xs';
+                if (noGrids && _gridsCache.length === 0) noGrids.style.display = 'block';
+            }
+        }
+
+        function renderGridVisualizer() {
+            var canvas = document.getElementById('grid-viz-canvas');
+            var noData = document.getElementById('viz-no-data');
+            var selectEl = document.getElementById('viz-asset-select');
+            if (!canvas) return;
+
+            if (selectEl && selectEl.options.length <= 1 && _gridsCache.length > 0) {
+                selectEl.innerHTML = '';
+                _gridsCache.forEach(function(g) {
+                    var opt = document.createElement('option');
+                    opt.value = g.asset; opt.textContent = g.asset;
+                    selectEl.appendChild(opt);
+                });
+            }
+
+            var selectedAsset = selectEl ? selectEl.value : (_gridsCache[0] ? _gridsCache[0].asset : null);
+            var grid = _gridsCache.find(function(g) { return g.asset === selectedAsset; });
+
+            if (!grid || !selectedAsset) {
+                if (noData) noData.style.display = 'block';
+                canvas.style.display = 'none';
+                return;
+            }
+            if (noData) noData.style.display = 'none';
+            canvas.style.display = 'block';
+
+            var ctx = canvas.getContext('2d');
+            var dpr = window.devicePixelRatio || 1;
+            var rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            var W = rect.width, H = rect.height;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, W, H);
+
+            var lower = grid.lower_price || 0;
+            var upper = grid.upper_price || 0;
+            var range = upper - lower;
+            if (range <= 0) return;
+
+            var pad = { top: 30, bottom: 30, left: 60, right: 20 };
+            var plotH = H - pad.top - pad.bottom;
+
+            function priceToY(price) {
+                return pad.top + plotH - ((price - lower) / range) * plotH;
+            }
+
+            var stepSize = grid.step_size || (range / (grid.nodes_total || 10));
+            var numLevels = Math.floor(range / stepSize) + 1;
+
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+
+            for (var i = 0; i < numLevels; i++) {
+                var price = lower + i * stepSize;
+                if (price > upper) break;
+                var y = priceToY(price);
+                var isBuyLevel = i % 2 === 0;
+                ctx.strokeStyle = isBuyLevel ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(W - pad.right, y);
+                ctx.stroke();
+
+                var dotColor = isBuyLevel ? '#4ade80' : '#f87171';
+                var isActive = i < (grid.nodes_active || 0);
+                ctx.fillStyle = isActive ? dotColor : '#334155';
+                ctx.beginPath();
+                ctx.arc(pad.left - 15, y, isActive ? 4 : 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#64748b';
+                ctx.fillText('$' + price.toFixed(2), pad.left - 22, y + 3);
+            }
+
+            var currentPos = _positionsCacheForViz.find(function(p) { return p.asset === selectedAsset; });
+            if (currentPos && currentPos.current > 0) {
+                var curPrice = currentPos.current;
+                if (curPrice >= lower && curPrice <= upper) {
+                    var curY = priceToY(curPrice);
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(pad.left, curY);
+                    ctx.lineTo(W - pad.right, curY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.font = 'bold 11px monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('\u25B6 $' + curPrice.toFixed(2), W - pad.right + 2, curY + 4);
+                }
+            }
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(grid.asset + ' GRID | ' + (grid.mode||'RANGE') + ' | Nodes: ' + (grid.nodes_active||0) + '/' + (grid.nodes_total||0) + ' | PnL: ' + formatPnl(grid.realized_pnl||0), pad.left, 18);
+
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#4ade80'; ctx.fillText('\u25CF Buy', W - pad.right - 50, 18);
+            ctx.fillStyle = '#f87171'; ctx.fillText('\u25CF Sell', W - pad.right - 10, 18);
+        }
+
+        // Wrap updateGrids to cache data and trigger visualizer re-render
+        var _origUpdateGrids = updateGrids;
+        updateGrids = function(grids) {
+            _gridsCache = grids || [];
+            _origUpdateGrids(grids);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+        // Wrap updatePositions to get current prices for overlay
+        var _origUpdatePositionsForViz = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCacheForViz = positions || [];
+            _origUpdatePositionsForViz(positions);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js">
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], positions: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            if (!container || !section) return;
+
+            var bots = [];
+
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID', asset: g.asset, pnl: g.realized_pnl || 0,
+                        details: (g.nodes_active||0) + '/' + (g.nodes_total||0) + ' nodes',
+                        investment: g.investment || 0, mode: g.mode || 'RANGE',
+                        cycles: g.cycles || 0
+                    });
+                });
+            }
+
+            // Add DCA Positions
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().indexOf('DCA') !== -1) {
+                        bots.push({
+                            type: 'DCA', asset: p.asset, pnl: p.upnl || 0,
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry, mode: p.side,
+                            cycles: 0
+                        });
+                    }
+                });
+            }
+
+            if (bots.length === 0) { section.style.display = 'none'; return; }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '\u{1F532}' : '\u{1F4C8}';
+                var borderClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                return '<div class="card ' + borderClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + (b.type === 'GRID' ? 'Realized PnL' : 'Unrealized PnL') + '</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to pass grid/position data to bot renderer
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + i);
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false, callbacks: { label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); } } }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics2 = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics2();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
+    
+        // === GRID BOT VISUALIZER (Canvas) ===
+        var _gridsCache = [];
+        var _positionsCacheForViz = [];
+
+        function showGridsTab(tab) {
+            var cardsContainer = document.getElementById('grids-container');
+            var noGrids = document.getElementById('no-grids');
+            var vizContainer = document.getElementById('grids-viz-container');
+            var btnCards = document.getElementById('grids-tab-cards');
+            var btnViz = document.getElementById('grids-tab-viz');
+            if (!vizContainer) return;
+            if (tab === 'viz') {
+                if (cardsContainer) cardsContainer.style.display = 'none';
+                if (noGrids) noGrids.style.display = 'none';
+                vizContainer.style.display = 'block';
+                if (btnCards) btnCards.className = 'btn btn-secondary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-primary text-xs';
+                renderGridVisualizer();
+            } else {
+                vizContainer.style.display = 'none';
+                if (cardsContainer) cardsContainer.style.display = 'grid';
+                if (btnCards) btnCards.className = 'btn btn-primary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-secondary text-xs';
+                if (noGrids && _gridsCache.length === 0) noGrids.style.display = 'block';
+            }
+        }
+
+        function renderGridVisualizer() {
+            var canvas = document.getElementById('grid-viz-canvas');
+            var noData = document.getElementById('viz-no-data');
+            var selectEl = document.getElementById('viz-asset-select');
+            if (!canvas) return;
+
+            if (selectEl && selectEl.options.length <= 1 && _gridsCache.length > 0) {
+                selectEl.innerHTML = '';
+                _gridsCache.forEach(function(g) {
+                    var opt = document.createElement('option');
+                    opt.value = g.asset; opt.textContent = g.asset;
+                    selectEl.appendChild(opt);
+                });
+            }
+
+            var selectedAsset = selectEl ? selectEl.value : (_gridsCache[0] ? _gridsCache[0].asset : null);
+            var grid = _gridsCache.find(function(g) { return g.asset === selectedAsset; });
+
+            if (!grid || !selectedAsset) {
+                if (noData) noData.style.display = 'block';
+                canvas.style.display = 'none';
+                return;
+            }
+            if (noData) noData.style.display = 'none';
+            canvas.style.display = 'block';
+
+            var ctx = canvas.getContext('2d');
+            var dpr = window.devicePixelRatio || 1;
+            var rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            var W = rect.width, H = rect.height;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, W, H);
+
+            var lower = grid.lower_price || 0;
+            var upper = grid.upper_price || 0;
+            var range = upper - lower;
+            if (range <= 0) return;
+
+            var pad = { top: 30, bottom: 30, left: 60, right: 20 };
+            var plotH = H - pad.top - pad.bottom;
+
+            function priceToY(price) {
+                return pad.top + plotH - ((price - lower) / range) * plotH;
+            }
+
+            var stepSize = grid.step_size || (range / (grid.nodes_total || 10));
+            var numLevels = Math.floor(range / stepSize) + 1;
+
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+
+            for (var i = 0; i < numLevels; i++) {
+                var price = lower + i * stepSize;
+                if (price > upper) break;
+                var y = priceToY(price);
+                var isBuyLevel = i % 2 === 0;
+                ctx.strokeStyle = isBuyLevel ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(W - pad.right, y);
+                ctx.stroke();
+
+                var dotColor = isBuyLevel ? '#4ade80' : '#f87171';
+                var isActive = i < (grid.nodes_active || 0);
+                ctx.fillStyle = isActive ? dotColor : '#334155';
+                ctx.beginPath();
+                ctx.arc(pad.left - 15, y, isActive ? 4 : 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#64748b';
+                ctx.fillText('$' + price.toFixed(2), pad.left - 22, y + 3);
+            }
+
+            var currentPos = _positionsCacheForViz.find(function(p) { return p.asset === selectedAsset; });
+            if (currentPos && currentPos.current > 0) {
+                var curPrice = currentPos.current;
+                if (curPrice >= lower && curPrice <= upper) {
+                    var curY = priceToY(curPrice);
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(pad.left, curY);
+                    ctx.lineTo(W - pad.right, curY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.font = 'bold 11px monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('\u25B6 $' + curPrice.toFixed(2), W - pad.right + 2, curY + 4);
+                }
+            }
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(grid.asset + ' GRID | ' + (grid.mode||'RANGE') + ' | Nodes: ' + (grid.nodes_active||0) + '/' + (grid.nodes_total||0) + ' | PnL: ' + formatPnl(grid.realized_pnl||0), pad.left, 18);
+
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#4ade80'; ctx.fillText('\u25CF Buy', W - pad.right - 50, 18);
+            ctx.fillStyle = '#f87171'; ctx.fillText('\u25CF Sell', W - pad.right - 10, 18);
+        }
+
+        // Wrap updateGrids to cache data and trigger visualizer re-render
+        var _origUpdateGrids = updateGrids;
+        updateGrids = function(grids) {
+            _gridsCache = grids || [];
+            _origUpdateGrids(grids);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+        // Wrap updatePositions to get current prices for overlay
+        var _origUpdatePositionsForViz = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCacheForViz = positions || [];
+            _origUpdatePositionsForViz(positions);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+    </script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: { extend: { colors: { slate: { 850: '#1a2332', 950: '#0b1120' } } } }
         }
+    
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], positions: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            if (!container || !section) return;
+
+            var bots = [];
+
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID', asset: g.asset, pnl: g.realized_pnl || 0,
+                        details: (g.nodes_active||0) + '/' + (g.nodes_total||0) + ' nodes',
+                        investment: g.investment || 0, mode: g.mode || 'RANGE',
+                        cycles: g.cycles || 0
+                    });
+                });
+            }
+
+            // Add DCA Positions
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().indexOf('DCA') !== -1) {
+                        bots.push({
+                            type: 'DCA', asset: p.asset, pnl: p.upnl || 0,
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry, mode: p.side,
+                            cycles: 0
+                        });
+                    }
+                });
+            }
+
+            if (bots.length === 0) { section.style.display = 'none'; return; }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '\u{1F532}' : '\u{1F4C8}';
+                var borderClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                return '<div class="card ' + borderClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + (b.type === 'GRID' ? 'Realized PnL' : 'Unrealized PnL') + '</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to pass grid/position data to bot renderer
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + i);
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false, callbacks: { label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); } } }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics2 = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics2();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
+    
+        // === GRID BOT VISUALIZER (Canvas) ===
+        var _gridsCache = [];
+        var _positionsCacheForViz = [];
+
+        function showGridsTab(tab) {
+            var cardsContainer = document.getElementById('grids-container');
+            var noGrids = document.getElementById('no-grids');
+            var vizContainer = document.getElementById('grids-viz-container');
+            var btnCards = document.getElementById('grids-tab-cards');
+            var btnViz = document.getElementById('grids-tab-viz');
+            if (!vizContainer) return;
+            if (tab === 'viz') {
+                if (cardsContainer) cardsContainer.style.display = 'none';
+                if (noGrids) noGrids.style.display = 'none';
+                vizContainer.style.display = 'block';
+                if (btnCards) btnCards.className = 'btn btn-secondary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-primary text-xs';
+                renderGridVisualizer();
+            } else {
+                vizContainer.style.display = 'none';
+                if (cardsContainer) cardsContainer.style.display = 'grid';
+                if (btnCards) btnCards.className = 'btn btn-primary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-secondary text-xs';
+                if (noGrids && _gridsCache.length === 0) noGrids.style.display = 'block';
+            }
+        }
+
+        function renderGridVisualizer() {
+            var canvas = document.getElementById('grid-viz-canvas');
+            var noData = document.getElementById('viz-no-data');
+            var selectEl = document.getElementById('viz-asset-select');
+            if (!canvas) return;
+
+            if (selectEl && selectEl.options.length <= 1 && _gridsCache.length > 0) {
+                selectEl.innerHTML = '';
+                _gridsCache.forEach(function(g) {
+                    var opt = document.createElement('option');
+                    opt.value = g.asset; opt.textContent = g.asset;
+                    selectEl.appendChild(opt);
+                });
+            }
+
+            var selectedAsset = selectEl ? selectEl.value : (_gridsCache[0] ? _gridsCache[0].asset : null);
+            var grid = _gridsCache.find(function(g) { return g.asset === selectedAsset; });
+
+            if (!grid || !selectedAsset) {
+                if (noData) noData.style.display = 'block';
+                canvas.style.display = 'none';
+                return;
+            }
+            if (noData) noData.style.display = 'none';
+            canvas.style.display = 'block';
+
+            var ctx = canvas.getContext('2d');
+            var dpr = window.devicePixelRatio || 1;
+            var rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            var W = rect.width, H = rect.height;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, W, H);
+
+            var lower = grid.lower_price || 0;
+            var upper = grid.upper_price || 0;
+            var range = upper - lower;
+            if (range <= 0) return;
+
+            var pad = { top: 30, bottom: 30, left: 60, right: 20 };
+            var plotH = H - pad.top - pad.bottom;
+
+            function priceToY(price) {
+                return pad.top + plotH - ((price - lower) / range) * plotH;
+            }
+
+            var stepSize = grid.step_size || (range / (grid.nodes_total || 10));
+            var numLevels = Math.floor(range / stepSize) + 1;
+
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+
+            for (var i = 0; i < numLevels; i++) {
+                var price = lower + i * stepSize;
+                if (price > upper) break;
+                var y = priceToY(price);
+                var isBuyLevel = i % 2 === 0;
+                ctx.strokeStyle = isBuyLevel ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(W - pad.right, y);
+                ctx.stroke();
+
+                var dotColor = isBuyLevel ? '#4ade80' : '#f87171';
+                var isActive = i < (grid.nodes_active || 0);
+                ctx.fillStyle = isActive ? dotColor : '#334155';
+                ctx.beginPath();
+                ctx.arc(pad.left - 15, y, isActive ? 4 : 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#64748b';
+                ctx.fillText('$' + price.toFixed(2), pad.left - 22, y + 3);
+            }
+
+            var currentPos = _positionsCacheForViz.find(function(p) { return p.asset === selectedAsset; });
+            if (currentPos && currentPos.current > 0) {
+                var curPrice = currentPos.current;
+                if (curPrice >= lower && curPrice <= upper) {
+                    var curY = priceToY(curPrice);
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(pad.left, curY);
+                    ctx.lineTo(W - pad.right, curY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.font = 'bold 11px monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('\u25B6 $' + curPrice.toFixed(2), W - pad.right + 2, curY + 4);
+                }
+            }
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(grid.asset + ' GRID | ' + (grid.mode||'RANGE') + ' | Nodes: ' + (grid.nodes_active||0) + '/' + (grid.nodes_total||0) + ' | PnL: ' + formatPnl(grid.realized_pnl||0), pad.left, 18);
+
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#4ade80'; ctx.fillText('\u25CF Buy', W - pad.right - 50, 18);
+            ctx.fillStyle = '#f87171'; ctx.fillText('\u25CF Sell', W - pad.right - 10, 18);
+        }
+
+        // Wrap updateGrids to cache data and trigger visualizer re-render
+        var _origUpdateGrids = updateGrids;
+        updateGrids = function(grids) {
+            _gridsCache = grids || [];
+            _origUpdateGrids(grids);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+        // Wrap updatePositions to get current prices for overlay
+        var _origUpdatePositionsForViz = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCacheForViz = positions || [];
+            _origUpdatePositionsForViz(positions);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
     </script>
     <style>
         body { background: #0b1120; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; }
@@ -61,6 +1105,13 @@
         th.sortable:hover { color: #60a5fa; }
         th.sortable .sort-icon { margin-left: 4px; font-size: 0.6rem; opacity: 0.4; }
         th.sortable.active .sort-icon { opacity: 1; color: #60a5fa; }
+        th.sortable.active { color: #60a5fa; background: rgba(59, 130, 246, 0.08); }
+        th.sortable .sort-icon { transition: transform 0.2s ease, opacity 0.2s ease; display: inline-block; }
+        th.sortable.active.asc .sort-icon { transform: rotate(0deg); }
+        th.sortable.active.desc .sort-icon { transform: rotate(180deg); }
+        #pos-asset-filter { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 12px; color: #e2e8f0; font-size: 0.8rem; cursor: pointer; }
+        #pos-asset-filter:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+        .positions-count { background: #1e3a5f33; color: #60a5fa; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; margin-left: 8px; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
         .animate-slide-in { animation: slideIn 0.3s ease-out; }
     </style>
@@ -108,16 +1159,40 @@
                 <div class="card"><div class="metric-label mb-1">Win Rate</div><div id="ov-winrate" class="text-xl font-bold text-white">N/A</div></div>
             </div>
             <div class="card"><div class="metric-label mb-3">System Health</div><div id="health-checks" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm"></div></div>
+            <!-- Active Bots Section -->
+            <div id="active-bots-section" class="mt-6" style="display:none;">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-lg font-bold text-white">Active Bots</h2>
+                    <span id="bot-count-badge" class="badge badge-grid">0 Active</span>
+                </div>
+                <div id="bots-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </div>
             <div class="card mt-6">
                 <div class="flex items-center justify-between mb-3"><div class="metric-label">Recent Trades</div><button onclick="exportTradesToCSV()" class="text-xs text-blue-400 hover:text-blue-300">Export CSV</button></div>
                 <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500 border-b border-slate-700"><th class="text-left py-2">Time</th><th class="text-left py-2">Asset</th><th class="text-left py-2">Side</th><th class="text-right py-2">PnL</th></tr></thead><tbody id="recent-trades-body"><tr><td colspan="4" class="text-center py-4 text-slate-500">Loading...</td></tr></tbody></table></div>
             </div>
         </div>
         <div id="page-positions" style="display:none;">
-            <div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-bold text-white">Open Positions</h1><select id="pos-asset-filter" onchange="filterPositions()" style="max-width:180px;"><option value="">All Assets</option></select></div>
+            <div class="flex items-center justify-between mb-6"><div class="flex items-center"><h1 class="text-2xl font-bold text-white">Open Positions</h1><span id="positions-count-badge" class="positions-count">0</span></div><select id="pos-asset-filter" onchange="filterPositions()" style="max-width:180px;"><option value="">All Assets</option></select></div>
             <div class="card !p-0 overflow-x-auto"><table><thead><tr><th class="sortable" onclick="sortPositions('asset')">Asset <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('side')">Side <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('size')">Size <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('entry')">Entry <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('current')">Current <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('upnl')">uPnL <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('pnl_pct')">PnL% <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('margin_used')">Margin <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('liquidation_px')">Liq Px <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('leverage')">Leverage <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('roe')">ROE <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('sl')">SL <span class="sort-icon">&#x25B2;&#x25BC;</span></th><th class="sortable" onclick="sortPositions('strategy')">Strategy <span class="sort-icon">&#x25B2;&#x25BC;</span></th></tr></thead><tbody id="positions-table"></tbody></table><div id="no-positions" class="p-8 text-center text-slate-500" style="display:none;">No open positions</div></div>
         </div>
-        <div id="page-grids" style="display:none;"><h1 class="text-2xl font-bold text-white mb-6">Active Grids</h1><div id="grids-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div><div id="no-grids" class="card text-center text-slate-500 py-8" style="display:none;">No active grids</div></div>
+        <div id="page-grids" style="display:none;"><div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold text-white">Active Grids</h1>
+                <div class="flex gap-2">
+                    <button id="grids-tab-cards" class="btn btn-primary text-xs" onclick="showGridsTab('cards')">Cards</button>
+                    <button id="grids-tab-viz" class="btn btn-secondary text-xs" onclick="showGridsTab('viz')">Visualizer</button>
+                </div>
+            </div>
+            <div id="grids-viz-container" style="display:none;">
+                <div class="card mb-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="metric-label">Grid Level Map</div>
+                        <select id="viz-asset-select" onchange="renderGridVisualizer()" style="max-width:150px;"></select>
+                    </div>
+                    <canvas id="grid-viz-canvas" style="width:100%;height:300px;background:#0f172a;border-radius:8px;"></canvas>
+                    <div id="viz-no-data" class="text-center text-slate-500 py-8" style="display:none;">No active grids to visualize</div>
+                </div>
+            </div><div id="grids-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div><div id="no-grids" class="card text-center text-slate-500 py-8" style="display:none;">No active grids</div></div>
         <div id="page-create" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Create New Bot</h1>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -151,6 +1226,15 @@
                 <div class="card"><div class="metric-label mb-1">Best / Worst</div><div id="an-best-worst" class="text-sm text-slate-400">$0 / $0</div></div>
             </div>
             <div class="card"><div class="metric-label mb-3">Equity Curve</div><canvas id="equity-chart" style="max-height:300px;"></canvas></div>
+            <div class="card mt-6">
+                <div class="metric-label mb-3">Daily PnL</div>
+                <canvas id="daily-pnl-chart" style="max-height:250px;"></canvas>
+            </div>
+            <div class="card mt-6">
+                <div class="metric-label mb-3">Monthly Returns</div>
+                <div id="monthly-heatmap" class="grid gap-1" style="grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));"></div>
+                <div id="no-monthly-data" class="text-center text-slate-500 py-4" style="display:none;">No monthly data available</div>
+            </div>
         </div>
         <div id="page-config" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Configuration Management</h1>
@@ -262,6 +1346,354 @@
         function connectSSE(){if(eventSource)eventSource.close();eventSource=new EventSource('/api/dashboard/stream',{withCredentials:true});eventSource.onopen=function(){document.getElementById('connection-status').className='connected';document.getElementById('connection-text').textContent='Live';};eventSource.onmessage=function(e){try{var d=JSON.parse(e.data);if(d.error)return;updateOverview(d);updatePositions(d.positions||[]);updateGrids(d.grids||[]);}catch(ex){}};eventSource.onerror=function(){document.getElementById('connection-status').className='disconnected';document.getElementById('connection-text').textContent='Reconnecting...';setTimeout(connectSSE,5000);};}
         fetch('/api/dashboard/health',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){var el=document.getElementById('health-checks'),checks=d.checks||{},html='';for(var k in checks){var v=checks[k];html+='<div class="flex items-center gap-2">'+(v?'\u2705':'\u274C')+' <span class="'+(v?'text-green-400':'text-red-400')+'">'+k.replace(/_/g,' ')+'</span></div>';}el.innerHTML=html;}).catch(function(){});
         connectSSE();
+    
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], positions: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            if (!container || !section) return;
+
+            var bots = [];
+
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID', asset: g.asset, pnl: g.realized_pnl || 0,
+                        details: (g.nodes_active||0) + '/' + (g.nodes_total||0) + ' nodes',
+                        investment: g.investment || 0, mode: g.mode || 'RANGE',
+                        cycles: g.cycles || 0
+                    });
+                });
+            }
+
+            // Add DCA Positions
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().indexOf('DCA') !== -1) {
+                        bots.push({
+                            type: 'DCA', asset: p.asset, pnl: p.upnl || 0,
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry, mode: p.side,
+                            cycles: 0
+                        });
+                    }
+                });
+            }
+
+            if (bots.length === 0) { section.style.display = 'none'; return; }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '\u{1F532}' : '\u{1F4C8}';
+                var borderClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                return '<div class="card ' + borderClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + (b.type === 'GRID' ? 'Realized PnL' : 'Unrealized PnL') + '</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to pass grid/position data to bot renderer
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + i);
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false, callbacks: { label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); } } }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics2 = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics2();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
+    
+        // === GRID BOT VISUALIZER (Canvas) ===
+        var _gridsCache = [];
+        var _positionsCacheForViz = [];
+
+        function showGridsTab(tab) {
+            var cardsContainer = document.getElementById('grids-container');
+            var noGrids = document.getElementById('no-grids');
+            var vizContainer = document.getElementById('grids-viz-container');
+            var btnCards = document.getElementById('grids-tab-cards');
+            var btnViz = document.getElementById('grids-tab-viz');
+            if (!vizContainer) return;
+            if (tab === 'viz') {
+                if (cardsContainer) cardsContainer.style.display = 'none';
+                if (noGrids) noGrids.style.display = 'none';
+                vizContainer.style.display = 'block';
+                if (btnCards) btnCards.className = 'btn btn-secondary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-primary text-xs';
+                renderGridVisualizer();
+            } else {
+                vizContainer.style.display = 'none';
+                if (cardsContainer) cardsContainer.style.display = 'grid';
+                if (btnCards) btnCards.className = 'btn btn-primary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-secondary text-xs';
+                if (noGrids && _gridsCache.length === 0) noGrids.style.display = 'block';
+            }
+        }
+
+        function renderGridVisualizer() {
+            var canvas = document.getElementById('grid-viz-canvas');
+            var noData = document.getElementById('viz-no-data');
+            var selectEl = document.getElementById('viz-asset-select');
+            if (!canvas) return;
+
+            if (selectEl && selectEl.options.length <= 1 && _gridsCache.length > 0) {
+                selectEl.innerHTML = '';
+                _gridsCache.forEach(function(g) {
+                    var opt = document.createElement('option');
+                    opt.value = g.asset; opt.textContent = g.asset;
+                    selectEl.appendChild(opt);
+                });
+            }
+
+            var selectedAsset = selectEl ? selectEl.value : (_gridsCache[0] ? _gridsCache[0].asset : null);
+            var grid = _gridsCache.find(function(g) { return g.asset === selectedAsset; });
+
+            if (!grid || !selectedAsset) {
+                if (noData) noData.style.display = 'block';
+                canvas.style.display = 'none';
+                return;
+            }
+            if (noData) noData.style.display = 'none';
+            canvas.style.display = 'block';
+
+            var ctx = canvas.getContext('2d');
+            var dpr = window.devicePixelRatio || 1;
+            var rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            var W = rect.width, H = rect.height;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, W, H);
+
+            var lower = grid.lower_price || 0;
+            var upper = grid.upper_price || 0;
+            var range = upper - lower;
+            if (range <= 0) return;
+
+            var pad = { top: 30, bottom: 30, left: 60, right: 20 };
+            var plotH = H - pad.top - pad.bottom;
+
+            function priceToY(price) {
+                return pad.top + plotH - ((price - lower) / range) * plotH;
+            }
+
+            var stepSize = grid.step_size || (range / (grid.nodes_total || 10));
+            var numLevels = Math.floor(range / stepSize) + 1;
+
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+
+            for (var i = 0; i < numLevels; i++) {
+                var price = lower + i * stepSize;
+                if (price > upper) break;
+                var y = priceToY(price);
+                var isBuyLevel = i % 2 === 0;
+                ctx.strokeStyle = isBuyLevel ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(W - pad.right, y);
+                ctx.stroke();
+
+                var dotColor = isBuyLevel ? '#4ade80' : '#f87171';
+                var isActive = i < (grid.nodes_active || 0);
+                ctx.fillStyle = isActive ? dotColor : '#334155';
+                ctx.beginPath();
+                ctx.arc(pad.left - 15, y, isActive ? 4 : 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#64748b';
+                ctx.fillText('$' + price.toFixed(2), pad.left - 22, y + 3);
+            }
+
+            var currentPos = _positionsCacheForViz.find(function(p) { return p.asset === selectedAsset; });
+            if (currentPos && currentPos.current > 0) {
+                var curPrice = currentPos.current;
+                if (curPrice >= lower && curPrice <= upper) {
+                    var curY = priceToY(curPrice);
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(pad.left, curY);
+                    ctx.lineTo(W - pad.right, curY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.font = 'bold 11px monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('\u25B6 $' + curPrice.toFixed(2), W - pad.right + 2, curY + 4);
+                }
+            }
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(grid.asset + ' GRID | ' + (grid.mode||'RANGE') + ' | Nodes: ' + (grid.nodes_active||0) + '/' + (grid.nodes_total||0) + ' | PnL: ' + formatPnl(grid.realized_pnl||0), pad.left, 18);
+
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#4ade80'; ctx.fillText('\u25CF Buy', W - pad.right - 50, 18);
+            ctx.fillStyle = '#f87171'; ctx.fillText('\u25CF Sell', W - pad.right - 10, 18);
+        }
+
+        // Wrap updateGrids to cache data and trigger visualizer re-render
+        var _origUpdateGrids = updateGrids;
+        updateGrids = function(grids) {
+            _gridsCache = grids || [];
+            _origUpdateGrids(grids);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+        // Wrap updatePositions to get current prices for overlay
+        var _origUpdatePositionsForViz = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCacheForViz = positions || [];
+            _origUpdatePositionsForViz(positions);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
     </script>
 </body>
 </html>
