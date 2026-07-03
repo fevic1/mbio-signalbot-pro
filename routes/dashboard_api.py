@@ -534,6 +534,23 @@ async def get_analytics(user: dict = Depends(get_current_user)):
 
 # --- Grid/DCA/Order Write Endpoints (Phase 2-3 preserved) ---
 
+
+@router.get("/price/{asset}")
+async def get_asset_price(asset: str, user: dict = Depends(get_current_user)):
+    """Return current mid price for an asset."""
+    try:
+        from execution.hl_executor import HLExecutor
+        executor = HLExecutor()
+        mids = executor.info.all_mids()
+        price = float(mids.get(asset.upper(), 0))
+        if price <= 0:
+            raise HTTPException(status_code=404, detail=f"No price available for {asset}")
+        return {"asset": asset.upper(), "price": price}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
 @router.post("/grid/open")
 async def grid_open(request: Request, user: dict = Depends(require_role("ADMIN", "OPERATOR"))):
     body = await request.json(); _validate_otp_or_raise(user, body.get("otp", ""))

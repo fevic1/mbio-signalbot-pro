@@ -352,6 +352,35 @@
             }
         };
 
+    
+        // === GRID FORM AUTO-FILL ===
+        async function autoFillGridForm() {
+            try {
+                var r = await fetch('/api/dashboard/config/defaults', { credentials: 'include' });
+                if (!r.ok) return;
+                var d = await r.json();
+                var g = d.grid || {};
+                if (!document.getElementById('grid-investment').value) document.getElementById('grid-investment').value = g.investment_amount || 30;
+                if (!document.getElementById('grid-nodes').value) document.getElementById('grid-nodes').value = g.num_nodes || 10;
+                
+                var asset = document.getElementById('grid-asset').value;
+                if (asset && !document.getElementById('grid-lower').value) {
+                    try {
+                        var pr = await fetch('/api/dashboard/price/' + asset, { credentials: 'include' });
+                        if (pr.ok) {
+                            var pd = await pr.json();
+                            var price = pd.price || 0;
+                            if (price > 0) {
+                                var rangePct = (g.max_range_pct || 10) / 100;
+                                document.getElementById('grid-lower').value = (price * (1 - rangePct)).toFixed(2);
+                                document.getElementById('grid-upper').value = (price * (1 + rangePct)).toFixed(2);
+                            }
+                        }
+                    } catch(e) { console.log('Price fetch:', e); }
+                }
+            } catch(e) { console.log('Auto-fill:', e); }
+        }
+
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js">
         // === ACTIVE BOT CARDS ===
@@ -700,6 +729,35 @@
                 renderGridVisualizer();
             }
         };
+
+    
+        // === GRID FORM AUTO-FILL ===
+        async function autoFillGridForm() {
+            try {
+                var r = await fetch('/api/dashboard/config/defaults', { credentials: 'include' });
+                if (!r.ok) return;
+                var d = await r.json();
+                var g = d.grid || {};
+                if (!document.getElementById('grid-investment').value) document.getElementById('grid-investment').value = g.investment_amount || 30;
+                if (!document.getElementById('grid-nodes').value) document.getElementById('grid-nodes').value = g.num_nodes || 10;
+                
+                var asset = document.getElementById('grid-asset').value;
+                if (asset && !document.getElementById('grid-lower').value) {
+                    try {
+                        var pr = await fetch('/api/dashboard/price/' + asset, { credentials: 'include' });
+                        if (pr.ok) {
+                            var pd = await pr.json();
+                            var price = pd.price || 0;
+                            if (price > 0) {
+                                var rangePct = (g.max_range_pct || 10) / 100;
+                                document.getElementById('grid-lower').value = (price * (1 - rangePct)).toFixed(2);
+                                document.getElementById('grid-upper').value = (price * (1 + rangePct)).toFixed(2);
+                            }
+                        }
+                    } catch(e) { console.log('Price fetch:', e); }
+                }
+            } catch(e) { console.log('Auto-fill:', e); }
+        }
 
     </script>
     <script>
@@ -1055,6 +1113,35 @@
             }
         };
 
+    
+        // === GRID FORM AUTO-FILL ===
+        async function autoFillGridForm() {
+            try {
+                var r = await fetch('/api/dashboard/config/defaults', { credentials: 'include' });
+                if (!r.ok) return;
+                var d = await r.json();
+                var g = d.grid || {};
+                if (!document.getElementById('grid-investment').value) document.getElementById('grid-investment').value = g.investment_amount || 30;
+                if (!document.getElementById('grid-nodes').value) document.getElementById('grid-nodes').value = g.num_nodes || 10;
+                
+                var asset = document.getElementById('grid-asset').value;
+                if (asset && !document.getElementById('grid-lower').value) {
+                    try {
+                        var pr = await fetch('/api/dashboard/price/' + asset, { credentials: 'include' });
+                        if (pr.ok) {
+                            var pd = await pr.json();
+                            var price = pd.price || 0;
+                            if (price > 0) {
+                                var rangePct = (g.max_range_pct || 10) / 100;
+                                document.getElementById('grid-lower').value = (price * (1 - rangePct)).toFixed(2);
+                                document.getElementById('grid-upper').value = (price * (1 + rangePct)).toFixed(2);
+                            }
+                        }
+                    } catch(e) { console.log('Price fetch:', e); }
+                }
+            } catch(e) { console.log('Auto-fill:', e); }
+        }
+
     </script>
     <style>
         body { background: #0b1120; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; }
@@ -1200,7 +1287,7 @@
                 <div class="card bot-card" onclick="showBotForm('grid')"><div class="flex items-center gap-3 mb-3"><span class="badge badge-grid">GRID BOT</span><span class="text-lg font-bold text-white">Sideways Market</span></div><p class="text-slate-400 text-sm">Profit from small price movements in range-bound markets.</p></div>
             </div>
             <div id="dca-form" class="card" style="display:none;"><div class="flex items-center justify-between mb-4"><h2 class="text-xl font-bold text-white">Configure DCA Bot</h2><button class="btn btn-secondary" onclick="hideBotForms()">Cancel</button></div><div class="form-grid"><div class="form-group"><label>Asset</label><select id="dca-asset" class="dynamic-asset-select"></select></div><div class="form-group"><label>Side</label><select id="dca-side"><option value="BUY">LONG</option><option value="SELL">SHORT</option></select></div><div class="form-group"><label>Base Size ($)</label><input type="number" id="dca-base-size" step="0.1"></div><div class="form-group"><label>TP %</label><input type="number" id="dca-tp" step="0.1"></div><div class="form-group"><label>SL %</label><input type="number" id="dca-sl" step="0.1"></div><div class="form-group"><label>Max SO</label><input type="number" id="dca-max-so" step="1"></div></div><div class="mt-4"><button class="btn btn-primary" onclick="submitDcaOpen()">Open DCA Bot</button></div></div>
-            <div id="grid-form" class="card" style="display:none;"><div class="flex items-center justify-between mb-4"><h2 class="text-xl font-bold text-white">Configure Grid Bot</h2><button class="btn btn-secondary" onclick="hideBotForms()">Cancel</button></div><div class="form-grid"><div class="form-group"><label>Asset</label><select id="grid-asset" class="dynamic-asset-select"></select></div><div class="form-group"><label>Investment ($)</label><input type="number" id="grid-investment" step="1"></div><div class="form-group"><label>Lower Price</label><input type="number" id="grid-lower" step="0.01"></div><div class="form-group"><label>Upper Price</label><input type="number" id="grid-upper" step="0.01"></div><div class="form-group"><label>Nodes</label><input type="number" id="grid-nodes" step="1"></div><div class="form-group"><label>Mode</label><select id="grid-mode"><option value="RANGE">Range</option></select></div></div><div class="mt-4"><button class="btn btn-primary" onclick="submitGridOpen()">Open Grid Bot</button></div></div>
+            <div id="grid-form" class="card" style="display:none;"><div class="flex items-center justify-between mb-4"><h2 class="text-xl font-bold text-white">Configure Grid Bot</h2><button class="btn btn-secondary" onclick="hideBotForms()">Cancel</button></div><div class="form-grid"><div class="form-group"><label>Asset</label><select id="grid-asset" onchange="autoFillGridForm()" class="dynamic-asset-select"></select></div><div class="form-group"><label>Investment ($)</label><input type="number" id="grid-investment" step="1"></div><div class="form-group"><label>Lower Price</label><input type="number" id="grid-lower" step="0.01"></div><div class="form-group"><label>Upper Price</label><input type="number" id="grid-upper" step="0.01"></div><div class="form-group"><label>Nodes</label><input type="number" id="grid-nodes" step="1"></div><div class="form-group"><label>Mode</label><select id="grid-mode"><option value="RANGE">Range</option></select></div></div><div class="mt-4"><button class="btn btn-primary" onclick="submitGridOpen()">Open Grid Bot</button></div></div>
         </div>
         <div id="page-orders" style="display:none;">
             <h1 class="text-2xl font-bold text-white mb-6">Order Desk</h1>
@@ -1693,6 +1780,35 @@
                 renderGridVisualizer();
             }
         };
+
+    
+        // === GRID FORM AUTO-FILL ===
+        async function autoFillGridForm() {
+            try {
+                var r = await fetch('/api/dashboard/config/defaults', { credentials: 'include' });
+                if (!r.ok) return;
+                var d = await r.json();
+                var g = d.grid || {};
+                if (!document.getElementById('grid-investment').value) document.getElementById('grid-investment').value = g.investment_amount || 30;
+                if (!document.getElementById('grid-nodes').value) document.getElementById('grid-nodes').value = g.num_nodes || 10;
+                
+                var asset = document.getElementById('grid-asset').value;
+                if (asset && !document.getElementById('grid-lower').value) {
+                    try {
+                        var pr = await fetch('/api/dashboard/price/' + asset, { credentials: 'include' });
+                        if (pr.ok) {
+                            var pd = await pr.json();
+                            var price = pd.price || 0;
+                            if (price > 0) {
+                                var rangePct = (g.max_range_pct || 10) / 100;
+                                document.getElementById('grid-lower').value = (price * (1 - rangePct)).toFixed(2);
+                                document.getElementById('grid-upper').value = (price * (1 + rangePct)).toFixed(2);
+                            }
+                        }
+                    } catch(e) { console.log('Price fetch:', e); }
+                }
+            } catch(e) { console.log('Auto-fill:', e); }
+        }
 
     </script>
 </body>

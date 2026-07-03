@@ -492,7 +492,7 @@ async def _close_position(asset: str, reply_fn=None) -> bool:
 
     try:
         pos = state.OPEN_POSITIONS[asset]
-        side = "SELL" if pos["side"] == "BUY" else "BUY"
+        side = "SELL" if pos.get("side", "BUY") == "BUY" else "BUY"
 
         result = await asyncio.to_thread(
             execute_hl_order,
@@ -836,23 +836,29 @@ async def cmd_open_grid(update, context):
         return
     
     parts = update.message.text.split()
-    if len(parts) < 7:
+    if len(parts) < 5:
         await update.message.reply_text(
             "🔲 <b>GRID Bot Setup</b>\n\n"
-            "Usage: <code>/open_grid &lt;ASSET&gt; &lt;LOWER&gt; &lt;UPPER&gt; &lt;LEVELS&gt; &lt;INVESTMENT&gt; &lt;PROFIT_PCT&gt;</code>\n\n"
-            "Example:\n<code>/open_grid BTC 59000 61000 10 100 0.5</code>",
+            "Usage: <code>/open_grid &lt;ASSET&gt; &lt;LOWER&gt; &lt;UPPER&gt; &lt;LEVELS&gt; [INVESTMENT] [PROFIT_PCT]</code>\n\n"
+            "Examples:\n"
+            "<code>/open_grid BTC 59000 61000 10 100 0.5</code> (full)\n"
+            "<code>/open_grid BTC 59000 61000 10</code> (config defaults)\n"
+            "<code>/open_grid BTC 0 0 10</code> (adaptive ATR range)",
             parse_mode='HTML'
         )
         return
     
-    # PHASE 1: Parse parameters (no network, no state)
+    # PHASE 1: Parse parameters with optional config defaults
     try:
+        import config_loader as _cfg_mod_early
+        _grid_defaults = _cfg_mod_early.get_config().get("grid", {})
+        
         asset = parts[1].strip().upper()
         lower_price = float(parts[2])
         upper_price = float(parts[3])
         grid_quantity = int(parts[4])
-        investment = float(parts[5])
-        profit_pct = float(parts[6])
+        investment = float(parts[5]) if len(parts) > 5 else float(_grid_defaults.get("min_investment_usd", 30))
+        profit_pct = float(parts[6]) if len(parts) > 6 else float(_grid_defaults.get("default_profit_per_grid_pct", 0.5))
     except (ValueError, IndexError) as e:
         await update.message.reply_text(f"❌ Invalid parameter: {e}")
         return
