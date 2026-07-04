@@ -1208,16 +1208,24 @@
     <aside class="w-64 flex-shrink-0 border-r border-slate-800 flex flex-col">
         <div class="p-6 border-b border-slate-800"><div class="flex items-center gap-3"><div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-xl">&#x1F916;</div><span class="text-xl font-bold tracking-tight text-white">MBIO</span></div></div>
         <nav class="flex-1 p-4 space-y-1">
-            <div class="sidebar-link active" onclick="showPage('dashboard', this)">&#x1F4CA; Dashboard</div>
+            <!-- PAGE 1: Dashboard -->
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 px-4 pt-2 pb-1 font-semibold">📊 Dashboard</div>
+            <div class="sidebar-link active" onclick="showPage('dashboard', this)">&#x1F4CA; Overview</div>
             <div class="sidebar-link" onclick="showPage('positions', this)">&#x1F4C8; Positions</div>
-            <div class="sidebar-link" onclick="showPage('grids', this)">&#x1F532; Grids</div>
-            <div class="sidebar-link" onclick="showPage('create', this)">&#x2795; Create Bot</div>
             <div class="sidebar-link" onclick="showPage('orders', this)">&#x1F4DD; Order Desk</div>
+            <!-- PAGE 2: My Robots -->
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 px-4 pt-3 pb-1 font-semibold border-t border-slate-700/50 mt-2">🤖 My Robots</div>
+            <div class="sidebar-link" onclick="showPage('grids', this)">&#x1F532; Grid Bots</div>
+            <div class="sidebar-link" onclick="showPage('create', this)">&#x2795; Create Bot</div>
+            <!-- PAGE 3: Analytics -->
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 px-4 pt-3 pb-1 font-semibold border-t border-slate-700/50 mt-2">📈 Analytics</div>
             <div class="sidebar-link" onclick="showPage('history', this)">&#x1F4DC; Trade History</div>
-            <div class="sidebar-link" onclick="showPage('analytics', this)">&#x1F4C9; Analytics</div>
+            <div class="sidebar-link" onclick="showPage('analytics', this)">&#x1F4C9; Performance</div>
+            <div class="sidebar-link" id="nav-audit" style="display:none;" onclick="showPage('audit', this)">&#x1F4CB; Audit Log</div>
+            <!-- PAGE 4: Settings -->
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 px-4 pt-3 pb-1 font-semibold border-t border-slate-700/50 mt-2">⚙️ Settings</div>
             <div class="sidebar-link" onclick="showPage('config', this)">&#x2699; Config</div>
             <div class="sidebar-link" onclick="showPage('safety', this)">&#x1F6E1; Safety</div>
-            <div class="sidebar-link" id="nav-audit" style="display:none;" onclick="showPage('audit', this)">&#x1F4CB; Audit Log</div>
             <div class="sidebar-link" onclick="showPage('reconcile', this)">&#x1F527; Reconcile</div>
             <div class="sidebar-link" onclick="showPage('sysmon', this)">&#x1F5A5; System</div>
             <div class="sidebar-link" id="nav-alerts" style="display:none;" onclick="showPage('alerts', this)">&#x1F514; Alerts</div>
@@ -1432,6 +1440,44 @@
         function updateGrids(grids){var c=document.getElementById('grids-container'),ng=document.getElementById('no-grids');if(!grids.length){c.innerHTML='';ng.style.display='block';return;}ng.style.display='none';c.innerHTML=grids.map(function(g){return'<div class="card"><div class="flex items-center justify-between mb-3"><div class="flex items-center gap-2"><span class="badge badge-grid">GRID</span><span class="text-lg font-bold text-white">'+g.asset+'</span></div><span class="text-xs text-slate-400">'+g.mode+'</span></div><div class="grid grid-cols-2 gap-3 text-sm"><div><span class="metric-label">Range</span><br>$'+g.lower_price.toLocaleString()+' - $'+g.upper_price.toLocaleString()+'</div><div><span class="metric-label">Nodes</span><br>'+g.nodes_active+'/'+g.nodes_total+'</div><div><span class="metric-label">Cycles</span><br>'+g.cycles+'</div><div><span class="metric-label">PnL</span><br><span class="'+pnlClass(g.realized_pnl)+'">'+formatPnl(g.realized_pnl)+'</span></div></div></div>';}).join('');}
         function connectSSE(){if(eventSource)eventSource.close();eventSource=new EventSource('/api/dashboard/stream',{withCredentials:true});eventSource.onopen=function(){document.getElementById('connection-status').className='connected';document.getElementById('connection-text').textContent='Live';};eventSource.onmessage=function(e){try{var d=JSON.parse(e.data);if(d.error)return;updateOverview(d);updatePositions(d.positions||[]);updateGrids(d.grids||[]);}catch(ex){}};eventSource.onerror=function(){document.getElementById('connection-status').className='disconnected';document.getElementById('connection-text').textContent='Reconnecting...';setTimeout(connectSSE,5000);};}
         fetch('/api/dashboard/health',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){var el=document.getElementById('health-checks'),checks=d.checks||{},html='';for(var k in checks){var v=checks[k];html+='<div class="flex items-center gap-2">'+(v?'\u2705':'\u274C')+' <span class="'+(v?'text-green-400':'text-red-400')+'">'+k.replace(/_/g,' ')+'</span></div>';}el.innerHTML=html;}).catch(function(){});
+        
+        // === URL ROUTING (Phase 10C) ===
+        var _pageRouteMap = {
+            'dashboard': '/dashboard', 'positions': '/dashboard', 'orders': '/dashboard',
+            'grids': '/robots', 'create': '/robots',
+            'history': '/analytics', 'analytics': '/analytics', 'audit': '/analytics',
+            'config': '/settings', 'safety': '/settings', 'reconcile': '/settings',
+            'sysmon': '/settings', 'alerts': '/settings'
+        };
+        var _routePageMap = {
+            '/dashboard': 'dashboard', '/robots': 'grids',
+            '/analytics': 'history', '/settings': 'config'
+        };
+        function navigateTo(page, el) {
+            showPage(page, el);
+            var route = _pageRouteMap[page] || '/dashboard';
+            if (window.location.pathname !== route) {
+                history.pushState({page: page}, '', route);
+            }
+        }
+        window.addEventListener('popstate', function(e) {
+            var page = (e.state && e.state.page) ? e.state.page : (_routePageMap[window.location.pathname] || 'dashboard');
+            var navEl = document.querySelector('.sidebar-link[onclick*="' + page + '"]');
+            showPage(page, navEl);
+        });
+        // Initial route resolution on page load
+        (function() {
+            var path = window.location.pathname;
+            var initialPage = _routePageMap[path] || 'dashboard';
+            if (path !== '/' && path !== '/login' && path !== '/dashboard') {
+                setTimeout(function() {
+                    var navEl = document.querySelector('.sidebar-link[onclick*="' + initialPage + '"]');
+                    showPage(initialPage, navEl);
+                }, 100);
+            }
+        })();
+        // === END URL ROUTING ===
+
         connectSSE();
     
         // === ACTIVE BOT CARDS ===

@@ -124,6 +124,18 @@ async def health():
     return {"status": "ok", "ts": int(time.time())}
 
 
+@api.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    """Catch-all route: serve index.html for all non-API frontend paths.
+    Enables client-side routing for /robots, /analytics, /settings, etc.
+    API routes under /api/ take priority via mount order."""
+    # Don't serve index.html for API or static asset requests
+    if full_path.startswith("api/") or full_path.startswith("static/"):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return FileResponse("frontend/index.html")
+
+
 def run_api():
     if ENABLE_API_SERVER:
         try:
