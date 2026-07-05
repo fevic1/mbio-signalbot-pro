@@ -1,0 +1,61 @@
+/* MBIO SignalBot Pro Dashboard Styles
+   Extracted from frontend/index.html (Phase 12 Migration)
+   Tailwind CSS loaded via CDN in index.html shell */
+
+body { background: #0b1120; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; }
+        .card { background: #1a2332; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+        .card:hover { border-color: #334155; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .metric-label { color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .metric-value { font-size: 1.5rem; font-weight: 700; }
+        .pnl-positive { color: #4ade80; } .pnl-negative { color: #f87171; } .pnl-neutral { color: #94a3b8; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+        th { text-align: left; padding: 10px 8px; color: #64748b; border-bottom: 1px solid #1e293b; font-weight: 600; white-space: nowrap; }
+        td { padding: 10px 8px; border-bottom: 1px solid #1e293b1a; white-space: nowrap; }
+        tr:hover td { background: #1e293b33; }
+        .sidebar-link { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 8px; color: #94a3b8; transition: all 0.2s; cursor: pointer; }
+        .sidebar-link:hover, .sidebar-link.active { background: #1e3a5f33; color: #60a5fa; border-left: 3px solid #3b82f6; }
+        .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+        .badge-buy { background: #16653433; color: #4ade80; } .badge-sell { background: #7f1d1d33; color: #f87171; }
+        .badge-grid { background: #4c1d9533; color: #a78bfa; } .badge-dca { background: #1e3a5f33; color: #60a5fa; }
+        #connection-status { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .connected { background: #4ade80; box-shadow: 0 0 6px #4ade80; } .disconnected { background: #f87171; box-shadow: 0 0 6px #f87171; }
+        .logout-btn { color: #64748b; font-size: 0.75rem; cursor: pointer; transition: color 0.2s; background: none; border: none; font-family: inherit; padding: 4px 0; }
+        .logout-btn:hover { color: #f87171; }
+        input, select { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font-family: inherit; outline: none; font-size: 0.85rem; width: 100%; box-sizing: border-box; }
+        input:focus, select:focus { border-color: #3b82f6; }
+        .btn { padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; font-size: 0.85rem; transition: all 0.2s; }
+        .btn-primary { background: #2563eb; color: white; } .btn-primary:hover { background: #1d4ed8; }
+        .btn-danger { background: #dc2626; color: white; } .btn-danger:hover { background: #b91c1c; }
+        .btn-secondary { background: #334155; color: #e2e8f0; } .btn-secondary:hover { background: #475569; }
+        .btn-success { background: #16a34a; color: white; } .btn-success:hover { background: #15803d; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 50; }
+        .modal-overlay.active { display: flex; }
+        .modal-card { background: #1a2332; border: 1px solid #1e293b; border-radius: 16px; padding: 32px; max-width: 440px; width: 90%; }
+        .bot-card { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+        .bot-card:hover { border-color: #3b82f6; transform: translateY(-2px); }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .tab-bar { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #1e293b; }
+        .tab-btn { padding: 10px 20px; color: #94a3b8; cursor: pointer; border: none; background: none; font-family: inherit; font-size: 0.85rem; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .tab-btn:hover { color: #e2e8f0; } .tab-btn.active { color: #60a5fa; border-bottom-color: #3b82f6; }
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #334155; border-radius: 24px; transition: 0.3s; }
+        .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+        .toggle-switch input:checked + .toggle-slider { background: #2563eb; }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+        th.sortable { cursor: pointer; user-select: none; transition: color 0.2s; }
+        th.sortable:hover { color: #60a5fa; }
+        th.sortable .sort-icon { margin-left: 4px; font-size: 0.6rem; opacity: 0.4; }
+        th.sortable.active .sort-icon { opacity: 1; color: #60a5fa; }
+        th.sortable.active { color: #60a5fa; background: rgba(59, 130, 246, 0.08); }
+        th.sortable .sort-icon { transition: transform 0.2s ease, opacity 0.2s ease; display: inline-block; }
+        th.sortable.active.asc .sort-icon { transform: rotate(0deg); }
+        th.sortable.active.desc .sort-icon { transform: rotate(180deg); }
+        #pos-asset-filter { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 12px; color: #e2e8f0; font-size: 0.8rem; cursor: pointer; }
+        #pos-asset-filter:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+        .positions-count { background: #1e3a5f33; color: #60a5fa; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; margin-left: 8px; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+        .animate-slide-in { animation: slideIn 0.3s ease-out; }

@@ -1,0 +1,25 @@
+<div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold text-white">Active Grids</h1>
+                <div class="flex gap-2">
+                    <button id="grids-tab-cards" class="btn btn-primary text-xs" onclick="showGridsTab('cards')">Cards</button>
+                    <button id="grids-tab-viz" class="btn btn-secondary text-xs" onclick="showGridsTab('viz')">Visualizer</button>
+                </div>
+            </div>
+            <div id="grids-viz-container" style="display:none;">
+                <div class="card mb-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="metric-label">Grid Level Map</div>
+                        <select id="viz-asset-select" onchange="renderGridVisualizer()" style="max-width:150px;"></select>
+                    </div>
+                    <canvas id="grid-viz-canvas" style="width:100%;height:300px;background:#0f172a;border-radius:8px;"></canvas>
+                    <div id="viz-no-data" class="text-center text-slate-500 py-8" style="display:none;">No active grids to visualize</div>
+                </div>
+            </div><div id="grids-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div><div id="no-grids" class="card text-center text-slate-500 py-8" style="display:none;">No active grids</div></div>
+        <div id="page-create" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Create New Bot</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="card bot-card" onclick="showBotForm('dca')"><div class="flex items-center gap-3 mb-3"><span class="badge badge-dca">DCA BOT</span><span class="text-lg font-bold text-white">Trend Trading</span></div><p class="text-slate-400 text-sm">Classic averaging strategy for trending markets.</p></div>
+                <div class="card bot-card" onclick="showBotForm('grid')"><div class="flex items-center gap-3 mb-3"><span class="badge badge-grid">GRID BOT</span><span class="text-lg font-bold text-white">Sideways Market</span></div><p class="text-slate-400 text-sm">Profit from small price movements in range-bound markets.</p></div>
+            </div>
+            <div id="dca-form" class="card" style="display:none;"><div class="flex items-center justify-between mb-4"><h2 class="text-xl font-bold text-white">Configure DCA Bot</h2><button class="btn btn-secondary" onclick="hideBotForms()">Cancel</button></div><div class="form-grid"><div class="form-group"><label>Asset</label><select id="dca-asset" class="dynamic-asset-select"></select></div><div class="form-group"><label>Side</label><select id="dca-side"><option value="BUY">LONG</option><option value="SELL">SHORT</option></select></div><div class="form-group"><label>Base Size ($)</label><input type="number" id="dca-base-size" step="0.1"></div><div class="form-group"><label>TP %</label><input type="number" id="dca-tp" step="0.1"></div><div class="form-group"><label>SL %</label><input type="number" id="dca-sl" step="0.1"></div><div class="form-group"><label>Max SO</label><input type="number" id="dca-max-so" step="1"></div></div><div class="mt-4"><button class="btn btn-primary" onclick="submitDcaOpen()">Open DCA Bot</button></div></div>
+            <div id="grid-form" class="card" style="display:none;"><div class="flex items-center justify-between mb-4"><h2 class="text-xl font-bold text-white">Configure Grid Bot</h2><button class="btn btn-secondary" onclick="hideBotForms()">Cancel</button></div><div class="form-grid"><div class="form-group"><label>Asset</label><select id="grid-asset" onchange="autoFillGridForm()" class="dynamic-asset-select"></select></div><div class="form-group"><label>Investment ($)</label><input type="number" id="grid-investment" step="1"></div><div class="form-group"><label>Lower Price</label><input type="number" id="grid-lower" step="0.01"></div><div class="form-group"><label>Upper Price</label><input type="number" id="grid-upper" step="0.01"></div><div class="form-group"><label>Nodes</label><input type="number" id="grid-nodes" step="1"></div><div class="form-group"><label>Mode</label><select id="grid-mode"><option value="RANGE">Range</option></select></div></div><div class="mt-4"><button class="btn btn-primary" onclick="submitGridOpen()">Open Grid Bot</button></div></div>

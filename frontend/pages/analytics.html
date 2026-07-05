@@ -1,0 +1,24 @@
+<div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-bold text-white">Trade History</h1><button onclick="exportTradesToCSV()" class="btn btn-primary">Export CSV</button></div><div class="card !p-0 overflow-x-auto"><table><thead><tr><th>Date</th><th>Asset</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>PnL%</th><th>Strategy</th><th>Source</th></tr></thead><tbody id="history-table"></tbody></table><div id="no-history" class="p-8 text-center text-slate-500" style="display:none;">No trade history</div></div></div>
+        <div id="page-analytics" style="display:none;">
+            <h1 class="text-2xl font-bold text-white mb-6">Performance Analytics</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div class="card"><div class="metric-label mb-1">Total Trades</div><div id="an-trades" class="metric-value text-white">0</div></div>
+                <div class="card"><div class="metric-label mb-1">Win Rate</div><div id="an-winrate" class="metric-value text-white">0%</div></div>
+                <div class="card"><div class="metric-label mb-1">Profit Factor</div><div id="an-pf" class="metric-value text-white">0</div></div>
+                <div class="card"><div class="metric-label mb-1">Sharpe Ratio</div><div id="an-sharpe" class="metric-value text-white">0</div></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div class="card"><div class="metric-label mb-1">Total PnL</div><div id="an-total-pnl" class="text-xl font-bold pnl-neutral">$0.00</div></div>
+                <div class="card"><div class="metric-label mb-1">Max Drawdown</div><div id="an-max-dd" class="text-xl font-bold pnl-negative">0%</div></div>
+                <div class="card"><div class="metric-label mb-1">Best / Worst</div><div id="an-best-worst" class="text-sm text-slate-400">$0 / $0</div></div>
+            </div>
+            <div class="card"><div class="metric-label mb-3">Equity Curve</div><canvas id="equity-chart" style="max-height:300px;"></canvas></div>
+            <div class="card mt-6">
+                <div class="metric-label mb-3">Daily PnL</div>
+                <canvas id="daily-pnl-chart" style="max-height:250px;"></canvas>
+            </div>
+            <div class="card mt-6">
+                <div class="metric-label mb-3">Monthly Returns</div>
+                <div id="monthly-heatmap" class="grid gap-1" style="grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));"></div>
+                <div id="no-monthly-data" class="text-center text-slate-500 py-4" style="display:none;">No monthly data available</div>
+            </div>
