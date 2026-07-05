@@ -1202,7 +1202,6 @@
         @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
         .animate-slide-in { animation: slideIn 0.3s ease-out; }
     </style>
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
 <body class="flex h-screen overflow-hidden">
     <div id="toast-container" class="fixed top-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none"></div>
@@ -1254,24 +1253,6 @@
                 <div class="card"><div class="metric-label mb-1">Unrealized PnL</div><div id="ov-unrealized" class="text-xl font-bold pnl-neutral">$0.00</div></div>
                 <div class="card"><div class="metric-label mb-1">Win Rate</div><div id="ov-winrate" class="text-xl font-bold text-white">N/A</div></div>
             </div>
-            <!-- TradingView Chart Widget (Phase 13 Task 2) -->
-            <div class="card !p-0 mb-6" style="min-height: 500px;">
-                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-                    <h3 class="text-lg font-bold text-white">📈 Market Chart</h3>
-                    <select id="tv-pair-selector" class="bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1" onchange="updateTVChart(this.value)">
-                        <option value="HYPERLIQUID:BTCUSD">BTC/USD</option>
-                        <option value="HYPERLIQUID:ETHUSD">ETH/USD</option>
-                        <option value="HYPERLIQUID:SOLUSD">SOL/USD</option>
-                        <option value="HYPERLIQUID:XRPUSD">XRP/USD</option>
-                        <option value="HYPERLIQUID:AVAXUSD">AVAX/USD</option>
-                        <option value="HYPERLIQUID:LINKUSD">LINK/USD</option>
-                        <option value="HYPERLIQUID:DOGEUSD">DOGE/USD</option>
-                        <option value="HYPERLIQUID:HYPEUSD">HYPE/USD</option>
-                    </select>
-                </div>
-                <div id="tv-chart-container" style="width:100%; height:480px;"></div>
-            </div>
-
             <div class="card"><div class="metric-label mb-3">System Health</div><div id="health-checks" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm"></div></div>
             <!-- Active Bots Section -->
             <div id="active-bots-section" class="mt-6" style="display:none;">
@@ -1883,65 +1864,6 @@
                 }
             } catch(e) { console.log('Auto-fill:', e); }
         }
-
-    
-        // === TradingView Chart Widget (Phase 13 Task 2) ===
-        // Independent of SSE and all existing functions.
-        var _tvWidget = null;
-
-        function initTVChart(symbol) {
-            symbol = symbol || 'HYPERLIQUID:BTCUSD';
-            if (_tvWidget) {
-                _tvWidget.remove();
-                _tvWidget = null;
-            }
-            try {
-                _tvWidget = new TradingView.widget({
-                    "autosize": true,
-                    "symbol": symbol,
-                    "interval": "15",
-                    "timezone": "Etc/UTC",
-                    "theme": "dark",
-                    "style": "1",
-                    "locale": "en",
-                    "toolbar_bg": "#0b0e11",
-                    "enable_publishing": false,
-                    "hide_top_toolbar": false,
-                    "hide_legend": false,
-                    "save_image": true,
-                    "container_id": "tv-chart-container",
-                    "backgroundColor": "#0b0e11",
-                    "gridLineColor": "#1e232f",
-                    "overrides": {
-                        "paneProperties.background": "#0b0e11",
-                        "paneProperties.vertGridProperties.color": "#1e232f",
-                        "paneProperties.horzGridProperties.color": "#1e232f"
-                    }
-                });
-            } catch (e) {
-                console.error('[TV] Chart init error:', e);
-                var c = document.getElementById('tv-chart-container');
-                if (c) c.innerHTML = '<div class="p-8 text-center text-slate-500">Chart failed to load. Check network connection.</div>';
-            }
-        }
-
-        function updateTVChart(symbol) {
-            if (symbol && typeof initTVChart === 'function') {
-                initTVChart(symbol);
-            }
-        }
-
-        // Initialize chart when dashboard page becomes visible
-        var _origShowPage = showPage;
-        showPage = function(p, el) {
-            _origShowPage(p, el);
-            if (p === 'dashboard') {
-                setTimeout(function() {
-                    var sel = document.getElementById('tv-pair-selector');
-                    initTVChart(sel ? sel.value : 'HYPERLIQUID:BTCUSD');
-                }, 100);
-            }
-        };
 
     </script>
 </body>

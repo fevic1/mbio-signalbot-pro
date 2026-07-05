@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MBIO SignalBot Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- TradingView Widget Library -->
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+  <script type="module" crossorigin src="/assets/index-M4Jd2jp7.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CxrJ7YNo.css">
+</head>
+<body class="flex">
+  <!-- Sidebar Navigation (rendered by sidebar-nav.js component) -->
+  <aside id="sidebar" class="w-64 min-h-screen bg-dark-card border-r border-dark-border flex flex-col"></aside>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 min-h-screen overflow-y-auto">
+    <!-- Top Bar -->
+    <header class="sticky top-0 z-30 bg-dark-bg/95 backdrop-blur border-b border-dark-border px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-xl font-bold text-white">🤖 MBIO</span>
+        <span id="connection-status" class="status-dot disconnected"></span>
+        <span id="connection-text" class="text-xs text-slate-500">Connecting...</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="text-right">
+          <div class="text-xs text-slate-500">Equity</div>
+          <div id="header-equity" class="text-sm font-semibold text-white">$0.00</div>
+        </div>
+        <div class="text-right">
+          <div class="text-xs text-slate-500">Today P/L</div>
+          <div id="header-pnl" class="text-sm font-semibold pnl-neutral">$0.00</div>
+        </div>
+        <div class="h-8 w-px bg-dark-border"></div>
+        <div class="text-right">
+          <div id="user-name" class="text-sm font-medium text-white">Loading...</div>
+          <div id="user-role" class="text-xs text-slate-500">USER</div>
+        </div>
+        <button id="logout-btn" class="text-xs text-slate-500 hover:text-red-400 transition">Sign Out</button>
+      </div>
+    </header>
+
+    <!-- Page Container (pages rendered here by router) -->
+    <div id="page-container" class="p-6"></div>
+  </main>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- OTP Modal -->
+  <div id="otp-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md shadow-2xl">
+      <h3 class="text-lg font-bold text-white mb-2">🔐 Confirm Action</h3>
+      <p id="otp-description" class="text-sm text-slate-400 mb-4"></p>
+      <input id="otp-input" type="text" maxlength="6" placeholder="Enter 6-digit OTP" class="w-full mb-3 text-center text-lg tracking-[0.5em] font-mono" />
+      <div id="otp-error" class="text-red-400 text-xs mb-3 hidden"></div>
+      <div class="flex gap-3">
+        <button id="otp-confirm-btn" class="btn-primary flex-1">Confirm</button>
+        <button id="otp-resend-btn" class="btn-secondary flex-1">Resend</button>
+        <button id="otp-cancel-btn" class="btn-secondary flex-1">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Emergency Stop Modal -->
+  <div id="estop-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-red-900/30 backdrop-blur-sm">
+    <div class="bg-dark-card border border-red-800 rounded-xl p-6 w-full max-w-md shadow-2xl">
+      <h3 class="text-lg font-bold text-red-400 mb-2">⚠️ EMERGENCY STOP</h3>
+      <p class="text-sm text-slate-400 mb-4">This will close ALL open positions and cancel ALL pending orders. This action is irreversible.</p>
+      <input id="estop-confirm-input" type="text" placeholder="Type STOP to confirm" class="w-full mb-3 text-center font-mono" />
+      <div id="estop-error" class="text-red-400 text-xs mb-3 hidden"></div>
+      <div class="flex gap-3">
+        <button id="estop-confirm-btn" class="btn-danger flex-1">EXECUTE STOP</button>
+        <button id="estop-cancel-btn" class="btn-secondary flex-1">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Entry Point -->
+</body>
+</html>
