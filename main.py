@@ -124,6 +124,10 @@ async def health():
     return {"status": "ok", "ts": int(time.time())}
 
 
+# Phase 13: HIP-4 Multi-Asset API Routes
+from routes.hip4_api import router as hip4_router
+api.include_router(hip4_router)
+
 @api.get("/{full_path:path}")
 async def serve_spa(full_path: str):
     """Catch-all route: serve index.html for all non-API frontend paths.
