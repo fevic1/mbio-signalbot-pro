@@ -5,22 +5,22 @@
 import { get } from './client.js';
 
 export function getMarketSpec(asset) {
-  return get(`/hip4/specs?asset=${encodeURIComponent(asset)}`);
+  return get(`/api/hip4/specs?asset=${encodeURIComponent(asset)}`);
 }
 
 export function getAssets(type) {
   const qs = type ? `?type=${encodeURIComponent(type)}` : '';
-  return get(`/hyperliquid/assets${qs}`);
+  return get(`/api/hyperliquid/assets${qs}`);
 }
 
 export function getPrice(asset) {
-  return get(`/hip4/price?asset=${encodeURIComponent(asset)}`);
+  return get(`/api/hip4/price?asset=${encodeURIComponent(asset)}`);
 }
 
 export function validateOrder(asset, price, size) {
-  return get(`/hip4/validate?asset=${encodeURIComponent(asset)}&price=${price}&size=${size}`);
+  return get(`/api/hip4/validate?asset=${encodeURIComponent(asset)}&price=${price}&size=${size}`);
 }
 
 export function getUnifiedPositions() {
-  return get('/hyperliquid/positions');
+  return get('/api/hyperliquid/positions');
 }

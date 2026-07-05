@@ -104,6 +104,11 @@ import os as _os
 
 if _os.path.isdir("frontend/static"):
     api.mount("/static", StaticFiles(directory="frontend/static"), name="dashboard_static")
+    # Phase 14: Static assets for new modular frontend
+    import os as _os
+    _v2_dist = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "frontend-v2-dist")
+    if _os.path.isdir(_v2_dist):
+        api.mount("/assets", StaticFiles(directory=_os.path.join(_v2_dist, "assets")), name="v2_assets")
 
 @api.get("/login")
 async def serve_login():
@@ -116,7 +121,13 @@ async def serve_dashboard():
 
 @api.get("/")
 async def root():
-    return {"status": "online", "version": "9.0", "open_positions": len(state.OPEN_POSITIONS)}
+    """Serve new modular frontend at root. Falls back to old monolith."""
+    import os
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    new_index = os.path.join(base_dir, "frontend-v2-dist", "index.html")
+    if os.path.exists(new_index):
+        return FileResponse(new_index)
+    return FileResponse(os.path.join(base_dir, "frontend", "index.html"))
 
 
 @api.get("/health")
@@ -137,7 +148,13 @@ async def serve_spa(full_path: str):
     if full_path.startswith("api/") or full_path.startswith("static/"):
         from fastapi.responses import JSONResponse
         return JSONResponse({"detail": "Not Found"}, status_code=404)
-    return FileResponse("frontend/index.html")
+    # Phase 14: Try new frontend first, fall back to old
+    import os
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    new_index = os.path.join(base_dir, "frontend-v2-dist", "index.html")
+    if os.path.exists(new_index):
+        return FileResponse(new_index)
+    return FileResponse(os.path.join(base_dir, "frontend", "index.html"))
 
 
 def run_api():

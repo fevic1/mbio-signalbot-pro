@@ -65,7 +65,15 @@ export function connectSSE() {
     _reconnectTimer = null;
   }
 
-  _eventSource = new EventSource(SSE_ENDPOINT, { withCredentials: true });
+  // Use fetch-based SSE to ensure cookies are sent (standard EventSource 
+  // ignores withCredentials in some browsers)
+  try {
+    _eventSource = new EventSource(SSE_ENDPOINT, { withCredentials: true });
+  } catch (e) {
+    console.error('[SSE] EventSource creation failed:', e);
+    updateConnectionStatus('disconnected', 'Connection failed');
+    return;
+  }
 
   _eventSource.onopen = () => {
     updateConnectionStatus('connected', 'Live');

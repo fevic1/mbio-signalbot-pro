@@ -114,10 +114,17 @@ async function loadHealth() {
 
 async function loadRecentTrades() {
   const result = await getTradeHistory(10);
+  console.log('[Dashboard] Trade history result:', JSON.stringify(result).substring(0, 500));
   const tbody = document.getElementById('dash-recent-trades');
-  if (!tbody || !result.ok) return;
+  if (!tbody) { console.warn('[Dashboard] dash-recent-trades element not found'); return; }
+  if (!result.ok) {
+    console.error('[Dashboard] Trade history failed:', result.error);
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-400">Error: ${result.error || 'Unknown'}</td></tr>`;
+    return;
+  }
 
   const trades = result.data?.trades || [];
+  console.log('[Dashboard] Parsed trades count:', trades.length);
   if (!trades.length) {
     tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-slate-500">No recent trades</td></tr>';
     return;

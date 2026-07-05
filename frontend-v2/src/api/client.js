@@ -4,7 +4,7 @@
  * Handles: credentials, JSON serialization, error extraction, typing.
  */
 
-const BASE = '/api/dashboard';
+const BASE = '';  // Backend routes have no /api/dashboard prefix
 
 export async function request(path, options = {}) {
   const url = path.startsWith('http') ? path : `${BASE}${path}`;
