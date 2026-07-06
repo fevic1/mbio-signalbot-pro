@@ -208,3 +208,14 @@ execution_precision:
   BNB: 3
   AVAX: 2
   LINK: 2
+
+# ==========================================
+# DYNAMIC UNIVERSE STANDARD (HIP-4)
+# ==========================================
+universe:
+  mode: "dynamic"           # "static" (use hardcoded list) or "dynamic" (fetch from exchange)
+  source: "HIP4"            # Fetch from HIP-4 Metadata Manager
+  filter: "top_volume"      # Sort by 24h trading volume
+  top_n: 50                 # Automatically trade the top 50 most liquid assets
+  min_volume_usd: 1000000   # Ignore "dead" coins with less than $1M daily volume
+  exclude_stablecoins: true # Auto-exclude USDC, USDT, FDUSD

@@ -131,7 +131,28 @@ def get_config() -> AppConfig:
     
     # Validate and return
     try:
-        config = AppConfig(**yaml_config)
+        
+    # --- DYNAMIC UNIVERSE INTERCEPTOR ---
+    universe_rules = yaml_config.get("universe", {})
+    if universe_rules.get("mode") == "dynamic":
+        try:
+            from core.hip4_metadata import HIP4MetadataManager
+            from hyperliquid.info import Info
+            from hyperliquid.utils import constants
+            
+            info = Info(constants.MAINNET_API_URL, skip_ws=True)
+            manager = HIP4MetadataManager.get_instance()
+            manager.initialize(info)
+            
+            resolved_assets = manager.resolve_universe(universe_rules)
+            if resolved_assets:
+                yaml_config.setdefault("hyperliquid", {})["assets"] = resolved_assets
+                logger.info(f"🌍 Dynamic Universe injected into config: {len(resolved_assets)} assets")
+        except Exception as e:
+            logger.error(f"❌ Dynamic Universe injection failed: {e}")
+    # ------------------------------------
+
+    config = AppConfig(**yaml_config)
         logger.info(f"✅ Configuration validated: {config.trading.max_open_positions} max positions")
         return config
     except Exception as e:

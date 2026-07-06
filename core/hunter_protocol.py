@@ -163,7 +163,7 @@ async def hunter_monitor_loop():
                 from config.config import get_config
                 
                 cfg = get_config()
-                assets = cfg.get("trading", {}).get("assets", [])
+                assets = cfg.get("hyperliquid", {}).get("assets", [])
                 
                 # Analyze all assets EXCEPT the stagnant ones
                 items = {asset: {} for asset in assets if asset not in stagnant_assets}

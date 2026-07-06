@@ -5,6 +5,8 @@ Dynamically adapts to any hyperliquid SDK structure.
 import os
 import logging
 from typing import Optional, Dict
+from core.hip4_metadata import HIP4MetadataManager
+
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,13 @@ class HLExecutor:
         # Initialize clients using dynamically loaded classes
         base_url = _constants.MAINNET_API_URL
         self.info = _Info(base_url, skip_ws=True)
+        
+        # --- HIP-4 INSTITUTIONAL INTEGRATION ---
+        from core.hip4_metadata import HIP4MetadataManager
+        self.hip4_manager = HIP4MetadataManager.get_instance()
+        self.hip4_manager.initialize(self.info)
+        logger.info("✅ HIP-4 Metadata Manager initialized.")
+        # ---------------------------------------
         self.exchange = _Exchange(self.account, base_url, account_address=self.address)
         
         mode = "multi-user" if private_key else "single-user (env)"
@@ -178,8 +187,8 @@ class HLExecutor:
             is_buy = side.upper() == "BUY"
             sz = float(size)
             # Round size to exchange precision
-            _prec = {"BTC":5,"ETH":4,"SOL":2,"XRP":0,"DOGE":0,"HYPE":2,"BNB":3,"AVAX":2,"LINK":2}
-            sz = round(sz, _prec.get(coin, 4))
+            # _prec removed: Using HIP-4 live metadata
+            sz = self.hip4_manager.format_size(coin, sz)
             
             # Determine price
             if limit_price is None:
@@ -194,7 +203,7 @@ class HLExecutor:
             
             # Apply tick rounding and size rounding according to asset precision
             px = _round_px(coin, px)
-            sz = _round_sz(coin, sz)
+            # sz = _round_sz(coin, sz)  <-- REMOVED: HIP-4 format_size already applied
             logger.info(f"🎯 Rounded: {coin} px={px} sz={sz}")
             
 
