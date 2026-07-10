@@ -5,6 +5,7 @@ Recreated from import signatures in dashboard_api.py.
 """
 
 import os
+import pyotp
 import json
 import time
 import hashlib
@@ -81,10 +82,23 @@ def _validate_session(token: str) -> Optional[dict]:
 # === Exported Functions ===
 
 def get_current_user(request: Request) -> dict:
-    """FastAPI dependency: extract and validate current user from session cookie."""
+    """FastAPI dependency: extract and validate current user from session cookie, query param, or header."""
+    # 1. Primary: Cookie (Standard Web)
     token = request.cookies.get("mbio_session")
+    
+    # 2. Fallback: Query Param (Required for SSE/EventSource)
+    if not token:
+        token = request.query_params.get("token")
+        
+    # 3. Fallback: Authorization Header (API Clients)
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
+        
     user = _validate_session(token)
     if not user:
         raise HTTPException(status_code=401, detail="Session expired")
@@ -105,13 +119,67 @@ def require_role(*allowed_roles: str) -> Callable:
 
 
 def verify_otp_for_user(user_id: str, otp: str) -> bool:
-    """Verify OTP code for a given user. Currently accepts any non-empty OTP for testing."""
+    """Verify OTP code for a given user using stored TOTP secret."""
     if not otp or len(otp) < 4:
         return False
-    # TODO: Implement proper TOTP/HOTP verification
-    # For now, accept configured test OTP or any 6-digit code in dev mode
-    expected_otp = os.environ.get("MBIO_TEST_OTP", "123456")
-    return otp == expected_otp or (os.environ.get("MBIO_DEV_MODE", "false").lower() == "true")
+    
+    # Get user's stored OTP secret
+    secret = get_user_otp_secret(user_id)
+    if not secret:
+        logger.warning(f"No OTP secret found for user {user_id}")
+        return False
+    
+    try:
+        # Verify OTP against stored secret
+        totp = pyotp.TOTP(secret)
+        return totp.verify(otp, valid_window=1)  # Allow 1 step of clock skew
+    except Exception as e:
+        logger.error(f"OTP verification failed for {user_id}: {e}")
+        return False
+
+
+
+# ============================================================
+# OTP/2FA Management Functions
+# ============================================================
+
+def get_user_otp_secret(user_id: str) -> str | None:
+    """Get stored OTP secret for user from database."""
+    try:
+        import sqlite3
+        conn = sqlite3.connect("data/users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT otp_secret FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else None
+    except Exception as e:
+        logger.error(f"Failed to get OTP secret for {user_id}: {e}")
+        return None
+
+
+def setup_user_otp(user_id: str) -> str:
+    """Generate and store new OTP secret for user."""
+    try:
+        secret = pyotp.random_base32()
+        import sqlite3
+        conn = sqlite3.connect("data/users.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET otp_secret = ? WHERE id = ?", (secret, user_id))
+        conn.commit()
+        conn.close()
+        logger.info(f"OTP secret setup for user {user_id}")
+        return secret
+    except Exception as e:
+        logger.error(f"Failed to setup OTP for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to setup 2FA: {str(e)}")
+
+
+def generate_otp_qr_uri(email: str, secret: str) -> str:
+    """Generate QR code URI for Google Authenticator."""
+    totp = pyotp.TOTP(secret)
+    provisioning_uri = totp.provisioning_uri(name=email, issuer_name="MBIO SignalBot")
+    return provisioning_uri
 
 
 async def login(request: Request):

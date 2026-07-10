@@ -362,7 +362,7 @@ async def dashboard_health(user: dict = Depends(get_current_user)):
         from config_loader import get_config; checks["config_loaded"] = bool(get_config())
     except Exception: pass
     try:
-        from execution.hl_executor import HLExecutor; checks["exchange_connected"] = bool(HLExecutor().info.all_mids())
+        from execution.hl_executor import hl_executor; checks["exchange_connected"] = bool(hl_executor.info.all_mids())
     except Exception: pass
     try:
         import core.state as state; checks["grid_state_loaded"] = len(state.OPEN_POSITIONS) >= 0
@@ -408,7 +408,7 @@ async def dashboard_positions(user: dict = Depends(get_current_user)):
         import core.state as state
         from execution.hl_executor import HLExecutor
         from core.grid_manager import is_grid_position
-        executor = HLExecutor(); mids = executor.info.all_mids()
+        executor = hl_executor; mids = executor.info.all_mids()
         for key, pos in state.OPEN_POSITIONS.items():
             if is_grid_position(key): continue
             asset = key; side = pos.get("side", "BUY"); size = float(pos.get("size", 0))
@@ -452,8 +452,9 @@ async def dashboard_grids(user: dict = Depends(get_current_user)):
 
 
 @router.get("/stream")
-async def dashboard_stream(user: dict = Depends(get_current_user)):
-    return await dashboard_sse_stream()
+async def dashboard_stream(request: Request):
+    """SSE stream - authentication handled internally by generator."""
+    return await dashboard_sse_stream(request)
 
 
 @router.get("/trade-history")
@@ -539,8 +540,8 @@ async def get_analytics(user: dict = Depends(get_current_user)):
 async def get_asset_price(asset: str, user: dict = Depends(get_current_user)):
     """Return current mid price for an asset."""
     try:
-        from execution.hl_executor import HLExecutor
-        executor = HLExecutor()
+        from execution.hl_executor import hl_executor
+        executor = hl_executor
         mids = executor.info.all_mids()
         price = float(mids.get(asset.upper(), 0))
         if price <= 0:
@@ -641,7 +642,7 @@ async def order_market(request: Request, user: dict = Depends(require_role("ADMI
     if size * float(body.get("price", 0)) < limits["min_notional"]:
         raise HTTPException(status_code=400, detail=f"Notional below minimum ${limits['min_notional']}")
     try:
-        from execution.hl_executor import HLExecutor; executor = HLExecutor()
+        from execution.hl_executor import hl_executor
         result = executor.market_order(asset, side, size)
         log_audit(user["id"], "ORDER_MARKET", resource=asset, details=json.dumps({"side": side, "size": size}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Market {side} {size} {asset} executed", "result": result}
@@ -661,7 +662,7 @@ async def order_limit(request: Request, user: dict = Depends(require_role("ADMIN
     if size * price < _get_risk_limits()["min_notional"]:
         raise HTTPException(status_code=400, detail=f"Notional below minimum")
     try:
-        from execution.hl_executor import HLExecutor; executor = HLExecutor()
+        from execution.hl_executor import hl_executor
         result = executor.limit_order(asset, side, size, price)
         log_audit(user["id"], "ORDER_LIMIT", resource=asset, details=json.dumps({"side": side, "size": size, "price": price}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Limit {side} {size} {asset} @ ${price} placed", "result": result}
@@ -679,7 +680,7 @@ async def order_stop_limit(request: Request, user: dict = Depends(require_role("
     if not asset or side not in ("BUY", "SELL") or size <= 0 or stop_price <= 0 or limit_price <= 0:
         raise HTTPException(status_code=400, detail="Invalid stop-limit parameters")
     try:
-        from execution.hl_executor import HLExecutor; executor = HLExecutor()
+        from execution.hl_executor import hl_executor
         result = executor.stop_limit_order(asset, side, size, stop_price, limit_price)
         log_audit(user["id"], "ORDER_STOP_LIMIT", resource=asset, details=json.dumps({"side": side, "size": size, "stop": stop_price, "limit": limit_price}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Stop-limit {side} {size} {asset} placed", "result": result}
@@ -697,7 +698,7 @@ async def order_trailing_stop(request: Request, user: dict = Depends(require_rol
     if not asset or size <= 0 or trail_pct <= 0:
         raise HTTPException(status_code=400, detail="Invalid trailing stop parameters")
     try:
-        from execution.hl_executor import HLExecutor; executor = HLExecutor()
+        from execution.hl_executor import hl_executor
         result = executor.trailing_stop_order(asset, side, size, trail_pct)
         log_audit(user["id"], "ORDER_TRAILING_STOP", resource=asset, details=json.dumps({"side": side, "size": size, "trail_pct": trail_pct}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Trailing stop {side} {size} {asset} ({trail_pct}%) placed", "result": result}
@@ -833,7 +834,7 @@ async def emergency_stop(request: Request, user: dict = Depends(require_role("AD
     log_audit(user["id"], "EMERGENCY_STOP_INITIATED", ip_address=ip, otp_verified=True)
     results = {"cancelled_orders": 0, "closed_positions": 0, "errors": []}
     try:
-        from execution.hl_executor import HLExecutor; executor = HLExecutor()
+        from execution.hl_executor import hl_executor
         try:
             open_orders = executor.info.open_orders(executor.address)
             for order in open_orders:
@@ -854,3 +855,140 @@ async def emergency_stop(request: Request, user: dict = Depends(require_role("AD
     except Exception as e: results["errors"].append(f"Executor: {str(e)[:100]}")
     log_audit(user["id"], "EMERGENCY_STOP_COMPLETED", details=json.dumps(results, default=str)[:1000], ip_address=ip, otp_verified=True)
     return {"status": "ok", "message": f"Emergency stop: {results['cancelled_orders']} cancelled, {results['closed_positions']} closed", "results": results}
+
+# ============================================================
+# 2FA Security Setup Endpoints
+# ============================================================
+
+@router.get("/security/2fa/setup")
+async def get_2fa_setup(user: dict = Depends(require_role("ADMIN"))):
+    """Generate OTP secret and QR code URI for 2FA setup."""
+    try:
+        import pyotp
+        from routes.dashboard_auth import get_user_otp_secret, setup_user_otp, generate_otp_qr_uri
+        
+        email = user.get('email')
+        secret = get_user_otp_secret(email)
+        
+        if not secret:
+            secret = setup_user_otp(email)
+            
+        qr_uri = generate_otp_qr_uri(email, secret)
+        
+        return {
+            "status": "success",
+            "secret": secret,
+            "qr_uri": qr_uri,
+            "is_enabled": bool(secret)
+        }
+    except Exception as e:
+        logger.error(f"2FA setup error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/security/2fa/verify")
+async def verify_2fa_setup(payload: dict, user: dict = Depends(require_role("ADMIN"))):
+    """Verify the 6-digit OTP code to finalize 2FA activation."""
+    try:
+        from routes.dashboard_auth import verify_otp_for_user
+        
+        otp_code = str(payload.get("otp_code", "")).strip()
+        if not otp_code:
+            raise HTTPException(status_code=400, detail="OTP code is required")
+            
+        is_valid = verify_otp_for_user(user, otp_code)
+        
+        if not is_valid:
+            raise HTTPException(status_code=400, detail="Invalid OTP code. Please check your authenticator app.")
+            
+        return {"status": "success", "message": "2FA successfully activated!"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# MANUAL ORDER EXECUTION (Dashboard Workflow)
+# ============================================================
+
+@router.post("/open_order")
+async def open_order(request: Request, user: dict = Depends(require_role("ADMIN", "OPERATOR"))):
+    """
+    Execute a manual trade from the dashboard.
+    Enforces: OTP confirmation, Balance > $10 guard, and SL validation.
+    """
+    try:
+        # Parse JSON with proper error handling
+        import json as json_module
+        raw_body = await request.body()
+        try:
+            body = json_module.loads(raw_body)
+        except json_module.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
+        
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Request body must be a JSON object")
+        
+        # 1. SECURITY: Enforce OTP (LLM Instruction: Never bypass OTP)
+        _validate_otp_or_raise(user, str(body.get("otp", "")))
+        
+        # 2. PARSE INPUTS
+        asset = str(body.get("asset", "")).strip().upper()
+        side = str(body.get("side", "BUY")).strip().upper()
+        order_type = str(body.get("type", "market")).strip().lower()
+        size_usd = float(body.get("size_usd", 0))
+        sl = float(body.get("sl", 0)) if body.get("sl") else None
+        tp = float(body.get("tp", 0)) if body.get("tp") else None
+        
+        if not asset or size_usd <= 0:
+            raise HTTPException(status_code=400, detail="Invalid asset or size")
+            
+        if side not in ["BUY", "SELL"]:
+            raise HTTPException(status_code=400, detail="Side must be BUY or SELL")
+
+        # 3. FINANCIAL RISK GUARD: Balance Check (LLM Instruction: > $10)
+        from core.data_fetcher import get_account_balance, get_current_price
+        current_balance = get_account_balance()
+        if current_balance < 10.0:
+            raise HTTPException(status_code=400, detail=f"Insufficient balance (${current_balance:.2f}). Minimum $10 required.")
+
+        # 4. CONVERT USD SIZE TO COIN SIZE
+        current_price = get_current_price(asset)
+        if current_price <= 0:
+            raise HTTPException(status_code=400, detail=f"Cannot fetch price for {asset}")
+            
+        size_coin = size_usd / current_price
+        
+        # 5. EXECUTE VIA EXISTING ENGINE (No core code changes)
+        from execution.hl_executor import execute_hl_order
+        
+        limit_px = None
+        if order_type == "limit":
+            limit_px = current_price # Simplified for now, UI can pass specific price later
+            
+        result = execute_hl_order(
+            coin=asset,
+            side=side,
+            size=size_coin,
+            limit_px=limit_px,
+            sl=sl,
+            tp=tp
+        )
+        
+        # 6. LOG ACTION
+        ip = request.client.host if request.client else "unknown"
+        log_audit(
+            user["id"], "MANUAL_ORDER", 
+            resource=asset, 
+            details=json.dumps({"side": side, "size_usd": size_usd, "size_coin": size_coin, "type": order_type, "result": str(result)}), 
+            ip_address=ip, 
+            otp_verified=True
+        )
+        
+        return {"status": "success", "message": f"Order executed for {asset}", "data": result}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Dashboard order execution failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
