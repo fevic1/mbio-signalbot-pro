@@ -31,3 +31,5 @@ latest_logs.txt
 SESSION_LOG.md
 26.1.2
 POST
+node_modules/
+frontend/node_modules/
