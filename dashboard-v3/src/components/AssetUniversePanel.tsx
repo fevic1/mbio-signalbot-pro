@@ -128,7 +128,7 @@ export function AssetUniversePanel({ onTradeAsset }: AssetUniversePanelProps) {
       const sse = new EventSource('/api/dashboard/stream/prices')
       sse.onopen = () => setSseConnected(true)
       sse.onmessage = (event) => {
-        try { setLivePrices(JSON.parse(event.data)) } catch (e) {}
+        try { setLivePrices(JSON.parse(event.data)) } catch {}
       }
       sse.onerror = () => {
         setSseConnected(false)

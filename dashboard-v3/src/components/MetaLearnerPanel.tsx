@@ -28,7 +28,7 @@ export function MetaLearnerPanel() {
     fetch()
     const id = setInterval(fetch, 30000) // Refresh every 30s
     return () => clearInterval(id)
-  }, [])
+  }, [selectedRegime])
 
   if (!data) return <p className="text-sm text-muted-foreground">Loading AI Strategy Weights...</p>
 
