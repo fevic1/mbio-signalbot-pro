@@ -18,7 +18,6 @@ class GroqClient(AIProvider):
         )
     
     async def analyze(self, asset: str, data: dict) -> dict:
-        import time; break  # 🛡️ Retries disabled  # 🛡️ Global Rate-Limit Shield
         prompt = self._build_prompt(asset, data)
         try:
             response = await self.client.ainvoke([HumanMessage(content=prompt)])

@@ -83,6 +83,12 @@ class HyperliquidConfig(BaseModel):
         return v
 
 class AppConfig(BaseModel):
+
+    def get(self, key: str, default=None):
+        """Backward compatibility for dict-like .get() access."""
+        data = self.model_dump() if hasattr(self, 'model_dump') else self.dict()
+        return data.get(key, default)
+
     """Root configuration."""
     trading: TradingConfig = Field(default_factory=TradingConfig)
     signals: SignalsConfig = Field(default_factory=SignalsConfig)
@@ -130,9 +136,6 @@ def get_config() -> AppConfig:
             logger.error("❌ Invalid TRADING_TICK_SIZES JSON")
     
     # Validate and return
-    try:
-        
-    # --- DYNAMIC UNIVERSE INTERCEPTOR ---
     universe_rules = yaml_config.get("universe", {})
     if universe_rules.get("mode") == "dynamic":
         try:
@@ -152,7 +155,8 @@ def get_config() -> AppConfig:
             logger.error(f"❌ Dynamic Universe injection failed: {e}")
     # ------------------------------------
 
-    config = AppConfig(**yaml_config)
+    try:
+        config = AppConfig(**yaml_config)
         logger.info(f"✅ Configuration validated: {config.trading.max_open_positions} max positions")
         return config
     except Exception as e:

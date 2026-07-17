@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from core.app_context import app_context
 from datetime import datetime, timezone, timedelta
 
 import core.state as state
@@ -24,6 +25,7 @@ async def check_and_close_positions(chat_id: str) -> None:
         pass
     _now_ts = datetime.now().timestamp()
     for _asset, _pos in list(state.OPEN_POSITIONS.items()):
+        if str(_asset).startswith("GRID::"): continue  # Grid states handled by grid_monitor
         _entry = float(_pos.get("entry", 0))
         _size = float(_pos.get("size", 0))
         _side = _pos.get("side", "BUY")
@@ -52,11 +54,18 @@ async def check_and_close_positions(chat_id: str) -> None:
 
             logger.info(f"📊 TELEMETRY: {_asset} {_side} | Entry: ${_entry:.4f} | SL: ${_sl:.4f} | Age: {_age_hrs:.1f}h (Price fetch failed)")
     cfg = get_config()
-    hl_raw = cfg.get("hyperliquid", {}).get("assets", {})
+    hl_raw = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("hyperliquid", {}).get("assets", {})
     hl_assets = hl_raw if isinstance(hl_raw, dict) else {a: a for a in hl_raw}
     live_prices = get_all_live_prices([hl_assets.get(k, k) for k in state.OPEN_POSITIONS.keys()])
     assets_to_remove = []
     for asset, pos in list(state.OPEN_POSITIONS.items()):
+        if str(asset).startswith("GRID::"):
+            continue  # Grid states handled by grid_monitor, not this loop
+        
+        # 🛡️ DCA EXCLUSION GUARD: Prevent generic tracker from hijacking DCA trailing stops/exits
+        if pos.get("dca") or pos.get("strategy") in ["AUTO_DCA", "MANUAL_DCA"]:
+            continue  # DCA states handled exclusively by institutional_dca.py / dca_manager.py
+            
         try:
             current_price = live_prices.get(hl_assets.get(asset, asset), get_current_price(f"{asset}-USD"))
             if current_price == 0:
@@ -166,7 +175,7 @@ async def check_and_close_positions(chat_id: str) -> None:
                             pos["sl"] = new_sl
                             logger.info(f"📈 {asset} Chandelier Trail (TRENDING): ${old_sl:.4f} → ${new_sl:.4f}")
 
-                elif current_price <= pos["sl"]:
+                elif pos.get("sl") and pos["sl"] > 0 and current_price <= pos["sl"]:
                     # 🧠 Smart Learning Override
                     if not pos.get("sl_extended"):
                         try:
@@ -238,7 +247,7 @@ async def check_and_close_positions(chat_id: str) -> None:
                             pos["sl"] = new_sl
                             logger.info(f"📉 {asset} Chandelier Trail (TRENDING): ${old_sl:.4f} → ${new_sl:.4f}")
 
-                elif current_price >= pos["sl"]:
+                elif pos.get("sl") and pos["sl"] > 0 and current_price >= pos["sl"]:
                     # 🧠 Smart Learning Override
                     if not pos.get("sl_extended"):
                         try:
@@ -366,7 +375,7 @@ async def check_and_close_positions(chat_id: str) -> None:
                     logger.info(f"📊 Exit analytics recorded: {asset} | {exit_method} | {pnl_pct:+.2f}% | {hold_time_hours:.1f}h")
                 except Exception as e:
                     logger.error(f"Exit analytics failed: {e}")
-                halt_threshold = cfg.get("trading", {}).get("drawdown_halt_pct", -15.0)
+                halt_threshold = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("trading", {}).get("drawdown_halt_pct", -15.0)
                 if is_drawdown_halted(halt_threshold):
                     from monitoring.alert_manager import send_drawdown_halt
                     await send_drawdown_halt(state.daily_pnl, halt_threshold, chat_id)
@@ -376,18 +385,39 @@ async def check_and_close_positions(chat_id: str) -> None:
         state.OPEN_POSITIONS.pop(asset, None)
 
 async def position_monitor_loop(chat_id: str) -> None:
-    return  # DISABLED: Background task amputated
     cfg = get_config()
-    interval = cfg.get("intervals", {}).get("position_monitor_sec", 60)
+    interval = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("intervals", {}).get("position_monitor_sec", 60)
     logger.info(f"🔄 Position monitor (every {interval}s)")
     while True:
         try:
+            # 🔄 RECONCILIATION: catch positions closed via ANY path (dashboard, Telegram,
+            # Auto-DCA exit, manual exchange action) that never got removed from
+            # state.OPEN_POSITIONS. Without this, check_and_close_positions() below has no
+            # way to ever notice a position is already gone — it's purely price-trigger based.
+            if state.OPEN_POSITIONS:
+                try:
+                    executor = app_context.executor
+                    live_positions = executor.get_open_positions()
+                    live_coins = {p["coin"] for p in live_positions}
+                    for tracked_asset in list(state.OPEN_POSITIONS.keys()):
+                        if tracked_asset.startswith("GRID::"):
+                            continue  # grid positions reconciled separately by grid_monitor
+                        if tracked_asset not in live_coins:
+                            stale_pos = state.OPEN_POSITIONS.pop(tracked_asset)
+                            logger.warning(
+                                f"🔄 RECONCILE: {tracked_asset} no longer open on exchange — "
+                                f"removing from memory (was: {stale_pos.get('side')} entry=${stale_pos.get('entry')})"
+                            )
+                    state.save_state()
+                except Exception as _re:
+                    logger.error(f"❌ Reconciliation error: {_re}")
+
             if state.OPEN_POSITIONS:
                 await check_and_close_positions(chat_id)
             else:
                 # Also try to sync from exchange if state is empty
-                from execution.hl_executor import HLExecutor
-                executor = HLExecutor()
+                # HLExecutor now from app_context
+                executor = app_context.executor
                 exchange_positions = executor.get_open_positions()
                 if exchange_positions:
                     for p in exchange_positions:
@@ -425,10 +455,9 @@ async def position_monitor_loop(chat_id: str) -> None:
         await asyncio.sleep(interval)
 
 async def quick_signal_scanner(chat_id: str) -> None:
-    return  # DISABLED: Background task amputated
     cfg = get_config()
-    interval = cfg.get("intervals", {}).get("quick_scanner_sec", 900)
-    threshold = cfg.get("intervals", {}).get("big_move_threshold", 0.03)
+    interval = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("intervals", {}).get("quick_scanner_sec", 900)
+    threshold = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("intervals", {}).get("big_move_threshold", 0.03)
     logger.info(f"🔄 Quick scanner (every {interval//60}min, {threshold*100:.0f}% threshold)")
     while True:
         await asyncio.sleep(interval)
@@ -436,9 +465,8 @@ async def quick_signal_scanner(chat_id: str) -> None:
         pass
 
 async def entry_scanner_loop(run_trade_fn, chat_id: str) -> None:
-    return  # DISABLED: Background task amputated
     cfg = get_config()
-    interval = cfg.get("intervals", {}).get("entry_scanner_sec", 1800)
+    interval = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("intervals", {}).get("entry_scanner_sec", 1800)
     logger.info(f"🎯 Entry scanner (every {interval//60}min)")
     while True:
         await asyncio.sleep(interval)
@@ -447,16 +475,22 @@ async def entry_scanner_loop(run_trade_fn, chat_id: str) -> None:
         pass
 
 async def full_analysis_loop(run_cycle_fn):
-    return  # DISABLED: Background task amputated
+    """Background task: Run full portfolio analysis periodically."""
+    import asyncio
+    import logging
+    from config_loader import get_config
+    
+    logger = logging.getLogger(__name__)
     cfg = get_config()
-    hours = cfg.get("intervals", {}).get("full_analysis_hours", 2)
-    logger.info(f"🔄 Full analysis (every {hours}h)")
+    hours = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("intervals", {}).get("full_analysis_hours", 2)
+    logger.info(f"🔄 Full analysis loop started (every {hours}h)")
+    
     while True:
         try:
-            return  # DISABLED: Legacy scanner bypassed for Manual Grid/DCA mode
-            logger.info("♻️ Full analysis cycle...")
-            await run_cycle_fn()
-            logger.info(f"💤 Sleeping {hours}h...")
+            logger.info("♻️ Executing full analysis cycle...")
+            if run_cycle_fn:
+                await run_cycle_fn()
+            logger.info(f"💤 Full analysis complete. Sleeping {hours}h...")
         except Exception as e:
             logger.error(f"❌ Full analysis error: {e}")
         await asyncio.sleep(hours * 3600)
@@ -468,15 +502,14 @@ async def update_trailing_dca():
         await asyncio.sleep(300)
         try:
             from core.state import OPEN_POSITIONS
-            from core.dca_manager import DCAManager
-            from execution.hl_executor import HLExecutor
-            executor = HLExecutor()
-            dca = DCAManager(executor)
+            # HLExecutor now from app_context
+            executor = app_context.executor
             for asset, pos in OPEN_POSITIONS.items():
                 dca_config = pos.get("dca")
                 if dca_config and dca_config.get("trailing") and dca_config.get("enabled"):
-                    # Check stabilization before updating trailing orders
-                    if not dca.is_stabilized(asset):
+                    # Check stabilization: ensure at least the base level is filled
+                    if not dca_config.get("filled_levels"):
+                        logger.debug(f"⏳ {asset} DCA not yet stabilized (no filled levels), skipping trailing update")
                         continue
                     mids = executor.info.all_mids()
                     current_price = float(mids.get(asset, 0))
@@ -495,8 +528,8 @@ async def monitor_dca_profit_targets():
         try:
             from core.state import OPEN_POSITIONS
             from core.dca_manager import DCAManager
-            from execution.hl_executor import HLExecutor
-            executor = HLExecutor()
+            # HLExecutor now from app_context
+            executor = app_context.executor
             dca = DCAManager(executor)
             for asset, pos in OPEN_POSITIONS.items():
                 dca_config = pos.get("dca")
@@ -526,9 +559,9 @@ async def monitor_grid_bots():
         try:
             from core.state import OPEN_POSITIONS
             from core.grid_manager import GridManager, is_grid_position, grid_asset_from_key
-            from execution.hl_executor import HLExecutor
+            # HLExecutor now from app_context
 
-            executor = HLExecutor()
+            executor = app_context.executor
             grid = GridManager(executor)
 
             for key in list(OPEN_POSITIONS.keys()):
@@ -553,6 +586,29 @@ async def monitor_grid_bots():
                     _st.save_state()
                     continue
 
+                # Check if grid needs initial deployment or recovery
+                nodes = config.get("nodes", [])
+                active_nodes = [n for n in nodes if n.get("status") == "OPEN"]
+                # Check for both PENDING and CANCELLED nodes (cancelled nodes need redeployment)
+                pending_nodes = [n for n in nodes if n.get("status") in ("PENDING", "CANCELLED")]
+                
+                # Reset CANCELLED nodes back to PENDING for redeployment
+                for node in pending_nodes:
+                    if node.get("status") == "CANCELLED":
+                        node["status"] = "PENDING"
+                        node["order_id"] = None
+                        logger.debug(f"🔲 Reset cancelled node L{node['level_index']} to PENDING")
+                
+                # If no active orders but grid is enabled, deploy/recover
+                if len(active_nodes) == 0 and len(pending_nodes) > 0:
+                    logger.info(f"🔲 {asset}: Grid has {len(pending_nodes)} pending nodes but no active orders — deploying")
+                    max_conc = 4  # Deploy closest 4 nodes
+                    deploy_result = grid.place_grid_orders(asset, config, current_price, max_concurrent=max_conc)
+                    logger.info(f"🔲 {asset}: Deployed {deploy_result['placed']} orders, {deploy_result['failed']} failed")
+                    import core.state as _st
+                    _st.save_state()
+                    continue  # Skip fill monitoring this cycle, orders just placed
+                
                 fill_result = grid.monitor_grid_fills(asset, config)
                 if fill_result["fills_detected"] > 0:
                     logger.info(

@@ -40,7 +40,7 @@ correlation_groups:
 - assets:
   - BTC
   - ETH
-  max_positions: 1
+  max_positions: 2
   name: High Correlation
 early_exit:
   consecutive_checks: 2
@@ -71,9 +71,9 @@ idle_monitor:
   min_confidence_threshold: 60
 intervals:
   big_move_threshold: 0.02
-  cache_price_threshold: 0.0
+  cache_price_threshold: 0.02
   entry_scanner_sec: 900
-  full_analysis_hours: 0.5
+  full_analysis_hours: 1
   position_monitor_sec: 60
   quick_scanner_sec: 300
 min_confidence: 80
@@ -136,29 +136,33 @@ trade_plan:
   tp2_atr_multiplier: 1.8
   tp3_atr_multiplier: 3.5
 trading:
-correlation_groups:
-  - assets: [BTC, ETH, SOL, AVAX]
-    max_positions: 2
-    name: Layer 1 Blockchains
-  - assets: [XRP, DOGE, HYPE, BNB]
-    max_positions: 2
-    name: Altcoins
-  - assets: [BTC, ETH]
-    max_positions: 2
-    name: High Correlation 
+  max_open_positions: 2
+  entry_min_confidence: 80
+  risk_pct_per_trade: 0.02
+  small_account_threshold: 100.0
+  small_account_max_pct: 0.5
+  large_account_max_pct: 0.2
+  min_order_value_usd: 10.0
+  drawdown_halt_pct: -15.0
+  correlation_block: true
+  correlated_groups:
+  - - BTC
+    - ETH
+  - - SOL
+    - DOGE
 execution:
   max_positions: 3
   min_confidence: 70
   risk_per_trade_pct: 0.05
-  default_notional: 20.0
+  default_notional: 10.0
   signal_source: both
   active_strategy: TV_BOS_V6
   ratchet_min_net_profit_usd: 1.0
   taker_fee_pct: 0.00035
 dca:
   max_levels: 3
-  level_spacing_pct: 1.2
-  size_multiplier: 1.25
+  level_spacing_pct: 2.0
+  size_multiplier: 1.5
   tp_pct: 1.0
   sl_pct: 4.0
   tp_recalc_on_fill: true
@@ -208,14 +212,10 @@ execution_precision:
   BNB: 3
   AVAX: 2
   LINK: 2
-
-# ==========================================
-# DYNAMIC UNIVERSE STANDARD (HIP-4)
-# ==========================================
 universe:
-  mode: "dynamic"           # "static" (use hardcoded list) or "dynamic" (fetch from exchange)
-  source: "HIP4"            # Fetch from HIP-4 Metadata Manager
-  filter: "top_volume"      # Sort by 24h trading volume
-  top_n: 50                 # Automatically trade the top 50 most liquid assets
-  min_volume_usd: 1000000   # Ignore "dead" coins with less than $1M daily volume
-  exclude_stablecoins: true # Auto-exclude USDC, USDT, FDUSD
+  mode: dynamic
+  source: HIP4
+  filter: top_volume
+  top_n: 50
+  min_volume_usd: 1000000
+  exclude_stablecoins: true

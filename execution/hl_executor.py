@@ -3,6 +3,7 @@ execution/hl_executor.py — Live Hyperliquid Execution (SDK-Agnostic)
 Dynamically adapts to any hyperliquid SDK structure.
 """
 import os
+import threading
 import logging
 from typing import Optional, Dict
 from core.hip4_metadata import HIP4MetadataManager
@@ -71,14 +72,13 @@ def _load_sdk():
 
 # Hardcoded precision (proven to work)
 _PRECISION = {
-    'BTC': {'sz_decimals': 4, 'tick': 1.0},
-    'ETH': {'sz_decimals': 3, 'tick': 0.1},
-    'SOL': {'sz_decimals': 2, 'tick': 0.01},
-    'XRP': {'sz_decimals': 0, 'tick': 0.0001},  # Integer sizes only
-    'DOGE': {'sz_decimals': 0, 'tick': 0.00001},
-    'LINK': {'sz_decimals': 2, 'tick': 0.001},
+    # Per Hyperliquid API: https://api.hyperliquid.xyz/info (type: meta)
     'BTC': {'sz_decimals': 5, 'tick': 1.0},
     'ETH': {'sz_decimals': 4, 'tick': 0.1},
+    'SOL': {'sz_decimals': 2, 'tick': 0.01},
+    'XRP': {'sz_decimals': 0, 'tick': 0.0001},
+    'DOGE': {'sz_decimals': 0, 'tick': 0.00001},
+    'LINK': {'sz_decimals': 2, 'tick': 0.001},
     'AVAX': {'sz_decimals': 2, 'tick': 0.01},
     'HYPE': {'sz_decimals': 2, 'tick': 0.001},
 }
@@ -94,7 +94,19 @@ def _round_sz(asset, sz):
 
 
 class HLExecutor:
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super(HLExecutor, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self, private_key: str | None = None, chat_id: int | None = None):
+        if getattr(self, "_initialized", False):
+            return
         _load_sdk()  # Ensure SDK is loaded
         
         # Multi-user support: use provided key or fallback to env var
@@ -123,11 +135,12 @@ class HLExecutor:
         
         mode = "multi-user" if private_key else "single-user (env)"
         logger.info(f"✅ HLExecutor initialized for {self.address} [{mode}]")
+        self._initialized = True
 
     def cancel_order(self, coin: str, order_id: int) -> dict:
         """Cancel an open order by ID. Wraps exchange.cancel_order()."""
         try:
-            result = self.exchange.cancel(coin=coin, oid=int(order_id))
+            result = self.exchange.cancel(coin, int(order_id))
             logger.info(f"🗑️ Cancelled order {order_id} for {coin}: {result}")
             return {"success": True, "result": result}
         except Exception as e:
@@ -257,25 +270,48 @@ class HLExecutor:
 
 
 # =============================================================================
-# LEGACY WRAPPER — Matches main.py expectations
-# =============================================================================
-_executor = None
 
-def _get_executor(private_key: str | None = None, chat_id: int | None = None):
-    global _executor
-    if private_key:
-        # Multi-user mode: create new executor with user's key (not singleton)
-        return HLExecutor(private_key=private_key, chat_id=chat_id)
-    if _executor is None:
-        # Single-user fallback: create singleton with global env var
-        _executor = HLExecutor()
-    return _executor
+    def close_position(self, asset: str) -> Dict:
+        """
+        Unified close logic: fetches live position, determines direction,
+        executes market order with reduce_only=True.
+        """
+        try:
+            # 1. Get current positions (synchronous)
+            positions = self.get_open_positions()
+            target = next((p for p in positions if p['coin'] == asset.upper()), None)
+            
+            if not target:
+                return {"success": False, "error": f"No open position for {asset}"}
+            
+            # 2. Determine closing direction
+            close_side = "SELL" if target['side'] == 'long' else "BUY"
+            close_size = target['size']
+            
+            logger.info(f"🔄 Closing {asset}: {close_side} {close_size} (reduce_only)")
+            
+            # 3. Execute market order with reduce_only=True
+            result = self.place_order(
+                coin=asset,
+                side=close_side,
+                size=close_size,
+                limit_price=None,
+                order_type="Limit",
+                reduce_only=True
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Close position failed for {asset}: {e}")
+            return {"success": False, "error": str(e)}
 
 def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float] = None, **kwargs) -> Dict:
     """Async wrapper — runs place_order in thread to avoid event loop conflicts."""
     import asyncio as _aio
     try:
-        executor = _get_executor()
+        from core.app_context import app_context
+        executor = app_context.executor
         _strategy = kwargs.get("strategy", "SIGNAL")
         _regime = kwargs.get("regime", "AUTO")
         
@@ -328,7 +364,59 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
                 logger.warning(f"⚠️ Failed to record trade in tracker: {e}")
         # ---------------------------------
 
+        # 🚀 PARALLEL BYBIT EXECUTION (Strategy A)
+        # Fires in a daemon thread so it never blocks or fails the primary HL execution.
+        if result and result.get("success"):
+            try:
+                import threading
+                from execution.bybit_executor import get_bybit_executor
+                
+                def _fire_bybit():
+                    try:
+                        bybit_ex = get_bybit_executor()
+                        if bybit_ex.client:
+                            bybit_ex.place_order(
+                                coin=coin,
+                                side=side,
+                                size=size,
+                                limit_price=limit_px,
+                                order_type=kwargs.get("order_type", "Market"),
+                                reduce_only=kwargs.get("reduce_only", False)
+                            )
+                    except Exception as bye:
+                        logger.warning(f"⚠️ Parallel Bybit execution failed: {bye}")
+                
+                threading.Thread(target=_fire_bybit, daemon=True).start()
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to trigger parallel Bybit execution: {e}")
+
         return result or {"success": False, "error": "None returned"}
     except Exception as e:
         logger.error(f"❌ execute_hl_order error: {e}")
         return {"success": False, "error": str(e)}
+
+
+# =============================================================================
+# FACTORY FUNCTION — Singleton access pattern
+# =============================================================================
+_executor_instance: Optional["HLExecutor"] = None
+_executor_lock = threading.Lock()
+
+def get_hl_executor(private_key: str | None = None, chat_id: int | None = None) -> "HLExecutor":
+    """
+    Get the singleton HLExecutor instance.
+    
+    Args:
+        private_key: Optional override for multi-user support
+        chat_id: Optional Telegram chat ID for alerts
+        
+    Returns:
+        The singleton HLExecutor instance
+    """
+    global _executor_instance
+    if _executor_instance is None:
+        with _executor_lock:
+            if _executor_instance is None:
+                _executor_instance = HLExecutor(private_key=private_key, chat_id=chat_id)
+    return _executor_instance
+

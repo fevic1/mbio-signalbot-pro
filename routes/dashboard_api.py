@@ -18,6 +18,7 @@ from routes.dashboard_auth import (
     login, logout, request_otp, get_me, log_audit
 )
 from routes.dashboard_sse import dashboard_sse_stream
+from core.app_context import app_context
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,38 @@ router.post("/auth/otp/request")(request_otp)
 # ============================================================
 # CONFIG MANAGEMENT (Structured form, ADMIN-only, OTP-gated)
 # ============================================================
+
+
+def calculate_market_regime(prices: list) -> str:
+    """
+    Calculate market regime based on price action.
+    Returns: "TRENDING", "RANGING", or "BREAKOUT"
+    """
+    if not prices or len(prices) < 20:
+        return "RANGING"
+    
+    # Calculate ADX-like trend strength
+    highs = [float(p.get("h", 0)) for p in prices[-20:]]
+    lows = [float(p.get("l", 0)) for p in prices[-20:]]
+    closes = [float(p.get("c", 0)) for p in prices[-20:]]
+    
+    # Calculate price range
+    price_range = max(highs) - min(lows)
+    avg_price = sum(closes) / len(closes)
+    range_pct = (price_range / avg_price) * 100 if avg_price > 0 else 0
+    
+    # Calculate trend direction
+    first_half_avg = sum(closes[:10]) / 10 if len(closes) >= 20 else closes[0]
+    second_half_avg = sum(closes[10:]) / len(closes[10:]) if len(closes) >= 20 else closes[-1]
+    trend_strength = abs(second_half_avg - first_half_avg) / first_half_avg * 100 if first_half_avg > 0 else 0
+    
+    # Determine regime
+    if trend_strength > 3:  # Strong directional movement
+        return "TRENDING"
+    elif range_pct > 5:  # High volatility, potential breakout
+        return "BREAKOUT"
+    else:  # Low volatility, sideways
+        return "RANGING"
 
 @router.get("/config/current")
 async def get_current_config(user: dict = Depends(require_role("ADMIN"))):
@@ -260,7 +293,7 @@ async def reconcile_signals(request: Request, user: dict = Depends(require_role(
 # ============================================================
 
 def _validate_otp_or_raise(user: dict, otp: str):
-    if not otp or not verify_otp_for_user(user["id"], otp):
+    if not otp or not verify_otp_for_user(user["email"], otp):
         raise HTTPException(status_code=403, detail="Invalid or expired OTP")
 
 
@@ -372,12 +405,29 @@ async def dashboard_health(user: dict = Depends(get_current_user)):
 
 @router.get("/overview")
 async def dashboard_overview(user: dict = Depends(get_current_user)):
-    result = {"balance": 0.0, "equity": 0.0, "deployed_pct": 0.0, "notional": 0.0, "open_positions": 0,
+    result = {"hl_balance": 0.0, "bybit_balance": 0.0, "total_balance": 0.0, 
+              "equity": 0.0, "deployed_pct": 0.0, "notional": 0.0, "open_positions": 0,
               "daily_pnl_pct": 0.0, "realized_pnl_usd": 0.0, "unrealized_pnl_usd": 0.0,
               "win_rate": "N/A", "total_trades": 0, "active_grids": 0}
+    
+    # 1. Hyperliquid Balance
     try:
-        from core.data_fetcher import get_account_balance; result["balance"] = round(get_account_balance(), 2)
+        from core.data_fetcher import get_account_balance
+        result["hl_balance"] = round(get_account_balance(), 2)
     except Exception: pass
+    
+    # 2. Bybit Balance
+    try:
+        from execution.bybit_executor import get_bybit_executor
+        bybit_ex = get_bybit_executor()
+        if bybit_ex and bybit_ex.client:
+            res = bybit_ex.client.get_wallet_balance(accountType="UNIFIED")
+            if res["retCode"] == 0:
+                result["bybit_balance"] = round(float(res["result"]["list"][0]["totalEquity"]), 2)
+    except Exception: pass
+    
+    result["total_balance"] = round(result["hl_balance"] + result["bybit_balance"], 2)
+    result["balance"] = result["total_balance"] # Backward compatibility
     try:
         import core.state as state
         from core.grid_manager import is_grid_position
@@ -397,8 +447,23 @@ async def dashboard_overview(user: dict = Depends(get_current_user)):
         result["total_trades"] = stats.get("closed_trades", 0)
         if stats.get("closed_trades", 0) > 0: result["win_rate"] = f"{stats['win_rate']:.1f}%"
     except Exception: pass
-    result["equity"] = round(result["balance"] + result["unrealized_pnl_usd"], 2)
+    result["equity"] = round(result["total_balance"] + result["unrealized_pnl_usd"], 2)
     return result
+
+
+def _json_safe_float(value, default=0.0, cap=10_000_000.0):
+    """Clamp inf/-inf/NaN to a finite value — json.dumps() cannot serialize any of
+    these and will 500 the entire endpoint if one slips through. Applies regardless
+    of how the bad value got into state.OPEN_POSITIONS in the first place."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(f):
+        return default
+    if math.isinf(f):
+        return cap if f > 0 else -cap
+    return f
 
 
 @router.get("/positions")
@@ -406,9 +471,9 @@ async def dashboard_positions(user: dict = Depends(get_current_user)):
     positions = []
     try:
         import core.state as state
-        from execution.hl_executor import HLExecutor
+        # _get_executor replaced by app_context
         from core.grid_manager import is_grid_position
-        executor = hl_executor; mids = executor.info.all_mids()
+        executor = app_context.executor; mids = executor.info.all_mids()
         for key, pos in state.OPEN_POSITIONS.items():
             if is_grid_position(key): continue
             asset = key; side = pos.get("side", "BUY"); size = float(pos.get("size", 0))
@@ -419,10 +484,35 @@ async def dashboard_positions(user: dict = Depends(get_current_user)):
                               "current": round(current, 4), "upnl": round(upnl, 4), "pnl_pct": round(pnl_pct, 2),
                               "value": round(size * current, 2), "margin_used": round(float(pos.get("margin_used", 0)), 4),
                               "liquidation_px": round(float(pos.get("liquidation_px", 0)), 2),
-                              "sl": round(float(pos.get("sl", 0)), 4), "tp1": round(float(pos.get("tp1", 0)), 4),
-                              "tp2": round(float(pos.get("tp2", 0)), 4), "tp3": round(float(pos.get("tp3", 0)), 4),
-                              "strategy": pos.get("strategy", "UNKNOWN"), "opened_at": str(pos.get("opened_at", ""))})
+                              "sl": round(_json_safe_float(pos.get("sl", 0)), 4), "tp1": round(_json_safe_float(pos.get("tp1", 0)), 4),
+                              "tp2": round(_json_safe_float(pos.get("tp2", 0)), 4), "tp3": round(_json_safe_float(pos.get("tp3", 0)), 4),
+                              "strategy": pos.get("strategy", "UNKNOWN"), "opened_at": str(pos.get("opened_at", "")),
+                              "exchange": "Hyperliquid"})
     except Exception as e: logger.error(f"Positions fetch error: {e}")
+    
+    # Fetch Bybit Positions
+    try:
+        from execution.bybit_executor import get_bybit_executor
+        bybit_ex = get_bybit_executor()
+        if bybit_ex and bybit_ex.client:
+            bybit_positions = bybit_ex.get_open_positions()
+            for p in bybit_positions:
+                side = "BUY" if p["side"] == "long" else "SELL"
+                size = p["size"]
+                entry = p["entry_price"]
+                current = float(mids.get(p["coin"], entry)) # Fallback to entry if mid missing
+                upnl = ((current - entry) * size if side == "BUY" else (entry - current) * size) if current > 0 else 0
+                pnl_pct = (((current - entry) / entry * 100) if side == "BUY" else ((entry - current) / entry * 100)) if entry > 0 else 0
+                positions.append({
+                    "asset": p["coin"], "side": side, "size": round(size, 8), "entry": round(entry, 4),
+                    "current": round(current, 4), "upnl": round(upnl, 4), "pnl_pct": round(pnl_pct, 2),
+                    "value": round(size * current, 2), "margin_used": 0.0, "liquidation_px": 0.0,
+                    "sl": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0,
+                    "strategy": "BYBIT", "opened_at": "", "exchange": "Bybit"
+                })
+    except Exception as e: 
+        logger.error(f"Bybit positions fetch error: {e}")
+        
     return {"positions": positions, "count": len(positions)}
 
 
@@ -434,6 +524,7 @@ async def dashboard_grids(user: dict = Depends(get_current_user)):
         from core.grid_manager import is_grid_position, grid_asset_from_key
         for key, config in state.OPEN_POSITIONS.items():
             if not is_grid_position(key): continue
+            if not config.get("enabled", False): continue  # skip closed grids — was showing "Inactive" zombie cards forever
             asset = grid_asset_from_key(key); nodes = config.get("nodes", [])
             active = len([n for n in nodes if n.get("status") == "OPEN"])
             grids.append({"key": key, "asset": asset, "enabled": config.get("enabled", False),
@@ -536,12 +627,137 @@ async def get_analytics(user: dict = Depends(get_current_user)):
 # --- Grid/DCA/Order Write Endpoints (Phase 2-3 preserved) ---
 
 
+@router.get("/dca_status")
+async def dashboard_dca_status(user: dict = Depends(get_current_user)):
+    """Real DCA position status, read from the same persisted state open_dca_position()
+    and close_dca_position() write to — no separate/ephemeral DCA store."""
+    dca_positions = []
+    try:
+        import core.state as state
+        for asset, pos in state.OPEN_POSITIONS.items():
+            if asset.startswith("GRID::"):
+                continue
+            dca = pos.get("dca")
+            if not dca:
+                continue
+            active_count = len([o for o in dca.get("active_orders", []) if o.get("status") == "active"])
+            dca_positions.append({
+                "asset": asset,
+                "direction": dca.get("direction", pos.get("side", "")),
+                "levels": dca.get("levels", 0),
+                "filled_levels": len(dca.get("filled_levels", [])),
+                "active_orders": active_count,
+                "base_size": dca.get("base_size", 0),
+                "total_invested": dca.get("total_invested", 0.0),
+                "avg_entry": dca.get("avg_entry", pos.get("entry", 0)),
+                "entry": pos.get("entry", 0),
+                "enabled": dca.get("enabled", False),
+                # 🛡️ VISIBILITY: Expose TP/SL to end user dashboard
+                "sl": pos.get("sl", 0),
+                "tp1": pos.get("tp1", 0),
+                "tp2": pos.get("tp2", 0),
+                "tp3": pos.get("tp3", 0),
+            })
+    except Exception as e:
+        logger.error(f"DCA status fetch error: {e}")
+
+    return {"positions": dca_positions, "count": len(dca_positions)}
+
+
+@router.get("/orders")
+async def dashboard_orders(user: dict = Depends(get_current_user)):
+    """Merged view of resting orders: real exchange limit orders + pending grid nodes + pending DCA levels."""
+    orders = []
+
+    # 1. Real resting limit orders sitting on the exchange order book
+    try:
+        executor = app_context.executor
+        # SDK BUG WORKAROUND: open_orders sometimes returns empty if address formatting is strict.
+        # We log the address to verify, and attempt the call.
+        logger.debug(f"Fetching open orders for address: {executor.address}")
+        raw_orders = executor.info.open_orders(executor.address)
+        
+        if not raw_orders:
+            logger.warning("⚠️ SDK open_orders returned empty. This is a known SDK version issue. Relying on internal state.")
+        else:
+            for o in raw_orders:
+                orders.append({
+                    "source": "exchange",
+                    "asset": o.get("coin", ""),
+                    "side": "BUY" if o.get("side") == "B" else "SELL",
+                    "price": float(o.get("limitPx", 0)),
+                    "size": float(o.get("sz", 0)),
+                    "order_id": o.get("oid"),
+                    "label": "Limit Order",
+                })
+    except Exception as e:
+        logger.error(f"Exchange open orders fetch error: {e}")
+
+    # 2. Grid nodes waiting to fill (not yet executed on the exchange)
+    try:
+        import core.state as state
+        for key, pos in state.OPEN_POSITIONS.items():
+            if not key.startswith("GRID::"):
+                continue
+            for node in pos.get("nodes", []):
+                if node.get("status") == "OPEN" and node.get("order_id"):
+                    orders.append({
+                        "source": "grid",
+                        "asset": key.replace("GRID::", ""),
+                        "side": node.get("side", ""),
+                        "price": node.get("price", 0),
+                        "size": None,
+                        "order_id": node.get("order_id"),
+                        "label": f"Grid L{node.get('level_index', '?')}",
+                    })
+    except Exception as e:
+        logger.error(f"Grid orders fetch error: {e}")
+
+    # 3. DCA levels waiting to fill
+    try:
+        import core.state as state
+        for asset, pos in state.OPEN_POSITIONS.items():
+            if asset.startswith("GRID::"):
+                continue
+            dca_config = pos.get("dca")
+            if not dca_config:
+                continue
+            for order in dca_config.get("active_orders", []):
+                if order.get("status") == "active" and order.get("order_id"):
+                    orders.append({
+                        "source": "dca",
+                        "asset": asset,
+                        "side": dca_config.get("direction", pos.get("side", "")),
+                        "price": order.get("price", 0),
+                        "size": order.get("size", None),
+                        "order_id": order.get("order_id"),
+                        "label": "DCA Level",
+                    })
+    except Exception as e:
+        logger.error(f"DCA orders fetch error: {e}")
+
+    return {"orders": orders, "count": len(orders)}
+
+
+@router.get("/activity")
+async def dashboard_activity(user: dict = Depends(get_current_user), limit: int = 50):
+    """Recent trade/fill activity from the persistent ledger (real executed events, not pre-trade signals)."""
+    try:
+        from core.trade_ledger import load_history
+        history = load_history()
+        recent = list(reversed(history))[:limit]
+        return {"activity": recent, "count": len(recent)}
+    except Exception as e:
+        logger.error(f"Activity fetch error: {e}")
+        return {"activity": [], "count": 0}
+
+
 @router.get("/price/{asset}")
 async def get_asset_price(asset: str, user: dict = Depends(get_current_user)):
     """Return current mid price for an asset."""
     try:
-        from execution.hl_executor import hl_executor
-        executor = hl_executor
+        # _get_executor replaced by app_context
+        executor = app_context.executor
         mids = executor.info.all_mids()
         price = float(mids.get(asset.upper(), 0))
         if price <= 0:
@@ -570,8 +786,11 @@ async def grid_open(request: Request, user: dict = Depends(require_role("ADMIN",
     except HTTPException: raise
     except Exception as e: logger.warning(f"Position limit check: {e}")
     try:
-        from core.grid_manager import GridManager; gm = GridManager()
-        result = gm.create_grid(asset=asset, lower_price=lower, upper_price=upper, investment_amount=investment, num_nodes=num_nodes)
+        from core.grid_manager import GridManager, grid_state_key; gm = GridManager(app_context.executor)
+        result = gm.create_grid(asset=asset, lower_price=lower, upper_price=upper, investment_amount=investment, grid_quantity=num_nodes)
+        # Register in global state and persist to disk so the monitor can pick it up
+        state.OPEN_POSITIONS[grid_state_key(asset)] = result
+        state.save_state()
         log_audit(user["id"], "GRID_OPEN", resource=asset, details=json.dumps({"lower": lower, "upper": upper, "investment": investment, "nodes": num_nodes}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Grid opened for {asset}", "result": result}
     except Exception as e:
@@ -585,7 +804,14 @@ async def grid_close(request: Request, user: dict = Depends(require_role("ADMIN"
     ip = request.client.host if request.client else "unknown"; asset = body.get("asset", "").upper()
     if not asset: raise HTTPException(status_code=400, detail="Asset required")
     try:
-        from core.grid_manager import GridManager; gm = GridManager(); result = gm.close_grid(asset=asset)
+        from core.grid_manager import GridManager, grid_state_key
+        import core.state as state
+        gm = GridManager(app_context.executor)
+        config = state.OPEN_POSITIONS.get(grid_state_key(asset))
+        if not config:
+            raise HTTPException(status_code=400, detail=f"No active grid for {asset}")
+        result = gm.close_grid(asset=asset, config=config)
+        state.save_state()  # Persist enabled=False to prevent grid from reappearing
         log_audit(user["id"], "GRID_CLOSE", resource=asset, details=json.dumps(result, default=str)[:500], ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Grid closed for {asset}", "result": result}
     except Exception as e:
@@ -595,23 +821,28 @@ async def grid_close(request: Request, user: dict = Depends(require_role("ADMIN"
 
 @router.post("/dca/open")
 async def dca_open(request: Request, user: dict = Depends(require_role("ADMIN", "OPERATOR"))):
+    """Calls the SAME shared open_dca_position() the Telegram /open_dca command uses —
+    do not reimplement DCA-open logic here. Two separate implementations is exactly
+    the class of bug that made DCA silently non-functional before tonight's fix."""
     body = await request.json(); _validate_otp_or_raise(user, body.get("otp", ""))
     ip = request.client.host if request.client else "unknown"
-    asset = body.get("asset", "").upper(); side = body.get("side", "BUY").upper()
-    base_size = float(body.get("base_order_size", 0)); tp_pct = float(body.get("take_profit_pct", 0)); sl_pct = float(body.get("stop_loss_pct", 0))
-    if not asset or side not in ("BUY", "SELL") or base_size <= 0:
-        raise HTTPException(status_code=400, detail="Invalid DCA parameters")
+    asset = body.get("asset", "").upper()
+    raw_side = body.get("side", "BUY").upper()
+    # open_dca_position speaks LONG/SHORT (matches Telegram's vocabulary); normalize here.
+    side = "LONG" if raw_side in ("BUY", "LONG") else "SHORT"
+    if not asset:
+        raise HTTPException(status_code=400, detail="Asset required")
     try:
-        import core.state as state; existing = state.OPEN_POSITIONS.get(asset)
-        if existing and existing.get("side", "").upper() != side:
-            raise HTTPException(status_code=400, detail=f"Direction conflict: existing {existing['side']} on {asset}")
-    except HTTPException: raise
-    except Exception as e: logger.warning(f"Direction check: {e}")
-    try:
-        from core.dca_manager import DCAManager; dm = DCAManager()
-        result = dm.open_dca(asset=asset, side=side, base_order_size=base_size, take_profit_pct=tp_pct, stop_loss_pct=sl_pct)
-        log_audit(user["id"], "DCA_OPEN", resource=asset, details=json.dumps({"side": side, "base_size": base_size, "tp": tp_pct, "sl": sl_pct}), ip_address=ip, otp_verified=True)
-        return {"status": "ok", "message": f"DCA opened for {asset} {side}", "result": result}
+        import main as _main
+        from core.dca_lifecycle import open_dca_position
+        result = await open_dca_position(asset, side, _main.dca_strategy)
+        if not result.get("success"):
+            log_audit(user["id"], "DCA_OPEN_FAILED", resource=asset, details=str(result.get("error"))[:500], ip_address=ip, otp_verified=True)
+            raise HTTPException(status_code=400, detail=result.get("error", "DCA open failed"))
+        log_audit(user["id"], "DCA_OPEN", resource=asset, details=json.dumps({"side": side, "result": result})[:1000], ip_address=ip, otp_verified=True)
+        return {"status": "ok", "message": result.get("message", f"DCA opened for {asset} {side}"), "result": result}
+    except HTTPException:
+        raise
     except Exception as e:
         log_audit(user["id"], "DCA_OPEN_FAILED", resource=asset, details=str(e)[:500], ip_address=ip, otp_verified=True)
         raise HTTPException(status_code=500, detail=f"DCA open failed: {str(e)[:200]}")
@@ -623,9 +854,30 @@ async def dca_close(request: Request, user: dict = Depends(require_role("ADMIN",
     ip = request.client.host if request.client else "unknown"; asset = body.get("asset", "").upper()
     if not asset: raise HTTPException(status_code=400, detail="Asset required")
     try:
-        from core.dca_manager import DCAManager; dm = DCAManager(); result = dm.close_dca(asset=asset)
-        log_audit(user["id"], "DCA_CLOSE", resource=asset, details=json.dumps(result, default=str)[:500], ip_address=ip, otp_verified=True)
+        import core.state as state
+        position = state.OPEN_POSITIONS.get(asset)
+        if not position:
+            raise HTTPException(status_code=404, detail=f"No open position for {asset}")
+        dca_config = position.get("dca", {})
+        position_side = position.get("side", "BUY").upper()
+        close_side = "SELL" if position_side in ("BUY", "LONG") else "BUY"
+
+        from core.dca_manager import DCAManager
+        dm = DCAManager(app_context.executor)
+        result = await dm.close_dca_position(asset=asset, config=dca_config, close_side=close_side)
+
+        if result.get("errors"):
+            log_audit(user["id"], "DCA_CLOSE_PARTIAL", resource=asset, details=json.dumps(result, default=str)[:500], ip_address=ip, otp_verified=True)
+        else:
+            log_audit(user["id"], "DCA_CLOSE", resource=asset, details=json.dumps(result, default=str)[:500], ip_address=ip, otp_verified=True)
+
+        if result.get("base_closed"):
+            state.OPEN_POSITIONS.pop(asset, None)
+            state.save_state()
+
         return {"status": "ok", "message": f"DCA closed for {asset}", "result": result}
+    except HTTPException:
+        raise
     except Exception as e:
         log_audit(user["id"], "DCA_CLOSE_FAILED", resource=asset, details=str(e)[:500], ip_address=ip, otp_verified=True)
         raise HTTPException(status_code=500, detail=f"DCA close failed: {str(e)[:200]}")
@@ -642,7 +894,8 @@ async def order_market(request: Request, user: dict = Depends(require_role("ADMI
     if size * float(body.get("price", 0)) < limits["min_notional"]:
         raise HTTPException(status_code=400, detail=f"Notional below minimum ${limits['min_notional']}")
     try:
-        from execution.hl_executor import hl_executor
+        # _get_executor replaced by app_context
+        executor = app_context.executor
         result = executor.market_order(asset, side, size)
         log_audit(user["id"], "ORDER_MARKET", resource=asset, details=json.dumps({"side": side, "size": size}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Market {side} {size} {asset} executed", "result": result}
@@ -662,7 +915,8 @@ async def order_limit(request: Request, user: dict = Depends(require_role("ADMIN
     if size * price < _get_risk_limits()["min_notional"]:
         raise HTTPException(status_code=400, detail=f"Notional below minimum")
     try:
-        from execution.hl_executor import hl_executor
+        # _get_executor replaced by app_context
+        executor = app_context.executor
         result = executor.limit_order(asset, side, size, price)
         log_audit(user["id"], "ORDER_LIMIT", resource=asset, details=json.dumps({"side": side, "size": size, "price": price}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Limit {side} {size} {asset} @ ${price} placed", "result": result}
@@ -680,7 +934,8 @@ async def order_stop_limit(request: Request, user: dict = Depends(require_role("
     if not asset or side not in ("BUY", "SELL") or size <= 0 or stop_price <= 0 or limit_price <= 0:
         raise HTTPException(status_code=400, detail="Invalid stop-limit parameters")
     try:
-        from execution.hl_executor import hl_executor
+        # _get_executor replaced by app_context
+        executor = app_context.executor
         result = executor.stop_limit_order(asset, side, size, stop_price, limit_price)
         log_audit(user["id"], "ORDER_STOP_LIMIT", resource=asset, details=json.dumps({"side": side, "size": size, "stop": stop_price, "limit": limit_price}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Stop-limit {side} {size} {asset} placed", "result": result}
@@ -698,7 +953,8 @@ async def order_trailing_stop(request: Request, user: dict = Depends(require_rol
     if not asset or size <= 0 or trail_pct <= 0:
         raise HTTPException(status_code=400, detail="Invalid trailing stop parameters")
     try:
-        from execution.hl_executor import hl_executor
+        # _get_executor replaced by app_context
+        executor = app_context.executor
         result = executor.trailing_stop_order(asset, side, size, trail_pct)
         log_audit(user["id"], "ORDER_TRAILING_STOP", resource=asset, details=json.dumps({"side": side, "size": size, "trail_pct": trail_pct}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Trailing stop {side} {size} {asset} ({trail_pct}%) placed", "result": result}
@@ -834,7 +1090,8 @@ async def emergency_stop(request: Request, user: dict = Depends(require_role("AD
     log_audit(user["id"], "EMERGENCY_STOP_INITIATED", ip_address=ip, otp_verified=True)
     results = {"cancelled_orders": 0, "closed_positions": 0, "errors": []}
     try:
-        from execution.hl_executor import hl_executor
+        # _get_executor replaced by app_context
+        executor = app_context.executor
         try:
             open_orders = executor.info.open_orders(executor.address)
             for order in open_orders:
@@ -895,7 +1152,7 @@ async def verify_2fa_setup(payload: dict, user: dict = Depends(require_role("ADM
         if not otp_code:
             raise HTTPException(status_code=400, detail="OTP code is required")
             
-        is_valid = verify_otp_for_user(user, otp_code)
+        is_valid = verify_otp_for_user(user["id"], otp_code)
         
         if not is_valid:
             raise HTTPException(status_code=400, detail="Invalid OTP code. Please check your authenticator app.")
@@ -958,12 +1215,22 @@ async def open_order(request: Request, user: dict = Depends(require_role("ADMIN"
             
         size_coin = size_usd / current_price
         
+        # 4.1 FINANCIAL RISK GUARD: Minimum Notional Check
+        min_notional = 10.0  # Hyperliquid minimum
+        if size_coin * current_price < min_notional:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Order size ${size_usd:.2f} is below Hyperliquid minimum ${min_notional:.2f}. Increase size."
+            )
+        
         # 5. EXECUTE VIA EXISTING ENGINE (No core code changes)
         from execution.hl_executor import execute_hl_order
         
         limit_px = None
         if order_type == "limit":
-            limit_px = current_price # Simplified for now, UI can pass specific price later
+            limit_px = float(body.get("limit_px", 0))
+            if limit_px <= 0:
+                raise HTTPException(status_code=400, detail="Limit orders require a valid limit_px")
             
         result = execute_hl_order(
             coin=asset,
@@ -973,7 +1240,42 @@ async def open_order(request: Request, user: dict = Depends(require_role("ADMIN"
             sl=sl,
             tp=tp
         )
-        
+
+        # 5.1 UPDATE IN-MEMORY POSITION STATE — without this, the position exists on the
+        # exchange but is invisible to the dashboard, Telegram, and (critically) the bot's
+        # own check_and_close_positions() SL/TP monitoring, which only reads state.OPEN_POSITIONS.
+        if result and result.get("success"):
+            import core.state as _state
+            from datetime import datetime, timezone
+            fill_price = float(result.get("avg_price") or current_price)
+            from core.trade_ledger import record_trade
+            record_trade("open", asset, "DASHBOARD_UNIFIED", side, size_coin, fill_price,
+                          order_id=result.get("order_id"))
+            _state.OPEN_POSITIONS[asset] = {
+                "side": side,
+                "entry": fill_price,
+                "size": size_coin,
+                # BUY: unset tp1/2/3 must be unreachable upward → float("inf"), confirmed
+                # against `if current_price >= pos.get("tp3", float("inf")):` in
+                # monitoring/position_tracker.py. Using 0 previously caused an instant false
+                # TP3 close on the first live test trade.
+                # SELL: no confirmed TP-trigger branch exists in check_and_close_positions —
+                # using 0 as a safe non-triggering default until that logic is verified.
+                # NOTE: float("inf") is NOT JSON-serializable and will 500 the entire
+                # /positions endpoint the moment this position is fetched. Using a large
+                # finite number instead — high enough that no real BTC/ETH/etc. price will
+                # ever reach it, but still a valid JSON number.
+                "sl": sl if sl else 0,
+                "tp1": tp if tp else (10_000_000 if side == "BUY" else 0),
+                "tp2": tp if tp else (10_000_000 if side == "BUY" else 0),
+                "tp3": tp if tp else (10_000_000 if side == "BUY" else 0),
+                "order_id": result.get("order_id", "unknown"),
+                "opened_at": datetime.now(timezone.utc),
+                "strategy": "DASHBOARD_UNIFIED",
+            }
+            _state.save_state()
+            logger.info(f"📊 Position tracked in memory: {asset} {side} @ ${fill_price} (SL: {sl}, TP: {tp})")
+
         # 6. LOG ACTION
         ip = request.client.host if request.client else "unknown"
         log_audit(
@@ -992,3 +1294,449 @@ async def open_order(request: Request, user: dict = Depends(require_role("ADMIN"
         logger.error(f"Dashboard order execution failed: {e}")
         raise HTTPException(status_code=500, detail=str(e)[:200])
 
+
+
+# ============================================================
+# DYNAMIC ASSET CATEGORIZATION (HIP-4)
+# ============================================================
+
+@router.get("/assets/categorized")
+async def get_categorized_assets(user: dict = Depends(get_current_user)):
+    """Return assets dynamically grouped by PERP, SPOT, and TRENDING."""
+    try:
+        from core.asset_universe import get_universe
+        universe = get_universe()
+        categories = universe.get_categorized_assets()
+        return {"status": "success", "data": categories}
+    except Exception as e:
+        logger.error(f"Failed to fetch categorized assets: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ============================================================
+# HIP-4 ASSET UNIVERSE ENDPOINT (with exchange toggle)
+# ============================================================
+
+# ========================================================================
+# LIVE ASSET UNIVERSE PIPELINE (Dynamic Exchange Mirror)
+# ========================================================================
+# Fetches the complete, live list of tradable assets from the exchange.
+# No hardcoded lists. No manual categorization. Mirrors the exchange exactly.
+# ========================================================================
+
+@router.get("/assets/universe")
+async def get_live_universe():
+    """
+    Fetches the live universe of assets directly from Hyperliquid Info API.
+    Uses a SINGLE API call to prevent rate limiting.
+    """
+    try:
+        import requests
+        API_URL = "https://api.hyperliquid.xyz/info"
+        
+        # 1. Single, optimized call for both metadata and live context
+        resp = requests.post(API_URL, json={"type": "metaAndAssetCtxs"}, timeout=15)
+        if resp.status_code != 200:
+            return {"success": False, "error": f"Failed to fetch market data: {resp.status_code}", "assets": []}
+        
+        data = resp.json()
+        if isinstance(data, list) and len(data) >= 2:
+            universe_list = data[0].get("universe", [])
+            context_list = data[1]
+        elif isinstance(data, dict):
+            universe_list = data.get("universe", [])
+            context_list = data.get("assetCtxs", [])
+        else:
+            universe_list = []
+            context_list = []
+            
+        live_assets = []
+        for idx, asset in enumerate(universe_list):
+            ctx = context_list[idx] if idx < len(context_list) else {}
+            name = asset.get("name", "UNKNOWN")
+            
+            # Get price
+            price_raw = ctx.get("markPx") or ctx.get("price") or 0
+            price = float(price_raw) if price_raw is not None else 0.0
+            
+            # Calculate 24h change
+            prev_px_raw = ctx.get('prevDayPx') or 0
+            prev_px = float(prev_px_raw) if prev_px_raw is not None else 0.0
+            change_24h = ((price - prev_px) / prev_px * 100) if prev_px > 0 else 0.0
+            
+            # Get volume and funding
+            day_vol_raw = ctx.get("dayNtlVlm") or 0
+            day_vol = float(day_vol_raw) if day_vol_raw is not None else 0.0
+            
+            funding_raw = ctx.get("funding") or 0
+            funding = float(funding_raw) if funding_raw is not None else 0.0
+            
+            # Native Hyperliquid CDN avatar URL
+            logo_url = f"https://static.hyperliquid.xyz/token-images/{name.lower()}.png"
+            
+            # Calculate regime based on 24h change (No extra API calls = No rate limits!)
+            abs_change = abs(change_24h)
+            if abs_change > 5.0:
+                regime = "BREAKOUT"
+            elif abs_change > 2.0:
+                regime = "TRENDING"
+            else:
+                regime = "RANGING"
+            
+            live_assets.append({
+                "symbol": name,
+                "name": name,
+                "logo_url": logo_url,
+                "category": "Perp",
+                "price": round(price, 4),
+                "volume_24h": round(day_vol, 2),
+                "change_24h": round(change_24h, 2),
+                "funding_rate": funding,
+                "max_leverage": asset.get("maxLeverage", 20),
+                "sz_decimals": asset.get("szDecimals", 4),
+                "type": "PERP",
+                "regime": regime,
+                "sparkline": [] # Left empty to prevent API rate limits
+            })
+            
+        # Sort by Volume descending
+        live_assets.sort(key=lambda x: x["volume_24h"], reverse=True)
+        
+        return {"success": True, "count": len(live_assets), "assets": live_assets}
+        
+    except Exception as e:
+        logger.error(f"Live Universe Pipeline Error: {e}")
+        return {"success": False, "error": str(e), "assets": []}
+
+
+@router.post("/terminal/candles")
+async def get_candles_terminal(request: Request, user: dict = Depends(get_current_user)):
+    """
+    Fetch candle data from Hyperliquid using existing data_fetcher.
+    POST body: {"coin": "BTC", "interval": "15m"}
+    """
+    try:
+        body = await request.json()
+        coin = body.get("coin", "BTC")
+        interval = body.get("interval", "1h")
+        
+        # Use the existing working candle fetcher
+        from core.data_fetcher import _fetch_hl_candles
+        
+        # Map interval to lookback days
+        interval_days = {
+            "1m": 1,
+            "5m": 3,
+            "15m": 7,
+            "30m": 14,
+            "1h": 30,
+            "4h": 60,
+            "1d": 365
+        }
+        lookback = interval_days.get(interval, 30)
+        
+        # Fetch candles using existing function
+        candles = _fetch_hl_candles(coin.upper(), interval, lookback)
+        
+        if not candles:
+            return []
+        
+        # Return raw HL format - frontend handles transformation
+        return candles
+        
+    except Exception as e:
+        logger.error(f"Candle fetch error: {e}")
+        return []
+
+
+def _interval_to_ms(interval: str) -> int:
+    """Convert interval to milliseconds."""
+    intervals = {
+        "1m": 60000,
+        "5m": 300000,
+        "15m": 900000,
+        "30m": 1800000,
+        "1h": 3600000,
+        "4h": 14400000,
+        "1d": 86400000
+    }
+    return intervals.get(interval, 3600000)
+
+
+# ============================================================
+# TERMINAL DATA ENDPOINT (for chart widget)
+# ============================================================
+
+@router.get("/terminal/data")
+async def get_terminal_data(user: dict = Depends(get_current_user)):
+    """Return categorized assets and current prices for chart widget."""
+    try:
+        from core.asset_universe import get_universe
+        
+        universe = get_universe()
+        categories = universe.get_categorized_assets()
+        
+        # Fetch current prices for trending assets
+        prices = {}
+        for asset in categories["TRENDING"][:10]:
+            try:
+                # Use existing price endpoint
+                import requests
+                r = requests.post(
+                    "https://api.hyperliquid.xyz/info",
+                    json={"type": "allMids"},
+                    timeout=5
+                )
+                if r.status_code == 200:
+                    all_mids = r.json()
+                    prices = {k: float(v) for k, v in all_mids.items()}
+                    break
+            except Exception:
+                continue
+        
+        return {
+            "categories": categories,
+            "prices": prices,
+            "trending": categories["TRENDING"]
+        }
+    except Exception as e:
+        logger.error(f"Terminal data error: {e}")
+        return {"categories": {"PERP": [], "SPOT": [], "TRENDING": []}, "prices": {}}
+
+
+# ============================================================
+# TRADINGVIEW UDF DATAFEED (HIP-4)
+# ============================================================
+
+@router.get("/udf/config")
+async def udf_config():
+    """TradingView UDF configuration endpoint."""
+    return {
+        "supports_search": True,
+        "supports_group_request": False,
+        "supported_resolutions": ["1", "5", "15", "30", "60", "240", "D", "W"],
+        "supports_marks": False,
+        "supports_timescale_marks": False,
+        "supports_time": True
+    }
+
+@router.get("/udf/symbols")
+async def udf_symbols(symbol: str = ""):
+    """Search symbols from HIP-4 universe."""
+    try:
+        from core.asset_universe import get_universe
+        
+        # Ensure universe is loaded
+        universe = get_universe()
+        universe._ensure_fresh()
+        
+        categories = universe.get_categorized_assets()
+        
+        # Combine all assets from all categories
+        all_assets = set()
+        for cat_name, cat_assets in categories.items():
+            if isinstance(cat_assets, list):
+                all_assets.update(cat_assets)
+        
+        # Filter by search query if provided
+        if symbol:
+            filtered = [a for a in all_assets if symbol.upper() in a.upper()]
+        else:
+            # Return all assets if no search query
+            filtered = list(all_assets)
+        
+        # Format for TradingView
+        symbols = []
+        for asset in sorted(filtered)[:100]:  # Limit results
+            symbols.append({
+                "name": asset,
+                "full_name": f"HYPERLIQUID:{asset}",
+                "description": f"{asset} Perpetual on Hyperliquid",
+                "exchange": "HYPERLIQUID",
+                "ticker": asset,
+                "type": "crypto",
+                "session": "24x7",
+                "timezone": "Etc/UTC",
+                "minmov": 1,
+                "minmove2": 0,
+                "pricescale": 100,
+                "has_intraday": True,
+                "has_no_volume": False,
+                "supported_resolutions": ["1", "5", "15", "30", "60", "240", "D", "W"],
+                "volume_precision": 2,
+                "data_status": "streaming"
+            })
+        
+        logger.info(f"UDF symbols: returned {len(symbols)} assets for query '{symbol}'")
+        return symbols
+    except Exception as e:
+        logger.error(f"UDF symbols error: {e}", exc_info=True)
+        return []
+
+@router.get("/udf/history")
+async def udf_history(symbol: str, resolution: str, from_time: int, to_time: int):
+    """Fetch candle history from HIP-4 for TradingView."""
+    try:
+        from core.data_fetcher import _fetch_hl_candles
+        
+        # Map resolution to interval
+        resolution_map = {
+            "1": "1m",
+            "5": "5m",
+            "15": "15m",
+            "30": "30m",
+            "60": "1h",
+            "240": "4h",
+            "D": "1d",
+            "W": "1w"
+        }
+        interval = resolution_map.get(resolution, "1h")
+        
+        # Calculate lookback days based on time range
+        lookback_days = max(1, (to_time - from_time) // 86400)
+        
+        # Fetch candles
+        candles = _fetch_hl_candles(symbol, interval, lookback_days)
+        
+        if not candles:
+            return {"s": "no_data"}
+        
+        # Transform to UDF format
+        times = []
+        opens = []
+        highs = []
+        lows = []
+        closes = []
+        volumes = []
+        
+        for c in candles:
+            times.append(c["t"] // 1000)
+            opens.append(float(c["o"]))
+            highs.append(float(c["h"]))
+            lows.append(float(c["l"]))
+            closes.append(float(c["c"]))
+            volumes.append(float(c.get("v", 0)))
+        
+        return {
+            "s": "ok",
+            "t": times,
+            "o": opens,
+            "h": highs,
+            "l": lows,
+            "c": closes,
+            "v": volumes
+        }
+    except Exception as e:
+        logger.error(f"UDF history error for {symbol}: {e}")
+        return {"s": "error", "errmsg": str(e)}
+
+@router.post("/close")
+async def dashboard_close_position(request: Request, user: dict = Depends(require_role("ADMIN", "OPERATOR"))):
+    """Close a position completely using unified core logic."""
+    try:
+        import json as json_module
+        raw_body = await request.body()
+        try:
+            body = json_module.loads(raw_body)
+        except json_module.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
+        
+        # 1. SECURITY: Enforce OTP
+        _validate_otp_or_raise(user, str(body.get("otp", "")))
+        
+        # 2. PARSE INPUT
+        asset = str(body.get("asset", "")).strip().upper()
+        if not asset:
+            raise HTTPException(status_code=400, detail="Asset required")
+        
+        # 3. EXECUTE VIA UNIFIED CORE LOGIC
+        executor = app_context.executor
+
+        # Capture live size/side BEFORE closing, purely for ledger logging —
+        # close_position()'s own result has no size field (only order_id/avg_price/status).
+        _pre_close_size = 0.0
+        _pre_close_side = ""
+        try:
+            _positions = executor.get_open_positions()
+            _target = next((p for p in _positions if p.get("coin") == asset.upper()), None)
+            if _target:
+                _pre_close_size = float(_target.get("size", 0))
+                _pre_close_side = _target.get("side", "")
+        except Exception as _e:
+            logger.error(f"Failed to capture pre-close position size for ledger: {_e}")
+
+        result = executor.close_position(asset)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Close failed"))
+        
+        # 3.1 LOG TO TRADE LEDGER (Activity panel reads this — without it, closes are invisible there)
+        try:
+            from core.trade_ledger import record_trade
+            exit_price = float(result.get("avg_price", 0) or 0)
+            record_trade("close", asset, "MANUAL_DASHBOARD", _pre_close_side,
+                          _pre_close_size, exit_price, order_id=result.get("order_id"))
+        except Exception as _e:
+            logger.error(f"Failed to record close trade in ledger: {_e}")
+
+        # 4. LOG ACTION
+        ip = request.client.host if request.client else "unknown"
+        log_audit(user["id"], "POSITION_CLOSED", resource=asset, 
+                  details=json_module.dumps({"result": str(result)}), ip_address=ip, otp_verified=True)
+        
+        return {"status": "success", "message": f"Position {asset} closed", "data": result}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Dashboard close failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@router.get("/meta_learner")
+async def dashboard_meta_learner(user: dict = Depends(get_current_user)):
+    """Expose MetaLearner weights and strategy status to the dashboard."""
+    try:
+        from core.meta_learner import get_meta_learner
+        meta = get_meta_learner()
+        
+        return {
+            "status": "active",
+            "weights": meta.weights,
+            "strategies": list(next(iter(meta.weights.values())).keys()) if meta.weights else [],
+            "regimes": list(meta.weights.keys())
+        }
+    except Exception as e:
+        logger.error(f"MetaLearner status error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/stream/prices")
+async def stream_prices():
+    """
+    Server-Sent Events endpoint for real-time price updates.
+    Proxies Hyperliquid WebSocket 'allMids' channel.
+    """
+    from fastapi.responses import StreamingResponse
+    import json
+    
+    async def event_generator():
+        import websockets
+        try:
+            async with websockets.connect("wss://api.hyperliquid.xyz/ws") as ws:
+                # Subscribe to all mids (mid prices for all assets)
+                await ws.send(json.dumps({
+                    "type": "subscribe",
+                    "subscription": {"type": "allMids"}
+                }))
+                
+                async for message in ws:
+                    data = json.loads(message)
+                    if data.get("channel") == "allMids":
+                        yield f"data: {json.dumps(data['data']['mids'])}\n\n"
+        except Exception as e:
+            logger.error(f"SSE WebSocket error: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

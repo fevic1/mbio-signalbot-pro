@@ -1,3 +1,4 @@
+from routes.dashboard_auth import get_current_user
 """
 HIP-4 Market Spec API Routes
 Phase 13: Multi-Asset Integration for MBIO SignalBot Pro
@@ -122,3 +123,28 @@ async def get_asset_price(asset: str = Query(..., description="Asset symbol")):
     except Exception as e:
         logger.error(f"Price fetch error for {asset}: {e}")
         return {"success": False, "error": str(e)}
+
+
+@router.get("/assets/categorized")
+async def get_categorized_assets(user: dict = Depends(get_current_user)):
+    """Return assets grouped by PERP, SPOT, and TRADFI."""
+    try:
+        from core.hip4_metadata import HIP4MetadataManager
+        manager = HIP4MetadataManager.get_instance()
+        categories = manager.categorize_assets()
+        
+        return {
+            "success": True,
+            "categories": categories,
+            "summary": {
+                "PERP": len(categories.get("PERP", [])),
+                "SPOT": len(categories.get("SPOT", [])),
+                "TRADFI": len(categories.get("TRADFI", [])),
+                "total": sum(len(v) for v in categories.values())
+            }
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to categorize assets: {e}")
+        return {"success": False, "error": str(e), "categories": {"PERP": [], "SPOT": [], "TRADFI": []}}

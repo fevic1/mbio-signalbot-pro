@@ -6,6 +6,7 @@ Manages execution, tracking, sizing, and safety circuit breakers.
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone
 import core.state as state
 from core.trade_ledger import record_trade
 
@@ -151,7 +152,12 @@ async def _execute_reentry(asset: str, chat_id: str, params: dict = None) -> Non
             })
 
         state.OPEN_POSITIONS[asset] = {
-            "side": side,
+            # NOTE: stored as BUY/SELL, not LONG/SHORT — check_and_close_positions()
+            # in monitoring/position_tracker.py compares against "BUY" literally, and
+            # storing "LONG" here silently broke the close logic (it would re-enter
+            # same-direction instead of closing, doubling exposure). See tonight's
+            # DCA-position-doubling incident.
+            "side": "BUY" if side == "LONG" else "SELL",
             "entry": entry_price,
             "size": base_size,
             "sl": sl_price,
@@ -177,6 +183,122 @@ async def _execute_reentry(asset: str, chat_id: str, params: dict = None) -> Non
 
     except Exception as e:
         logger.error(f"❌ Auto-DCA re-entry failed for {asset}: {e}")
+
+
+async def open_dca_position(asset: str, side: str, dca_strategy) -> dict:
+    """
+    Shared DCA-open logic — the single source of truth for opening a new DCA
+    position. Used by both the Telegram /open_dca command and the dashboard's
+    /dca/open endpoint, so the two callers cannot drift apart the way the old
+    duplicated implementations did.
+
+    Returns a result dict: {"success": bool, "message": str, ...details}
+    Does NOT talk to Telegram or FastAPI directly — callers format the
+    response for their own transport.
+    """
+    if asset not in ["BTC", "ETH"]:
+        return {"success": False, "error": "DCA Strategy only supports BTC and ETH."}
+    if side not in ["LONG", "SHORT"]:
+        return {"success": False, "error": "Side must be LONG or SHORT."}
+    # 🛡️ FINANCIAL RISK GUARD: Check global state to prevent duplicate base orders
+    if asset in state.OPEN_POSITIONS:
+        return {"success": False, "error": f"{asset} already has an active position in global state."}
+    if asset in dca_strategy.positions:
+        return {"success": False, "error": f"{asset} already has an active DCA position."}
+
+    try:
+        from core.data_fetcher import get_mtf_data, get_account_balance
+        data = get_mtf_data(f"{asset}-USD")
+        if not data or "1h" not in data:
+            return {"success": False, "error": "Failed to fetch market data."}
+
+        current_price = float(data["1h"]["price"])
+        atr = float(data["1h"]["atr"])
+        balance = get_account_balance()
+        
+        # 🛡️ FINANCIAL RISK GUARD: Prevent SL below liquidation price (20x leverage = ~5% liq)
+        # We enforce a strict 5.5% minimum SL distance for LONGs to account for fees and slippage.
+        min_sl_distance_pct = 0.055 
+        calculated_sl_distance = atr * dca_strategy.config.SL_ATR_MULT
+        
+        if side == "LONG":
+            if calculated_sl_distance > (current_price * min_sl_distance_pct):
+                logger.error(f"🚫 RISK BLOCK: Calculated SL for {asset} is below safe liquidation buffer. Aborting.")
+                return {"success": False, "error": "ATR too high for safe SL placement at current leverage. Risk of liquidation."}
+            sl_distance = calculated_sl_distance
+        else:
+            sl_distance = calculated_sl_distance
+
+        risk_amount = balance * 0.01
+        base_size = risk_amount / sl_distance if sl_distance > 0 else 0
+
+        if base_size <= 0:
+            return {"success": False, "error": "Calculated size is too small."}
+
+        from execution.hl_executor import execute_hl_order
+        result = execute_hl_order(
+            coin=asset, side="BUY" if side == "LONG" else "SELL",
+            size=base_size, strategy="DCA", regime="AUTO"
+        )
+
+        if not result.get("success"):
+            return {"success": False, "error": result.get("error", "Order failed")}
+
+        from strategies.institutional_dca import PositionState
+        pos = PositionState(
+            asset=asset, side=side, size=base_size, entry_price=current_price,
+            active_so_count=0, last_order_price=current_price,
+            trailing_stop=current_price - atr * dca_strategy.config.TRAILING_ATR_MULT
+                if side == "LONG" else current_price + atr * dca_strategy.config.TRAILING_ATR_MULT,
+        )
+        dca_strategy.positions[asset] = pos
+
+        # 🛡️ Define DCA parameters locally to prevent NameError and ensure consistency
+        max_levels = 3
+        spacing_pct = 1.2
+        size_multiplier = 1.25
+
+        state.OPEN_POSITIONS[asset] = {
+            # NOTE: stored as BUY/SELL, not LONG/SHORT — see note in _execute_reentry
+            # above for why this matters (check_and_close_positions compares == "BUY").
+            "side": "BUY" if side == "LONG" else "SELL", "entry": current_price, "size": base_size,
+            "sl": current_price - sl_distance if side == "LONG" else current_price + sl_distance,
+            "tp1": current_price + atr * dca_strategy.config.TP1_MULT if side == "LONG" else current_price - atr * dca_strategy.config.TP1_MULT,
+            "tp2": current_price + atr * dca_strategy.config.TP2_MULT if side == "LONG" else current_price - atr * dca_strategy.config.TP2_MULT,
+            "tp3": current_price + atr * dca_strategy.config.TP3_MULT if side == "LONG" else current_price - atr * dca_strategy.config.TP3_MULT,
+            "order_id": result.get("order_id"),
+            "opened_at": datetime.now(timezone.utc).isoformat(),
+            "strategy": "MANUAL_DCA",
+            "dca": {
+                "enabled": True,
+                "trailing": True,  # REQUIRED for background task to manage orders
+                "direction": side,
+                "levels": max_levels,
+                "spacing_pct": spacing_pct,
+                "size_multiplier": size_multiplier,
+                "base_size": base_size,
+                "active_orders": [],  # Will be populated by dca_manager
+                "filled_levels": [1], # Level 1 (base) is filled
+                "total_invested": round(base_size * current_price, 2),
+                "avg_entry": current_price,
+            },
+        }
+
+        activate_auto_dca(
+            asset=asset, direction=side, base_size=base_size,
+            max_levels=max_levels, spacing_pct=spacing_pct, size_multiplier=size_multiplier,
+            tp_pct=1.0, sl_pct=4.0,
+        )
+
+        logger.info(f"✅ DCA opened via open_dca_position: {asset} {side} @ ${current_price:.2f}")
+        return {
+            "success": True,
+            "message": f"DCA Position Opened: {asset} {side} @ ${current_price:.2f} | Size: {base_size:.4f} | Auto-DCA ACTIVATED",
+            "asset": asset, "side": side, "entry": current_price, "size": base_size,
+        }
+    except Exception as e:
+        logger.error(f"❌ Error opening DCA for {asset}: {e}")
+        return {"success": False, "error": str(e)}
 
 
 def activate_auto_dca(asset: str, direction: str, base_size: float,

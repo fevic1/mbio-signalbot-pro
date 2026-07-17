@@ -8,6 +8,7 @@ import asyncio
 import os
 import re
 import logging
+from core.app_context import app_context
 from datetime import datetime, timezone
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -236,7 +237,7 @@ async def cmd_positions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     from config_loader import get_config
 
     cfg = get_config()
-    assets_map = cfg.get("assets", {}).get("crypto", {})
+    assets_map = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("assets", {}).get("crypto", {})
 
     msg = "📊 <b>MBIO OPEN POSITIONS</b>\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -323,9 +324,8 @@ async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         pos = state.OPEN_POSITIONS[asset]
 
         # Query live exchange using verified normalized format
-        from execution.hl_executor import HLExecutor as _HLExec
-        _exec = _HLExec()
-        _live_positions = _exec.get_open_positions() or []
+        from core.app_context import app_context
+        _live_positions = app_context.executor.get_open_positions() or []
         _live_pos = None
         for _item in _live_positions:
             if isinstance(_item, dict) and _item.get("coin") == asset:
@@ -488,7 +488,7 @@ async def _close_position(asset: str, reply_fn=None) -> bool:
     from config_loader import get_config
 
     cfg = get_config()
-    hl_assets = {a: a for a in cfg.get("hyperliquid", {}).get("assets", [])}
+    hl_assets = {a: a for a in (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("hyperliquid", {}).get("assets", [])}
 
     try:
         pos = state.OPEN_POSITIONS[asset]
@@ -566,12 +566,12 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         notional = sum(p.get("size", 0) * p.get("entry", 0) for p in positions.values())
         deployed_pct = (notional / balance * 100) if balance > 0 else 0
 
-        intervals = cfg.get("intervals", {})
+        intervals = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("intervals", {})
         quick_min = intervals.get("quick_scanner_sec", 900) // 60
         entry_min = intervals.get("entry_scanner_sec", 1800) // 60
         full_hours = intervals.get("full_analysis_hours", 2)
 
-        ai_cfg = cfg.get("ai", {})
+        ai_cfg = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("ai", {})
         providers = ", ".join(ai_cfg.get("provider_order", ["groq", "cerebras", "openrouter"]))
 
         try:
@@ -691,7 +691,7 @@ async def cmd_signal_source(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         new_mode = args[0].lower()
     else:
         cfg = config_loader.get_config()
-        current = cfg.get("execution", {}).get("signal_source", "both")
+        current = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("execution", {}).get("signal_source", "both")
         idx = valid.index(current) if current in valid else 2
         new_mode = valid[(idx + 1) % len(valid)]
 
@@ -728,7 +728,7 @@ async def cmd_strategy_select(update: Update, context: ContextTypes.DEFAULT_TYPE
         msg = "📋 <b>Available Strategies</b>\n━━━━━━━━━━━━━━━━━━━━\n"
         with open(yaml_path, 'r') as f:
             cfg = yaml.safe_load(f) or {}
-        current = cfg.get("execution", {}).get("active_strategy", "NONE")
+        current = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("execution", {}).get("active_strategy", "NONE")
         for s in valid:
             icon = "🟢" if s == current else "⚪"
             msg += f"{icon} <code>{s}</code>\n"
@@ -778,8 +778,8 @@ async def cmd_dca_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await update.message.reply_text(f"ℹ️ {asset} has no active DCA configuration")
             return
 
-        from execution.hl_executor import HLExecutor
-        executor = HLExecutor()
+        # HLExecutor now from app_context
+        executor = app_context.executor
         mids = executor.info.all_mids()
         current_price = float(mids.get(asset, 0))
         if current_price <= 0:
@@ -903,10 +903,10 @@ async def cmd_open_grid(update, context):
     
     # PHASE 3: Execute (network + state mutations)
     try:
-        from execution.hl_executor import HLExecutor
+        # HLExecutor now from app_context
         from core.grid_manager import GridManager, grid_state_key
         
-        executor = HLExecutor()
+        executor = app_context.executor
         mids = executor.info.all_mids()
         current_price = float(mids.get(asset, 0))
         if current_price <= 0:
@@ -1033,9 +1033,9 @@ async def cmd_close_grid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     try:
         from core.grid_manager import GridManager, grid_state_key
-        from execution.hl_executor import HLExecutor
+        # HLExecutor now from app_context
 
-        executor = HLExecutor()
+        executor = app_context.executor
         grid = GridManager(executor)
         key = grid_state_key(asset)
         config = state.OPEN_POSITIONS.get(key)
@@ -1089,7 +1089,7 @@ async def grid_monitor_task():
     import asyncio
     import core.state as gs_state
     from core.grid_manager import GridManager, is_grid_position, grid_asset_from_key
-    from execution.hl_executor import HLExecutor
+    # HLExecutor now from app_context
 
     logger.info("📋 grid_monitor task loop started")
 
@@ -1097,7 +1097,7 @@ async def grid_monitor_task():
         try:
             await asyncio.sleep(120)
 
-            executor = HLExecutor()
+            executor = app_context.executor
             grid_mgr = GridManager(executor)
 
             for key in list(gs_state.OPEN_POSITIONS.keys()):

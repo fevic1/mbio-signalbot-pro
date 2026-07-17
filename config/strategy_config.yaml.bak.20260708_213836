@@ -1,0 +1,221 @@
+ai:
+  batch_size: 1
+  groq: null
+  max_retries: 3
+  models:
+    cerebras: gpt-oss-120b
+    groq: llama-3.3-70b-versatile
+    openrouter: meta-llama/llama-3.1-70b-instruct
+  provider_order:
+  - groq
+  - cerebras
+  - openrouter
+  retry_backoff_sec: 10
+  retry_delay_seconds: 30
+assets:
+  crypto:
+    AVAX: AVAX-USD
+    BTC: BTC-USD
+    DOGE: DOGE-USD
+    ETH: ETH-USD
+    HYPE: HYPE-USD
+    LINK: LINK-USD
+    SOL: SOL-USD
+    XRP: XRP-USD
+correlation_groups:
+- assets:
+  - BTC
+  - ETH
+  - SOL
+  - AVAX
+  max_positions: 2
+  name: Layer 1 Blockchains
+- assets:
+  - XRP
+  - DOGE
+  - HYPE
+  - BNB
+  max_positions: 2
+  name: Altcoins
+- assets:
+  - BTC
+  - ETH
+  max_positions: 1
+  name: High Correlation
+early_exit:
+  consecutive_checks: 2
+  cooldown_minutes: 30
+  enabled: true
+  pattern_threshold: LIKELY_LOSER
+  pnl_threshold: -1.5
+hyperliquid:
+  assets:
+  - BTC
+  - ETH
+  - SOL
+  - XRP
+  - DOGE
+  - AVAX
+  - LINK
+  - HYPE
+  default_fallback_prices:
+    BTC: 63000.0
+    DOGE: 0.087
+    ETH: 1700.0
+    SOL: 67.0
+    XRP: 1.17
+idle_monitor:
+  confidence_reduction: 10
+  enabled: true
+  idle_hours_before_relax: 1.0
+  min_confidence_threshold: 60
+intervals:
+  big_move_threshold: 0.02
+  cache_price_threshold: 0.0
+  entry_scanner_sec: 900
+  full_analysis_hours: 0.5
+  position_monitor_sec: 60
+  quick_scanner_sec: 300
+min_confidence: 80
+position_age:
+  enabled: true
+  exclude_assets: []
+  max_age_hours: 72
+  warning_age_hours: 48
+risk:
+  drawdown_halt_pct: -15.0
+  large_account_max_pct: 0.2
+  max_risk_per_trade_pct: 0.03
+  max_total_exposure_pct: 8.0
+  max_total_risk_pct: 0.1
+  small_account_max_pct: 0.5
+  small_account_threshold: 100
+risk_guard:
+  cooldown_minutes: 30
+  max_consecutive_losses: 3
+  max_daily_loss_pct: -5.0
+  max_open_positions: 4
+  max_position_pct: 0.5
+  min_trade_interval_sec: 60
+scanner:
+  full_analysis_interval_h: 1
+  quick_scan_interval_min: 5
+  quick_scan_threshold_pct: 2.0
+sentiment:
+  btc_trend_filter: true
+  enabled: true
+  news_filter: true
+signals:
+  buy_1d_rsi_max: 38
+  confidence_bands:
+    regular_signal_conf_max: 84
+    regular_signal_conf_min: 60
+    strong_signal_conf_max: 95
+    strong_signal_conf_min: 85
+    weak_signal_conf_max: 69
+    weak_signal_conf_min: 50
+  sell_1d_rsi_min: 62
+  strong_buy_1d_rsi_max: 35
+  strong_buy_1h_rsi_max: 45
+  strong_sell_1d_rsi_min: 65
+  strong_sell_1h_rsi_min: 58
+smart_entry:
+  enabled: true
+  initial_pct: 0.5
+  max_pending_per_asset: 1
+  pullback_pct: 0.005
+smart_exit:
+  enabled: true
+  max_age_hours: 72
+  tp1_partial_pct: 0.4
+  tp2_partial_pct: 0.35
+trade_plan:
+  min_atr_pct: 0.02
+  sl_atr_multiplier: 1.5
+  tp1_atr_multiplier: 0.8
+  tp2_atr_multiplier: 1.8
+  tp3_atr_multiplier: 3.5
+trading:
+correlation_groups:
+  - assets: [BTC, ETH, SOL, AVAX]
+    max_positions: 2
+    name: Layer 1 Blockchains
+  - assets: [XRP, DOGE, HYPE, BNB]
+    max_positions: 2
+    name: Altcoins
+  - assets: [BTC, ETH]
+    max_positions: 2
+    name: High Correlation 
+execution:
+  max_positions: 3
+  min_confidence: 70
+  risk_per_trade_pct: 0.05
+  default_notional: 20.0
+  signal_source: both
+  active_strategy: TV_BOS_V6
+  ratchet_min_net_profit_usd: 1.0
+  taker_fee_pct: 0.00035
+dca:
+  max_levels: 3
+  level_spacing_pct: 1.2
+  size_multiplier: 1.25
+  tp_pct: 1.0
+  sl_pct: 4.0
+  tp_recalc_on_fill: true
+  cancel_unfilled_on_exit: true
+  min_notional: 10.0
+  min_notional_buffer: 1.15
+  default_levels: 4
+  default_spacing_pct: 1.5
+  default_multiplier: 1.3
+  trailing_offset_pct: 1.0
+  profit_target_pct: 20.0
+  trailing_enabled: true
+  trailing_update_threshold: 2.0
+  profit_target_check_interval: 120
+  max_total_dca_exposure_pct: 3.0
+  pause_on_large_drop_pct: 5.0
+  resume_after_stabilization_min: 30
+auto_dca:
+  reentry_cooldown_sec: 60
+  max_consecutive_losses: 3
+  pause_after_loss_min: 30
+  reuse_last_params: true
+  telegram_notify_reentry: true
+grid:
+  default_profit_per_grid_pct: 0.5
+  default_grid_quantity: 10
+  min_grid_quantity: 2
+  max_grid_quantity: 50
+  min_investment_usd: 10
+  max_investment_usd: 500
+  default_stop_loss_pct: 10.0
+  default_take_profit_pct: 5.0
+  min_margin_usd: 3.0
+  capital_recycle_divisor: 4
+  reversal:
+    enabled: true
+    step_size_override: null
+    max_concurrent_orders: 4
+    flip_on_fill: true
+execution_precision:
+  BTC: 5
+  ETH: 4
+  SOL: 2
+  XRP: 0
+  DOGE: 0
+  HYPE: 2
+  BNB: 3
+  AVAX: 2
+  LINK: 2
+
+# ==========================================
+# DYNAMIC UNIVERSE STANDARD (HIP-4)
+# ==========================================
+universe:
+  mode: "dynamic"           # "static" (use hardcoded list) or "dynamic" (fetch from exchange)
+  source: "HIP4"            # Fetch from HIP-4 Metadata Manager
+  filter: "top_volume"      # Sort by 24h trading volume
+  top_n: 50                 # Automatically trade the top 50 most liquid assets
+  min_volume_usd: 1000000   # Ignore "dead" coins with less than $1M daily volume
+  exclude_stablecoins: true # Auto-exclude USDC, USDT, FDUSD

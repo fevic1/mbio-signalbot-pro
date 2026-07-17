@@ -1,3 +1,23 @@
+
+/* MBIO AUTH INTERCEPTOR: Fixes EventSource header limitation */
+(function(){
+    const _origES = window.EventSource;
+    if (!_origES) return;
+    window.EventSource = function(url, opts) {
+        if (url && typeof url === 'string' && url.includes('/api/dashboard/stream')) {
+            const t = localStorage.getItem('mbio_token') || localStorage.getItem('token') || localStorage.getItem('access_token') || '';
+            if (t && !url.includes('token=')) {
+                url += (url.includes('?') ? '&' : '?') + 'token=' + t;
+                console.log('[MBIO] Intercepted SSE stream, appended auth token.');
+            }
+        }
+        return new _origES(url, opts);
+    };
+    window.EventSource.prototype = _origES.prototype;
+    window.EventSource.CONNECTING = _origES.CONNECTING;
+    window.EventSource.OPEN = _origES.OPEN;
+    window.EventSource.CLOSED = _origES.CLOSED;
+})();
 /**
  * MBIO SignalBot Pro - Centralized API Module
  * Phase 12 Migration: Extracted from frontend/index.html

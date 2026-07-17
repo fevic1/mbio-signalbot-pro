@@ -1,84 +1,33 @@
-# === SECRETS ===
+# Environment & Secrets
 .env
+.env.local
 *.key
-*.pem
-*.p12
-credentials.json
-service-account*.json
 
-# === RUNTIME DATA ===
-data/
-state.json
-agent.log
-*.db
-chroma_db/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
 
-# === BACKUPS & TEMP ===
-*.backup.*
-*.bak.*
-*.swp
-*.tar.gz
-backup_*/
-mbio_backup_*
-
-# === THIRD-PARTY SDKs ===
-gsutil/
-google-cloud-sdk/
-which gsutil/
-install_dir/
-node_modules/
-package-lock.json
-
-# === BUILD ARTIFACTS ===
-.docker.swp
-.compose.swp
-.mbio-signalbot.swp
-CACHED
-exporting
-transferring
-unpacking
-resolving
-reading
-naming
-resolve
-0
-=
-=0.4.22
-=2.2.2
-
-# === IDE/OS ===
+# IDE & OS
+.DS_Store
 .vscode/
 .idea/
-.DS_Store
 
-# === MBIO Safety Rules ===
-.env
-*.env
-__pycache__/
-*.pyc
-*.pyo
-backup_*/
-*.backup
-*.backup.*
-data/signals.db
-data/exit_analytics.json
-data/grid_state.json
-data/chroma_db/
-scripts/archived/
-
-# === MBIO Safety Rules ===
-.env
-*.env
-__pycache__/
-*.pyc
-*.pyo
-backup_*/
-*.backup
-*.backup.*
-data/signals.db
-data/exit_analytics.json
-data/grid_state.json
-data/chroma_db/
-scripts/archived/
+# Project specific junk (Prevent committing broken/test files)
+.archive_cleanup_*/
+*.broken
+*.save
+*.bak
+test_*.py
+verify_*.sh
+apply_fixes.sh
+restore_baseline.py
+wire_asset_universe_final.py
+latest_logs.txt
+SESSION_LOG.md
+26.1.2
+POST

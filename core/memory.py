@@ -1,4 +1,5 @@
 import chromadb
+from chromadb.config import Settings
 from datetime import datetime
 import logging
 
@@ -7,7 +8,7 @@ logger = logging.getLogger(__name__)
 class TradeMemory:
     def __init__(self, persist_dir: str = "/app/data/chroma_db"):
         """Initialize ChromaDB and create the trade_history collection."""
-        self.client = chromadb.PersistentClient(path=persist_dir)
+        self.client = chromadb.PersistentClient(path=persist_dir, settings=Settings(anonymized_telemetry=False))
         self.collection = self.client.get_or_create_collection(
             name="trade_history",
             metadata={"hnsw:space": "cosine"}

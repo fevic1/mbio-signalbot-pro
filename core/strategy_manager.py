@@ -117,7 +117,20 @@ class StrategyManager:
                 else:
                     pass  # 🛡️ Auto-fixed empty block
         winner = locals().get("winner", "ENSEMBLE")
-        logger.info(f"🏆 Ensemble Vote: {final_signal} | Winning Strategy: {winner} | Consensus Score: {conf}%")
+        
+        # 🛡️ INSTITUTIONAL REGIME GATE: Enforce directional rules before execution
+        if final_signal != "HOLD":
+            if self.current_regime == "TRENDING_UP" and final_signal == "SELL":
+                logger.info(f"🚫 REGIME GATE: Blocked SELL signal in TRENDING_UP regime (prevents counter-trend shorts).")
+                final_signal, conf, winner = "HOLD", 0, "REGIME_GATE"
+            elif self.current_regime == "TRENDING_DOWN" and final_signal == "BUY":
+                logger.info(f"🚫 REGIME GATE: Blocked BUY signal in TRENDING_DOWN regime (prevents catching falling knives).")
+                final_signal, conf, winner = "HOLD", 0, "REGIME_GATE"
+            elif self.current_regime == "RANGING" and winner in ["Momentum", "Breakout"]:
+                logger.info(f"🚫 REGIME GATE: Blocked directional {winner} signal in RANGING regime (prevents false breakouts).")
+                final_signal, conf, winner = "HOLD", 0, "REGIME_GATE"
+
+        logger.info(f"🏆 Ensemble Vote: {final_signal} | Winning Strategy: {winner} | Consensus Score: {conf}% | Regime: {self.current_regime}")
         return final_signal, conf, winner
 
     async def _get_strategy_signal(self, strat, data, name):

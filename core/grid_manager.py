@@ -219,6 +219,21 @@ class GridManager:
 
         results = {"fills_detected": 0, "flips_executed": 0, "orders_placed": 0, "tp_orders_placed": 0, "errors": []}
         
+        # NEW: Direct order-existence verification to prevent zombie cancellation loops
+        try:
+            open_orders = self.executor.info.open_orders(self.executor.address)
+            live_order_ids = {str(o.get("oid")) for o in open_orders if o.get("coin") == asset}
+            
+            for node in config.get("nodes", []):
+                if node["status"] == "OPEN" and node.get("order_id"):
+                    if str(node["order_id"]) not in live_order_ids:
+                        logger.warning(f"🔲 Node L{node['level_index']} order {node['order_id']} vanished from exchange. Marking CANCELLED.")
+                        node["status"] = "CANCELLED"
+                        node["order_id"] = None
+        except Exception as e:
+            logger.error(f"❌ Order existence check failed for {asset}: {e}")
+            results["errors"].append(f"Order check failed: {str(e)}")
+
         # PRIMARY: Sync against exchange open_orders (most reliable fill detection)
         sync_result = self.sync_pending_orders(asset, config)
         results["fills_detected"] += sync_result.get("fills_detected", 0)
@@ -282,7 +297,11 @@ class GridManager:
             if node["status"] == "OPEN" and node.get("order_id"):
                 try:
                     cancel = self.executor.cancel_order(coin=asset, order_id=int(node["order_id"]))
-                    if cancel.get("success"):
+                    # Mark as CANCELLED even if exchange says "already canceled" to prevent loop
+                    cancel_result = cancel.get("result", {})
+                    statuses = cancel_result.get("response", {}).get("data", {}).get("statuses", [])
+                    has_already_canceled = any("already canceled" in str(s.get("error", "")).lower() for s in statuses)
+                    if cancel.get("success") or has_already_canceled:
                         results["orders_cancelled"] += 1
                         node["status"] = "CANCELLED"
                 except Exception as e:

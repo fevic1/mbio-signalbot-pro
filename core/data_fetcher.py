@@ -66,15 +66,57 @@ def get_account_balance() -> float:
         info = Info(_hl_api_url(), skip_ws=True)
         address = os.getenv("HL_ACCOUNT_ADDRESS", "")
         if not address:
-            logger.warning("HL_ACCOUNT_ADDRESS not set — using fallback balance $5")
-            return 5.0
+            logger.warning("HL_ACCOUNT_ADDRESS not set — returning 0.0")
+            return 0.0
         state = info.user_state(address)
-        balance = float(state.get("marginSummary", {}).get("accountValue", 0))
-        logger.info(f"💰 Account balance: ${balance:.2f}")
-        return max(balance, 1.0)
+        # Universal safe extraction: handle dict, SDK objects, and edge cases
+        # Step 1: Extract margin_summary
+        margin_summary = None
+        if isinstance(state, dict):
+            margin_summary = state.get("marginSummary")
+        elif hasattr(state, "marginSummary"):
+            margin_summary = getattr(state, "marginSummary", None)
+        else:
+            # Fallback: try dict-style get on any object (handles custom dict-like SDK responses)
+            try:
+                margin_summary = state.get("marginSummary") if hasattr(state, "get") else None
+            except:
+                margin_summary = None
+        
+        # Step 2: Extract account_value
+        account_value = None
+        if isinstance(margin_summary, dict):
+            account_value = margin_summary.get("accountValue", 0)
+        elif hasattr(margin_summary, "accountValue"):
+            account_value = getattr(margin_summary, "accountValue", 0)
+        else:
+            # Fallback: try dict-style get
+            try:
+                account_value = margin_summary.get("accountValue") if hasattr(margin_summary, "get") else 0
+            except:
+                account_value = 0
+        
+        # UNCONDITIONAL FORCE LOG: Reveal account_value before condition
+        # Step 3: Convert to float safely with diagnostic logging
+
+        try:
+            if account_value in (None, "", "0", 0, 0.0):
+                balance = 0.0
+                # Log diagnostic info only if balance is zero (avoid log spam)
+                logger.info(f"🔍 DEBUG VISIBLE: state={type(state)}, margin_summary={margin_summary}, account_value={account_value}")
+                # Also log specific checks
+                if margin_summary:
+                    logger.info(f"🔍 DEBUG VISIBLE: margin_summary keys={margin_summary.keys() if isinstance(margin_summary, dict) else dir(margin_summary)}")
+            else:
+                balance = float(account_value)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"⚠️ Invalid accountValue: {account_value} (type: {type(account_value)}, error: {e})")
+            balance = 0.0
+        logger.info(f"💰 Account balance (Address: {address[:8]}...): ${balance:.2f}")
+        return balance
     except Exception as e:
         logger.error(f"Balance fetch failed: {e}")
-        return 5.0
+        return 0.0
 
 
 def get_hype_price_from_hyperliquid() -> float:

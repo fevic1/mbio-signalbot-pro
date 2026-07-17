@@ -38,6 +38,8 @@ class HIP4MetadataManager:
     
     def _refresh_metadata(self) -> bool:
         try:
+            if self._initialized and (time.time() - self._last_fetch_time) < self._CACHE_TTL_SECONDS:
+                return True
             logger.info("📡 HIP-4: Refreshing asset universe metadata...")
             meta = self._info_client.meta()
             universe = meta.get("universe", [])
@@ -206,3 +208,38 @@ class HIP4MetadataManager:
         except Exception as e:
             logger.error(f"❌ HIP-4 Categorization failed: {e}")
             return {"PERP": list(self._asset_specs.keys()), "SPOT": [], "TRADFI": []}
+
+    def get_live_market_data(self) -> dict:
+        """Fetch and cache live mid-prices, volumes, and funding rates (3s TTL)."""
+        import time
+        if not hasattr(self, '_last_market_fetch'):
+            self._last_market_fetch = 0
+            self._cached_market_data = {"prices": {}, "volumes": {}, "funding": {}}
+            
+        if time.time() - self._last_market_fetch < 3:
+            return self._cached_market_data
+            
+        try:
+            mids = self._info_client.all_mids()
+            resp = requests.post("https://api.hyperliquid.xyz/info", json={"type": "metaAndAssetCtxs"}, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            universe = data[0].get("universe", []) if isinstance(data, list) else data.get("universe", [])
+            ctxs = data[1] if isinstance(data, list) else data.get("assetCtxs", [])
+            
+            prices, volumes, funding = {}, {}, {}
+            for i, asset in enumerate(universe):
+                name = asset.get("name")
+                if name:
+                    prices[name] = float(mids.get(name, 0))
+                    ctx = ctxs[i] if i < len(ctxs) else {}
+                    volumes[name] = float(ctx.get("dayNtlVlm", 0))
+                    funding[name] = float(ctx.get("funding", 0))
+                    
+            self._cached_market_data = {"prices": prices, "volumes": volumes, "funding": funding}
+            self._last_market_fetch = time.time()
+            return self._cached_market_data
+        except Exception as e:
+            logger.error(f"❌ HIP-4 Market data fetch failed: {e}")
+            return self._cached_market_data

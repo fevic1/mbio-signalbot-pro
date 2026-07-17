@@ -99,6 +99,10 @@ class DCAManager:
                     level["status"] = "active"
                     level["placed_at"] = datetime.now(timezone.utc).isoformat()
                     placed.append(level)
+                    # 🛡️ ENGAGE LOCK: Prevent next order until reconciliation confirms fill
+                    config["is_waiting_for_fill"] = True
+                    config["last_fill_price"] = level["price"]
+                    logger.info(f"🔒 {asset} DCA lock engaged. Waiting for fill at ${level['price']}")
                     logger.info(f"📊 DCA Level {level['level']} placed: {asset} {side} {level['size']} @ ${level['price']}")
                 else:
                     logger.warning(f"⚠️ Failed to place DCA level {level['level']}: {result.get('error')}")
@@ -191,9 +195,17 @@ class DCAManager:
     async def update_trailing_orders(self, asset: str, config: Dict, current_price: float) -> Dict:
         if not config.get("enabled") or not config.get("trailing"):
             return {"updated": 0, "errors": []}
+        
+        # 🛡️ STATE LOCK: Prevent multi-tick spamming if an order is already pending fill
+        if config.get("is_waiting_for_fill", False):
+            logger.debug(f"⏳ {asset} DCA waiting for fill, skipping order placement cycle")
+            return {"updated": 0, "errors": []}
+            
         results = {"updated": 0, "cancelled": 0, "errors": []}
-        entry_price = config.get("avg_entry", 0)
-        base_size = config.get("base_size", 0.00025)
+        
+        # 🎯 CALCULATE FROM LAST FILL, not shifting average entry, to prevent compounding drift
+        last_fill_price = config.get("last_fill_price", config.get("avg_entry", 0))
+        base_size = config.get("base_size", 0.00018)
         new_levels = self.calculate_trailing_levels(entry_price, current_price, base_size, config)
         for order in config.get("active_orders", []):
             if order.get("status") == "active" and order.get("order_id"):

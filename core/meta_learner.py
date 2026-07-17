@@ -14,35 +14,35 @@ logger = logging.getLogger(__name__)
 # Default weight initialization for each regime (from backtest priors)
 DEFAULT_WEIGHTS = {
     "TRENDING_UP": {
-        "Momentum": 0.40,
-        "MeanReversion": 0.10,
-        "Breakout": 0.20,
-        "Carry": 0.10,
-        "LLM": 0.15,
+        "Momentum": 0.25,   # Reduced from 0.40 (avoid noise)
+        "MeanReversion": 0.05,
+        "Breakout": 0.10,   # Reduced from 0.20 (avoid false breakouts)
+        "Carry": 0.20,      # Increased from 0.10 (safer trend following)
+        "LLM": 0.35,        # Increased from 0.15 (high conviction AI filter)
         "SimpleRSI": 0.05,
     },
     "TRENDING_DOWN": {
-        "Momentum": 0.35,      # short momentum
-        "MeanReversion": 0.15,
-        "Breakout": 0.20,
-        "Carry": 0.10,
-        "LLM": 0.15,
+        "Momentum": 0.25,   # Reduced (short momentum is risky)
+        "MeanReversion": 0.05,
+        "Breakout": 0.10,   # Reduced
+        "Carry": 0.20,      # Increased
+        "LLM": 0.35,        # Increased (critical for shorting safely)
         "SimpleRSI": 0.05,
     },
     "RANGING": {
-        "Momentum": 0.10,
-        "MeanReversion": 0.40,
-        "Breakout": 0.10,
-        "Carry": 0.20,
-        "LLM": 0.10,
-        "SimpleRSI": 0.20,
+        "Momentum": 0.05,   # Reduced (momentum fails in chop)
+        "MeanReversion": 0.30, # Reduced slightly from 0.40 (reduce fee drag)
+        "Breakout": 0.05,   # Reduced (avoid traps)
+        "Carry": 0.25,      # Increased (stable yield/trend)
+        "LLM": 0.25,        # Increased (filter noise)
+        "SimpleRSI": 0.10,  # Reduced from 0.20 (too noisy)
     },
     "VOLATILE": {
-        "Momentum": 0.20,
-        "MeanReversion": 0.20,
-        "Breakout": 0.40,
-        "Carry": 0.10,
-        "LLM": 0.05,
+        "Momentum": 0.10,   # Reduced
+        "MeanReversion": 0.30, # Increased (fade the spikes)
+        "Breakout": 0.05,   # CRITICAL REDUCTION: 0.40 -> 0.05 (breakouts fail often in volatility)
+        "Carry": 0.20,
+        "LLM": 0.30,        # Increased (essential for volatility filtering)
         "SimpleRSI": 0.05,
     },
 }

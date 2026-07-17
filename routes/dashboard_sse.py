@@ -1,6 +1,5 @@
 """
 Server-Sent Events stream for real-time dashboard updates.
-Phase 5 DEFINITIVE: Enriched positions, analytics, safety limits, system monitoring.
 """
 import asyncio
 import json
@@ -8,7 +7,10 @@ import math
 import os
 import time
 import logging
+from core.app_context import app_context
+from core.app_context import app_context
 from datetime import datetime, timezone
+from fastapi import Request
 from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
@@ -92,15 +94,17 @@ async def _collect_dashboard_state() -> dict:
             state_data["balance"] = round(get_account_balance(), 2)
         except Exception: pass
         try:
-            from execution.hl_executor import HLExecutor
-            executor = HLExecutor(); mids = executor.info.all_mids()
+            from core.app_context import app_context
+            executor = app_context.executor
+            mids = executor.info.all_mids()
             exchange_positions = {}
             try:
                 raw = executor.info.user_state(executor.address)
                 for ap in raw.get("assetPositions", []):
                     pos = ap.get("position", {}); coin = pos.get("coin", "")
                     if coin:
-                        exchange_positions[coin] = {"margin_used": float(pos.get("marginUsed", 0)),
+                        exchange_positions[coin] = {
+                            "margin_used": float(pos.get("marginUsed", 0)),
                             "liquidation_px": float(pos.get("liquidationPx", 0)),
                             "leverage": float(pos.get("leverage", {}).get("value", 1)),
                             "roe": float(pos.get("returnOnEquity", 0))}
@@ -112,7 +116,8 @@ async def _collect_dashboard_state() -> dict:
                 upnl = ((current - entry) * size if side == "BUY" else (entry - current) * size) if current > 0 else 0
                 pnl_pct = (((current - entry) / entry * 100) if side == "BUY" else ((entry - current) / entry * 100)) if entry > 0 else 0
                 exch = exchange_positions.get(asset, {})
-                state_data["positions"].append({"asset": asset, "side": side, "size": round(size, 8),
+                state_data["positions"].append({
+                    "asset": asset, "side": side, "size": round(size, 8),
                     "entry": round(entry, 4), "current": round(current, 4), "upnl": round(upnl, 4),
                     "pnl_pct": round(pnl_pct, 2),
                     "margin_used": round(exch.get("margin_used", float(pos.get("margin_used", 0))), 4),
@@ -132,7 +137,8 @@ async def _collect_dashboard_state() -> dict:
                 if not is_grid_position(key): continue
                 asset = grid_asset_from_key(key); nodes = config.get("nodes", [])
                 active = len([n for n in nodes if n.get("status") == "OPEN"])
-                state_data["grids"].append({"asset": asset, "mode": config.get("mode", "RANGE"),
+                state_data["grids"].append({
+                    "asset": asset, "mode": config.get("mode", "RANGE"),
                     "lower_price": round(float(config.get("lower_price", 0)), 2),
                     "upper_price": round(float(config.get("upper_price", 0)), 2),
                     "step_size": round(float(config.get("step_size", 0)), 2),
@@ -145,7 +151,8 @@ async def _collect_dashboard_state() -> dict:
         except Exception: pass
         try:
             risk_cfg = cfg.get("risk", {})
-            state_data["safety_limits"] = {"max_positions": int(risk_cfg.get("max_positions", 5)),
+            state_data["safety_limits"] = {
+                "max_positions": int(risk_cfg.get("max_positions", 5)),
                 "min_notional": float(risk_cfg.get("min_notional", 2)),
                 "max_leverage": int(risk_cfg.get("max_leverage", 20)),
                 "max_notional_per_asset": float(risk_cfg.get("max_notional_per_asset", 100))}
@@ -156,18 +163,30 @@ async def _collect_dashboard_state() -> dict:
     return state_data
 
 
-async def sse_generator():
+async def sse_generator(request: Request = None):
     while True:
         try:
+            if request:
+                from routes.dashboard_auth import get_current_user
+                try:
+                    user = get_current_user(request)
+                except Exception:
+                    err_payload = json.dumps({"error": "unauthenticated", "balance": 0, "equity": 0})
+                    yield f"data: {err_payload}\n\n"
+                    await asyncio.sleep(5)
+                    continue
             data = await _collect_dashboard_state()
-            yield f"data: {json.dumps(data, default=str)}\n\n"
-        except asyncio.CancelledError: break
+            payload = json.dumps(data, default=str)
+            yield f"data: {payload}\n\n"
+        except asyncio.CancelledError:
+            break
         except Exception as e:
             logger.error(f"SSE generator error: {e}")
-            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+            err_payload = json.dumps({"error": str(e)})
+            yield f"data: {err_payload}\n\n"
         await asyncio.sleep(2)
 
 
-async def dashboard_sse_stream():
-    return StreamingResponse(sse_generator(), media_type="text/event-stream",
+async def dashboard_sse_stream(request: Request = None):
+    return StreamingResponse(sse_generator(request), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})

@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /var/www/mbio-frontend:/var/www/mbio-frontend:ro
+    networks:
+      - mbio-network
+
+networks:
+  mbio-network:
+    external: true

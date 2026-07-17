@@ -31,9 +31,9 @@ _sessions: dict[str, dict] = {}
 
 # Default admin user (fallback if no users.json)
 _DEFAULT_USERS = {
-    "fixed@mbio.com": {
+    os.environ.get("MBIO_ADMIN_EMAIL", "admin@mbio.com"): {
         "id": "admin-001",
-        "email": "fixed@mbio.com",
+        "email": os.environ.get("MBIO_ADMIN_EMAIL", "admin@mbio.com"),
         "name": "Fixed Test",
         "role": "ADMIN",
         "password_hash": None,  # Uses password from env or default
@@ -144,13 +144,25 @@ def verify_otp_for_user(user_id: str, otp: str) -> bool:
 # ============================================================
 
 def get_user_otp_secret(user_id: str) -> str | None:
-    """Get stored OTP secret for user from database."""
+    """Get stored OTP secret for user from database.
+    
+    Tries to find user by id first, then falls back to email lookup.
+    This handles the case where user_id might be an email or a UUID.
+    """
     try:
         import sqlite3
         conn = sqlite3.connect("data/users.db")
         cursor = conn.cursor()
+        
+        # Try id lookup first
         cursor.execute("SELECT otp_secret FROM users WHERE id = ?", (user_id,))
         row = cursor.fetchone()
+        
+        # If not found, try email lookup
+        if not row:
+            cursor.execute("SELECT otp_secret FROM users WHERE email = ?", (user_id,))
+            row = cursor.fetchone()
+        
         conn.close()
         return row[0] if row else None
     except Exception as e:
@@ -208,7 +220,10 @@ async def login(request: Request):
             raise HTTPException(status_code=401, detail="Invalid credentials")
     else:
         # Fallback: check against env password or default
-        env_password = os.environ.get("MBIO_ADMIN_PASSWORD", "123456789000")
+        env_password = os.environ.get("MBIO_ADMIN_PASSWORD")
+        if not env_password:
+            logger.error("MBIO_ADMIN_PASSWORD not set - authentication will fail")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
         if password != env_password:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 

@@ -1,3 +1,23 @@
+
+/* MBIO AUTH INTERCEPTOR: Fixes EventSource header limitation */
+(function(){
+    const _origES = window.EventSource;
+    if (!_origES) return;
+    window.EventSource = function(url, opts) {
+        if (url && typeof url === 'string' && url.includes('/api/dashboard/stream')) {
+            const t = localStorage.getItem('mbio_token') || localStorage.getItem('token') || localStorage.getItem('access_token') || '';
+            if (t && !url.includes('token=')) {
+                url += (url.includes('?') ? '&' : '?') + 'token=' + t;
+                console.log('[MBIO] Intercepted SSE stream, appended auth token.');
+            }
+        }
+        return new _origES(url, opts);
+    };
+    window.EventSource.prototype = _origES.prototype;
+    window.EventSource.CONNECTING = _origES.CONNECTING;
+    window.EventSource.OPEN = _origES.OPEN;
+    window.EventSource.CLOSED = _origES.CLOSED;
+})();
 /**
  * MBIO SignalBot Pro - SSE Connection Manager
  * Phase 12 Migration: Isolated from frontend/index.html
@@ -129,7 +149,11 @@ function updateGrids(grids) {
 function connectSSE() {
     if (eventSource) eventSource.close();
     
-    eventSource = new EventSource('/api/dashboard/stream', { withCredentials: true });
+    eventSource = new EventSource((function() {
+            const token = localStorage.getItem('mbio_token') || localStorage.getItem('token') || localStorage.getItem('access_token') || '';
+            const baseUrl = typeof SSE_ENDPOINT !== 'undefined' ? SSE_ENDPOINT : '/api/dashboard/stream';
+            return token ? `${baseUrl}?token=${token}` : baseUrl;
+        })(), { withCredentials: true });
     
     eventSource.onopen = function() {
         var statusEl = document.getElementById('connection-status');
