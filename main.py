@@ -106,16 +106,67 @@ api.include_router(auth_router, prefix="/api")
 from routes.hip4_api import router as hip4_router
 api.include_router(hip4_router)
 
+# Dashboard static files and entry point
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os as _os
+
+if _os.path.isdir("frontend/static"):
+    api.mount("/static", StaticFiles(directory="frontend/static"), name="dashboard_static")
+    # Phase 14: Static assets for new modular frontend
+    import os as _os
+    _v2_dist = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "frontend-v2-dist")
+    if _os.path.isdir(_v2_dist):
+        api.mount("/assets", StaticFiles(directory=_os.path.join(_v2_dist, "assets")), name="v2_assets")
+
+@api.get("/login")
+async def serve_login():
+    return FileResponse("frontend/login.html")
+
+@api.get("/dashboard")
+async def serve_dashboard():
+    return FileResponse("frontend/index.html")
+>>>>>>> main
 
 
 @api.get("/")
 async def root():
-    return {"status": "online", "version": "9.0", "open_positions": len(state.OPEN_POSITIONS)}
+    """Serve new modular frontend at root. Falls back to old monolith."""
+    import os
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    new_index = os.path.join(base_dir, "frontend-v2-dist", "index.html")
+    if os.path.exists(new_index):
+        return FileResponse(new_index)
+    return FileResponse(os.path.join(base_dir, "frontend", "index.html"))
 
 @api.get("/health")
 async def health():
     return {"status": "ok", "ts": int(time.time())}
 
+
+# Phase 13: HIP-4 Multi-Asset API Routes
+from routes.hip4_api import router as hip4_router
+api.include_router(hip4_router)
+
+@api.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    """Catch-all route: serve index.html for all non-API frontend paths.
+    Enables client-side routing for /robots, /analytics, /settings, etc.
+    API routes under /api/ take priority via mount order."""
+    # Don't serve index.html for API or static asset requests
+    if full_path.startswith("api/") or full_path.startswith("static/"):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    # Phase 14: Try new frontend first, fall back to old
+    import os
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    new_index = os.path.join(base_dir, "frontend-v2-dist", "index.html")
+    if os.path.exists(new_index):
+        return FileResponse(new_index)
+    return FileResponse(os.path.join(base_dir, "frontend", "index.html"))
+
+
+>>>>>>> main
 def run_api():
     if ENABLE_API_SERVER:
         try:
