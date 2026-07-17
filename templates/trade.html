@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<script>
+/* MBIO GLOBAL AUTH INTERCEPTOR - BYPASSES VITE MINIFICATION */
+(function(){
+    const _origES = window.EventSource;
+    if (!_origES) return;
+    window.EventSource = function(url, opts) {
+        if (url && typeof url === 'string' && url.includes('/api/dashboard/stream')) {
+            const t = localStorage.getItem('mbio_token') || localStorage.getItem('token') || localStorage.getItem('access_token') || '';
+            if (t && !url.includes('token=')) {
+                url += (url.includes('?') ? '&' : '?') + 'token=' + t;
+                console.log('[MBIO INTERCEPTOR] Appended auth token to SSE stream.');
+            }
+        }
+        return new _origES(url, opts);
+    };
+    window.EventSource.prototype = _origES.prototype;
+    window.EventSource.CONNECTING = _origES.CONNECTING;
+    window.EventSource.OPEN = _origES.OPEN;
+    window.EventSource.CLOSED = _origES.CLOSED;
+})();
+</script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MBIO SignalBot Pro — Dashboard</title>
+    <script src="https://cdn.tailwindcss.com">
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], positions: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            if (!container || !section) return;
+
+            var bots = [];
+
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID', asset: g.asset, pnl: g.realized_pnl || 0,
+                        details: (g.nodes_active||0) + '/' + (g.nodes_total||0) + ' nodes',
+                        investment: g.investment || 0, mode: g.mode || 'RANGE',
+                        cycles: g.cycles || 0
+                    });
+                });
+            }
+
+            // Add DCA Positions
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().indexOf('DCA') !== -1) {
+                        bots.push({
+                            type: 'DCA', asset: p.asset, pnl: p.upnl || 0,
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry, mode: p.side,
+                            cycles: 0
+                        });
+                    }
+                });
+            }
+
+            if (bots.length === 0) { section.style.display = 'none'; return; }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '\u{1F532}' : '\u{1F4C8}';
+                var borderClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                return '<div class="card ' + borderClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + (b.type === 'GRID' ? 'Realized PnL' : 'Unrealized PnL') + '</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to pass grid/position data to bot renderer
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + i);
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false, callbacks: { label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); } } }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics2 = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics2();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
+    
+        // === GRID BOT VISUALIZER (Canvas) ===
+        var _gridsCache = [];
+        var _positionsCacheForViz = [];
+
+        function showGridsTab(tab) {
+            var cardsContainer = document.getElementById('grids-container');
+            var noGrids = document.getElementById('no-grids');
+            var vizContainer = document.getElementById('grids-viz-container');
+            var btnCards = document.getElementById('grids-tab-cards');
+            var btnViz = document.getElementById('grids-tab-viz');
+            if (!vizContainer) return;
+            if (tab === 'viz') {
+                if (cardsContainer) cardsContainer.style.display = 'none';
+                if (noGrids) noGrids.style.display = 'none';
+                vizContainer.style.display = 'block';
+                if (btnCards) btnCards.className = 'btn btn-secondary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-primary text-xs';
+                renderGridVisualizer();
+            } else {
+                vizContainer.style.display = 'none';
+                if (cardsContainer) cardsContainer.style.display = 'grid';
+                if (btnCards) btnCards.className = 'btn btn-primary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-secondary text-xs';
+                if (noGrids && _gridsCache.length === 0) noGrids.style.display = 'block';
+            }
+        }
+
+        function renderGridVisualizer() {
+            var canvas = document.getElementById('grid-viz-canvas');
+            var noData = document.getElementById('viz-no-data');
+            var selectEl = document.getElementById('viz-asset-select');
+            if (!canvas) return;
+
+            if (selectEl && selectEl.options.length <= 1 && _gridsCache.length > 0) {
+                selectEl.innerHTML = '';
+                _gridsCache.forEach(function(g) {
+                    var opt = document.createElement('option');
+                    opt.value = g.asset; opt.textContent = g.asset;
+                    selectEl.appendChild(opt);
+                });
+            }
+
+            var selectedAsset = selectEl ? selectEl.value : (_gridsCache[0] ? _gridsCache[0].asset : null);
+            var grid = _gridsCache.find(function(g) { return g.asset === selectedAsset; });
+
+            if (!grid || !selectedAsset) {
+                if (noData) noData.style.display = 'block';
+                canvas.style.display = 'none';
+                return;
+            }
+            if (noData) noData.style.display = 'none';
+            canvas.style.display = 'block';
+
+            var ctx = canvas.getContext('2d');
+            var dpr = window.devicePixelRatio || 1;
+            var rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            var W = rect.width, H = rect.height;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, W, H);
+
+            var lower = grid.lower_price || 0;
+            var upper = grid.upper_price || 0;
+            var range = upper - lower;
+            if (range <= 0) return;
+
+            var pad = { top: 30, bottom: 30, left: 60, right: 20 };
+            var plotH = H - pad.top - pad.bottom;
+
+            function priceToY(price) {
+                return pad.top + plotH - ((price - lower) / range) * plotH;
+            }
+
+            var stepSize = grid.step_size || (range / (grid.nodes_total || 10));
+            var numLevels = Math.floor(range / stepSize) + 1;
+
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+
+            for (var i = 0; i < numLevels; i++) {
+                var price = lower + i * stepSize;
+                if (price > upper) break;
+                var y = priceToY(price);
+                var isBuyLevel = i % 2 === 0;
+                ctx.strokeStyle = isBuyLevel ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(W - pad.right, y);
+                ctx.stroke();
+
+                var dotColor = isBuyLevel ? '#4ade80' : '#f87171';
+                var isActive = i < (grid.nodes_active || 0);
+                ctx.fillStyle = isActive ? dotColor : '#334155';
+                ctx.beginPath();
+                ctx.arc(pad.left - 15, y, isActive ? 4 : 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#64748b';
+                ctx.fillText('$' + price.toFixed(2), pad.left - 22, y + 3);
+            }
+
+            var currentPos = _positionsCacheForViz.find(function(p) { return p.asset === selectedAsset; });
+            if (currentPos && currentPos.current > 0) {
+                var curPrice = currentPos.current;
+                if (curPrice >= lower && curPrice <= upper) {
+                    var curY = priceToY(curPrice);
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(pad.left, curY);
+                    ctx.lineTo(W - pad.right, curY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.font = 'bold 11px monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('\u25B6 $' + curPrice.toFixed(2), W - pad.right + 2, curY + 4);
+                }
+            }
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(grid.asset + ' GRID | ' + (grid.mode||'RANGE') + ' | Nodes: ' + (grid.nodes_active||0) + '/' + (grid.nodes_total||0) + ' | PnL: ' + formatPnl(grid.realized_pnl||0), pad.left, 18);
+
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#4ade80'; ctx.fillText('\u25CF Buy', W - pad.right - 50, 18);
+            ctx.fillStyle = '#f87171'; ctx.fillText('\u25CF Sell', W - pad.right - 10, 18);
+        }
+
+        // Wrap updateGrids to cache data and trigger visualizer re-render
+        var _origUpdateGrids = updateGrids;
+        updateGrids = function(grids) {
+            _gridsCache = grids || [];
+            _origUpdateGrids(grids);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+        // Wrap updatePositions to get current prices for overlay
+        var _origUpdatePositionsForViz = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCacheForViz = positions || [];
+            _origUpdatePositionsForViz(positions);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+    
+        // === GRID FORM AUTO-FILL ===
+        async function autoFillGridForm() {
+            try {
+                var r = await fetch('/api/dashboard/config/defaults', { credentials: 'include' });
+                if (!r.ok) return;
+                var d = await r.json();
+                var g = d.grid || {};
+                if (!document.getElementById('grid-investment').value) document.getElementById('grid-investment').value = g.investment_amount || 30;
+                if (!document.getElementById('grid-nodes').value) document.getElementById('grid-nodes').value = g.num_nodes || 10;
+                
+                var asset = document.getElementById('grid-asset').value;
+                if (asset && !document.getElementById('grid-lower').value) {
+                    try {
+                        var pr = await fetch('/api/dashboard/price/' + asset, { credentials: 'include' });
+                        if (pr.ok) {
+                            var pd = await pr.json();
+                            var price = pd.price || 0;
+                            if (price > 0) {
+                                var rangePct = (g.max_range_pct || 10) / 100;
+                                document.getElementById('grid-lower').value = (price * (1 - rangePct)).toFixed(2);
+                                document.getElementById('grid-upper').value = (price * (1 + rangePct)).toFixed(2);
+                            }
+                        }
+                    } catch(e) { console.log('Price fetch:', e); }
+                }
+            } catch(e) { console.log('Auto-fill:', e); }
+        }
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js">
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], positions: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            if (!container || !section) return;
+
+            var bots = [];
+
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID', asset: g.asset, pnl: g.realized_pnl || 0,
+                        details: (g.nodes_active||0) + '/' + (g.nodes_total||0) + ' nodes',
+                        investment: g.investment || 0, mode: g.mode || 'RANGE',
+                        cycles: g.cycles || 0
+                    });
+                });
+            }
+
+            // Add DCA Positions
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().indexOf('DCA') !== -1) {
+                        bots.push({
+                            type: 'DCA', asset: p.asset, pnl: p.upnl || 0,
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry, mode: p.side,
+                            cycles: 0
+                        });
+                    }
+                });
+            }
+
+            if (bots.length === 0) { section.style.display = 'none'; return; }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '\u{1F532}' : '\u{1F4C8}';
+                var borderClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                return '<div class="card ' + borderClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + (b.type === 'GRID' ? 'Realized PnL' : 'Unrealized PnL') + '</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to pass grid/position data to bot renderer
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + i);
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false, callbacks: { label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); } } }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics2 = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics2();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
+    
+        // === GRID BOT VISUALIZER (Canvas) ===
+        var _gridsCache = [];
+        var _positionsCacheForViz = [];
+
+        function showGridsTab(tab) {
+            var cardsContainer = document.getElementById('grids-container');
+            var noGrids = document.getElementById('no-grids');
+            var vizContainer = document.getElementById('grids-viz-container');
+            var btnCards = document.getElementById('grids-tab-cards');
+            var btnViz = document.getElementById('grids-tab-viz');
+            if (!vizContainer) return;
+            if (tab === 'viz') {
+                if (cardsContainer) cardsContainer.style.display = 'none';
+                if (noGrids) noGrids.style.display = 'none';
+                vizContainer.style.display = 'block';
+                if (btnCards) btnCards.className = 'btn btn-secondary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-primary text-xs';
+                renderGridVisualizer();
+            } else {
+                vizContainer.style.display = 'none';
+                if (cardsContainer) cardsContainer.style.display = 'grid';
+                if (btnCards) btnCards.className = 'btn btn-primary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-secondary text-xs';
+                if (noGrids && _gridsCache.length === 0) noGrids.style.display = 'block';
+            }
+        }
+
+        function renderGridVisualizer() {
+            var canvas = document.getElementById('grid-viz-canvas');
+            var noData = document.getElementById('viz-no-data');
+            var selectEl = document.getElementById('viz-asset-select');
+            if (!canvas) return;
+
+            if (selectEl && selectEl.options.length <= 1 && _gridsCache.length > 0) {
+                selectEl.innerHTML = '';
+                _gridsCache.forEach(function(g) {
+                    var opt = document.createElement('option');
+                    opt.value = g.asset; opt.textContent = g.asset;
+                    selectEl.appendChild(opt);
+                });
+            }
+
+            var selectedAsset = selectEl ? selectEl.value : (_gridsCache[0] ? _gridsCache[0].asset : null);
+            var grid = _gridsCache.find(function(g) { return g.asset === selectedAsset; });
+
+            if (!grid || !selectedAsset) {
+                if (noData) noData.style.display = 'block';
+                canvas.style.display = 'none';
+                return;
+            }
+            if (noData) noData.style.display = 'none';
+            canvas.style.display = 'block';
+
+            var ctx = canvas.getContext('2d');
+            var dpr = window.devicePixelRatio || 1;
+            var rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            var W = rect.width, H = rect.height;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, W, H);
+
+            var lower = grid.lower_price || 0;
+            var upper = grid.upper_price || 0;
+            var range = upper - lower;
+            if (range <= 0) return;
+
+            var pad = { top: 30, bottom: 30, left: 60, right: 20 };
+            var plotH = H - pad.top - pad.bottom;
+
+            function priceToY(price) {
+                return pad.top + plotH - ((price - lower) / range) * plotH;
+            }
+
+            var stepSize = grid.step_size || (range / (grid.nodes_total || 10));
+            var numLevels = Math.floor(range / stepSize) + 1;
+
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+
+            for (var i = 0; i < numLevels; i++) {
+                var price = lower + i * stepSize;
+                if (price > upper) break;
+                var y = priceToY(price);
+                var isBuyLevel = i % 2 === 0;
+                ctx.strokeStyle = isBuyLevel ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(W - pad.right, y);
+                ctx.stroke();
+
+                var dotColor = isBuyLevel ? '#4ade80' : '#f87171';
+                var isActive = i < (grid.nodes_active || 0);
+                ctx.fillStyle = isActive ? dotColor : '#334155';
+                ctx.beginPath();
+                ctx.arc(pad.left - 15, y, isActive ? 4 : 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#64748b';
+                ctx.fillText('$' + price.toFixed(2), pad.left - 22, y + 3);
+            }
+
+            var currentPos = _positionsCacheForViz.find(function(p) { return p.asset === selectedAsset; });
+            if (currentPos && currentPos.current > 0) {
+                var curPrice = currentPos.current;
+                if (curPrice >= lower && curPrice <= upper) {
+                    var curY = priceToY(curPrice);
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(pad.left, curY);
+                    ctx.lineTo(W - pad.right, curY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.font = 'bold 11px monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('\u25B6 $' + curPrice.toFixed(2), W - pad.right + 2, curY + 4);
+                }
+            }
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(grid.asset + ' GRID | ' + (grid.mode||'RANGE') + ' | Nodes: ' + (grid.nodes_active||0) + '/' + (grid.nodes_total||0) + ' | PnL: ' + formatPnl(grid.realized_pnl||0), pad.left, 18);
+
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#4ade80'; ctx.fillText('\u25CF Buy', W - pad.right - 50, 18);
+            ctx.fillStyle = '#f87171'; ctx.fillText('\u25CF Sell', W - pad.right - 10, 18);
+        }
+
+        // Wrap updateGrids to cache data and trigger visualizer re-render
+        var _origUpdateGrids = updateGrids;
+        updateGrids = function(grids) {
+            _gridsCache = grids || [];
+            _origUpdateGrids(grids);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+        // Wrap updatePositions to get current prices for overlay
+        var _origUpdatePositionsForViz = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCacheForViz = positions || [];
+            _origUpdatePositionsForViz(positions);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+    
+        // === GRID FORM AUTO-FILL ===
+        async function autoFillGridForm() {
+            try {
+                var r = await fetch('/api/dashboard/config/defaults', { credentials: 'include' });
+                if (!r.ok) return;
+                var d = await r.json();
+                var g = d.grid || {};
+                if (!document.getElementById('grid-investment').value) document.getElementById('grid-investment').value = g.investment_amount || 30;
+                if (!document.getElementById('grid-nodes').value) document.getElementById('grid-nodes').value = g.num_nodes || 10;
+                
+                var asset = document.getElementById('grid-asset').value;
+                if (asset && !document.getElementById('grid-lower').value) {
+                    try {
+                        var pr = await fetch('/api/dashboard/price/' + asset, { credentials: 'include' });
+                        if (pr.ok) {
+                            var pd = await pr.json();
+                            var price = pd.price || 0;
+                            if (price > 0) {
+                                var rangePct = (g.max_range_pct || 10) / 100;
+                                document.getElementById('grid-lower').value = (price * (1 - rangePct)).toFixed(2);
+                                document.getElementById('grid-upper').value = (price * (1 + rangePct)).toFixed(2);
+                            }
+                        }
+                    } catch(e) { console.log('Price fetch:', e); }
+                }
+            } catch(e) { console.log('Auto-fill:', e); }
+        }
+
+    </script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { slate: { 850: '#1a2332', 950: '#0b1120' } } } }
+        }
+    
+        // === ACTIVE BOT CARDS ===
+        var _botsCache = { grids: [], positions: [] };
+
+        function renderBotCards(grids, positions) {
+            var container = document.getElementById('bots-container');
+            var section = document.getElementById('active-bots-section');
+            var countBadge = document.getElementById('bot-count-badge');
+            if (!container || !section) return;
+
+            var bots = [];
+
+            // Add Grids
+            if (grids && grids.length > 0) {
+                grids.forEach(function(g) {
+                    bots.push({
+                        type: 'GRID', asset: g.asset, pnl: g.realized_pnl || 0,
+                        details: (g.nodes_active||0) + '/' + (g.nodes_total||0) + ' nodes',
+                        investment: g.investment || 0, mode: g.mode || 'RANGE',
+                        cycles: g.cycles || 0
+                    });
+                });
+            }
+
+            // Add DCA Positions
+            if (positions && positions.length > 0) {
+                positions.forEach(function(p) {
+                    if (p.strategy && p.strategy.toUpperCase().indexOf('DCA') !== -1) {
+                        bots.push({
+                            type: 'DCA', asset: p.asset, pnl: p.upnl || 0,
+                            details: p.side + ' ' + p.size.toFixed(4),
+                            investment: p.size * p.entry, mode: p.side,
+                            cycles: 0
+                        });
+                    }
+                });
+            }
+
+            if (bots.length === 0) { section.style.display = 'none'; return; }
+            section.style.display = 'block';
+            countBadge.textContent = bots.length + ' Active';
+
+            container.innerHTML = bots.map(function(b) {
+                var pnlClass = b.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                var icon = b.type === 'GRID' ? '\u{1F532}' : '\u{1F4C8}';
+                var borderClass = b.type === 'GRID' ? 'border-purple-500/30' : 'border-blue-500/30';
+                return '<div class="card ' + borderClass + ' relative overflow-hidden">' +
+                    '<div class="absolute top-0 right-0 p-2 opacity-10 text-4xl">' + icon + '</div>' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div class="flex items-center gap-2">' +
+                            '<span class="badge ' + (b.type === 'GRID' ? 'badge-grid' : 'badge-dca') + '">' + b.type + '</span>' +
+                            '<span class="font-bold text-white">' + b.asset + '</span>' +
+                        '</div>' +
+                        '<span class="text-xs text-slate-400">' + b.mode + '</span>' +
+                    '</div>' +
+                    '<div class="mb-2">' +
+                        '<div class="text-2xl font-bold ' + pnlClass + '">' + formatPnl(b.pnl) + '</div>' +
+                        '<div class="text-xs text-slate-500">' + (b.type === 'GRID' ? 'Realized PnL' : 'Unrealized PnL') + '</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2 text-xs mt-3 pt-3 border-t border-slate-700">' +
+                        '<div><span class="text-slate-500">Details:</span><br><span class="text-slate-300">' + b.details + '</span></div>' +
+                        '<div><span class="text-slate-500">Invested:</span><br><span class="text-slate-300">$' + b.investment.toFixed(2) + '</span></div>' +
+                    '</div></div>';
+            }).join('');
+        }
+
+        // Wrap updateOverview to pass grid/position data to bot renderer
+        var _origUpdateOverview = updateOverview;
+        updateOverview = function(data) {
+            _origUpdateOverview(data);
+            renderBotCards(data.grids || [], data.positions || []);
+        };
+
+    
+        // === DAILY PNL BAR CHART ===
+        var dailyPnlChartInstance = null;
+
+        function renderDailyPnlChart(equityCurve) {
+            var canvas = document.getElementById('daily-pnl-chart');
+            if (!canvas || typeof Chart === 'undefined') return;
+            if (dailyPnlChartInstance) { dailyPnlChartInstance.destroy(); }
+            if (!equityCurve || equityCurve.length < 2) return;
+
+            var labels = [];
+            var values = [];
+            var colors = [];
+            for (var i = 1; i < equityCurve.length; i++) {
+                var prev = typeof equityCurve[i-1] === 'object' ? equityCurve[i-1].equity : equityCurve[i-1];
+                var curr = typeof equityCurve[i] === 'object' ? equityCurve[i].equity : equityCurve[i];
+                var delta = curr - prev;
+                labels.push('T' + i);
+                values.push(parseFloat(delta.toFixed(2)));
+                colors.push(delta >= 0 ? 'rgba(74, 222, 128, 0.7)' : 'rgba(248, 113, 113, 0.7)');
+            }
+
+            dailyPnlChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily PnL ($)',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function(c) { return c.replace('0.7', '1'); }),
+                        borderWidth: 1,
+                        borderRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false, callbacks: { label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); } } }
+                    },
+                    scales: {
+                        x: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 15 } },
+                        y: { display: true, grid: { color: '#1e293b' }, ticks: { color: '#64748b', callback: function(v) { return '$' + v.toFixed(2); } } }
+                    }
+                }
+            });
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderDailyPnlChart(d.equity_curve || []);
+                }
+            } catch(e) { console.error('Daily PnL chart:', e); }
+        };
+
+    
+        // === MONTHLY RETURNS HEATMAP ===
+        function renderMonthlyHeatmap(monthlyReturns) {
+            var container = document.getElementById('monthly-heatmap');
+            var noData = document.getElementById('no-monthly-data');
+            if (!container) return;
+
+            if (!monthlyReturns || Object.keys(monthlyReturns).length === 0) {
+                container.style.display = 'none';
+                if (noData) noData.style.display = 'block';
+                return;
+            }
+            container.style.display = 'grid';
+            if (noData) noData.style.display = 'none';
+
+            var months = Object.keys(monthlyReturns).sort();
+
+            container.innerHTML = months.map(function(month) {
+                var ret = monthlyReturns[month];
+                var bgColor, textColor;
+                if (ret > 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(34, 197, 94, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#4ade80';
+                } else if (ret < 0) {
+                    var intensity = Math.min(Math.abs(ret) / 20, 1);
+                    bgColor = 'rgba(239, 68, 68, ' + (0.2 + intensity * 0.6).toFixed(2) + ')';
+                    textColor = '#f87171';
+                } else {
+                    bgColor = 'rgba(100, 116, 139, 0.2)';
+                    textColor = '#94a3b8';
+                }
+
+                return '<div class="rounded-lg p-2 text-center" style="background:' + bgColor + ';">' +
+                    '<div class="text-xs text-slate-400 mb-1">' + month + '</div>' +
+                    '<div class="text-sm font-bold" style="color:' + textColor + ';">' +
+                    (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</div></div>';
+            }).join('');
+        }
+
+        // Chain into loadAnalytics
+        var _prevLoadAnalytics2 = loadAnalytics;
+        loadAnalytics = async function() {
+            await _prevLoadAnalytics2();
+            try {
+                var r = await fetch('/api/dashboard/analytics', { credentials: 'include' });
+                if (r.ok) {
+                    var d = await r.json();
+                    renderMonthlyHeatmap(d.monthly_returns || {});
+                }
+            } catch(e) { console.error('Monthly heatmap:', e); }
+        };
+
+    
+        // === GRID BOT VISUALIZER (Canvas) ===
+        var _gridsCache = [];
+        var _positionsCacheForViz = [];
+
+        function showGridsTab(tab) {
+            var cardsContainer = document.getElementById('grids-container');
+            var noGrids = document.getElementById('no-grids');
+            var vizContainer = document.getElementById('grids-viz-container');
+            var btnCards = document.getElementById('grids-tab-cards');
+            var btnViz = document.getElementById('grids-tab-viz');
+            if (!vizContainer) return;
+            if (tab === 'viz') {
+                if (cardsContainer) cardsContainer.style.display = 'none';
+                if (noGrids) noGrids.style.display = 'none';
+                vizContainer.style.display = 'block';
+                if (btnCards) btnCards.className = 'btn btn-secondary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-primary text-xs';
+                renderGridVisualizer();
+            } else {
+                vizContainer.style.display = 'none';
+                if (cardsContainer) cardsContainer.style.display = 'grid';
+                if (btnCards) btnCards.className = 'btn btn-primary text-xs';
+                if (btnViz) btnViz.className = 'btn btn-secondary text-xs';
+                if (noGrids && _gridsCache.length === 0) noGrids.style.display = 'block';
+            }
+        }
+
+        function renderGridVisualizer() {
+            var canvas = document.getElementById('grid-viz-canvas');
+            var noData = document.getElementById('viz-no-data');
+            var selectEl = document.getElementById('viz-asset-select');
+            if (!canvas) return;
+
+            if (selectEl && selectEl.options.length <= 1 && _gridsCache.length > 0) {
+                selectEl.innerHTML = '';
+                _gridsCache.forEach(function(g) {
+                    var opt = document.createElement('option');
+                    opt.value = g.asset; opt.textContent = g.asset;
+                    selectEl.appendChild(opt);
+                });
+            }
+
+            var selectedAsset = selectEl ? selectEl.value : (_gridsCache[0] ? _gridsCache[0].asset : null);
+            var grid = _gridsCache.find(function(g) { return g.asset === selectedAsset; });
+
+            if (!grid || !selectedAsset) {
+                if (noData) noData.style.display = 'block';
+                canvas.style.display = 'none';
+                return;
+            }
+            if (noData) noData.style.display = 'none';
+            canvas.style.display = 'block';
+
+            var ctx = canvas.getContext('2d');
+            var dpr = window.devicePixelRatio || 1;
+            var rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            var W = rect.width, H = rect.height;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, W, H);
+
+            var lower = grid.lower_price || 0;
+            var upper = grid.upper_price || 0;
+            var range = upper - lower;
+            if (range <= 0) return;
+
+            var pad = { top: 30, bottom: 30, left: 60, right: 20 };
+            var plotH = H - pad.top - pad.bottom;
+
+            function priceToY(price) {
+                return pad.top + plotH - ((price - lower) / range) * plotH;
+            }
+
+            var stepSize = grid.step_size || (range / (grid.nodes_total || 10));
+            var numLevels = Math.floor(range / stepSize) + 1;
+
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+
+            for (var i = 0; i < numLevels; i++) {
+                var price = lower + i * stepSize;
+                if (price > upper) break;
+                var y = priceToY(price);
+                var isBuyLevel = i % 2 === 0;
+                ctx.strokeStyle = isBuyLevel ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(W - pad.right, y);
+                ctx.stroke();
+
+                var dotColor = isBuyLevel ? '#4ade80' : '#f87171';
+                var isActive = i < (grid.nodes_active || 0);
+                ctx.fillStyle = isActive ? dotColor : '#334155';
+                ctx.beginPath();
+                ctx.arc(pad.left - 15, y, isActive ? 4 : 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#64748b';
+                ctx.fillText('$' + price.toFixed(2), pad.left - 22, y + 3);
+            }
+
+            var currentPos = _positionsCacheForViz.find(function(p) { return p.asset === selectedAsset; });
+            if (currentPos && currentPos.current > 0) {
+                var curPrice = currentPos.current;
+                if (curPrice >= lower && curPrice <= upper) {
+                    var curY = priceToY(curPrice);
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(pad.left, curY);
+                    ctx.lineTo(W - pad.right, curY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.font = 'bold 11px monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('\u25B6 $' + curPrice.toFixed(2), W - pad.right + 2, curY + 4);
+                }
+            }
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(grid.asset + ' GRID | ' + (grid.mode||'RANGE') + ' | Nodes: ' + (grid.nodes_active||0) + '/' + (grid.nodes_total||0) + ' | PnL: ' + formatPnl(grid.realized_pnl||0), pad.left, 18);
+
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#4ade80'; ctx.fillText('\u25CF Buy', W - pad.right - 50, 18);
+            ctx.fillStyle = '#f87171'; ctx.fillText('\u25CF Sell', W - pad.right - 10, 18);
+        }
+
+        // Wrap updateGrids to cache data and trigger visualizer re-render
+        var _origUpdateGrids = updateGrids;
+        updateGrids = function(grids) {
+            _gridsCache = grids || [];
+            _origUpdateGrids(grids);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+        // Wrap updatePositions to get current prices for overlay
+        var _origUpdatePositionsForViz = updatePositions;
+        updatePositions = function(positions) {
+            _positionsCacheForViz = positions || [];
+            _origUpdatePositionsForViz(positions);
+            var vizContainer = document.getElementById('grids-viz-container');
+            if (vizContainer && vizContainer.style.display !== 'none') {
+                renderGridVisualizer();
+            }
+        };
+
+    
+        // === GRID FORM AUTO-FILL ===
+        async function autoFillGridForm() {
+            try {
+                var r = await fetch('/api/dashboard/config/defaults', { credentials: 'include' });
+                if (!r.ok) return;
+                var d = await r.json();
+                var g = d.grid || {};
+                if (!document.getElementById('grid-investment').value) document.getElementById('grid-investment').value = g.investment_amount || 30;
+                if (!document.getElementById('grid-nodes').value) document.getElementById('grid-nodes').value = g.num_nodes || 10;
+                
+                var asset = document.getElementById('grid-asset').value;
+                if (asset && !document.getElementById('grid-lower').value) {
+                    try {
+                        var pr = await fetch('/api/dashboard/price/' + asset, { credentials: 'include' });
+                        if (pr.ok) {
+                            var pd = await pr.json();
+                            var price = pd.price || 0;
+                            if (price > 0) {
+                                var rangePct = (g.max_range_pct || 10) / 100;
+                                document.getElementById('grid-lower').value = (price * (1 - rangePct)).toFixed(2);
+                                document.getElementById('grid-upper').value = (price * (1 + rangePct)).toFixed(2);
+                            }
+                        }
+                    } catch(e) { console.log('Price fetch:', e); }
+                }
+            } catch(e) { console.log('Auto-fill:', e); }
+        }
+
+    </script>
+    <style>
+        body { background: #0b1120; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; }
+        .card { background: #1a2332; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+        .card:hover { border-color: #334155; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .metric-label { color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .metric-value { font-size: 1.5rem; font-weight: 700; }
+        .pnl-positive { color: #4ade80; } .pnl-negative { color: #f87171; } .pnl-neutral { color: #94a3b8; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+        th { text-align: left; padding: 10px 8px; color: #64748b; border-bottom: 1px solid #1e293b; font-weight: 600; white-space: nowrap; }
+        td { padding: 10px 8px; border-bottom: 1px solid #1e293b1a; white-space: nowrap; }
+        tr:hover td { background: #1e293b33; }
+        .sidebar-link { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 8px; color: #94a3b8; transition: all 0.2s; cursor: pointer; }
+        .sidebar-link:hover, .sidebar-link.active { background: #1e3a5f33; color: #60a5fa; border-left: 3px solid #3b82f6; }
+        .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+        .badge-buy { background: #16653433; color: #4ade80; } .badge-sell { background: #7f1d1d33; color: #f87171; }
+        .badge-grid { background: #4c1d9533; color: #a78bfa; } .badge-dca { background: #1e3a5f33; color: #60a5fa; }
+        #connection-status { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .connected { background: #4ade80; box-shadow: 0 0 6px #4ade80; } .disconnected { background: #f87171; box-shadow: 0 0 6px #f87171; }
+        .logout-btn { color: #64748b; font-size: 0.75rem; cursor: pointer; transition: color 0.2s; background: none; border: none; font-family: inherit; padding: 4px 0; }
+        .logout-btn:hover { color: #f87171; }
+        input, select { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font-family: inherit; outline: none; font-size: 0.85rem; width: 100%; box-sizing: border-box; }
+        input:focus, select:focus { border-color: #3b82f6; }
+        .btn { padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; font-size: 0.85rem; transition: all 0.2s; }
+        .btn-primary { background: #2563eb; color: white; } .btn-primary:hover { background: #1d4ed8; }
+        .btn-danger { background: #dc2626; color: white; } .btn-danger:hover { background: #b91c1c; }
+        .btn-secondary { background: #334155; color: #e2e8f0; } .btn-secondary:hover { background: #475569; }
+        .btn-success { background: #16a34a; color: white; } .btn-success:hover { background: #15803d; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 50; }
+        .modal-overlay.active { display: flex; }
+        .modal-card { background: #1a2332; border: 1px solid #1e293b; border-radius: 16px; padding: 32px; max-width: 440px; width: 90%; }
+        .bot-card { cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+        .bot-card:hover { border-color: #3b82f6; transform: translateY(-2px); }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .tab-bar { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #1e293b; }
+        .tab-btn { padding: 10px 20px; color: #94a3b8; cursor: pointer; border: none; background: none; font-family: inherit; font-size: 0.85rem; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .tab-btn:hover { color: #e2e8f0; } .tab-btn.active { color: #60a5fa; border-bottom-color: #3b82f6; }
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #334155; border-radius: 24px; transition: 0.3s; }
+        .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+        .toggle-switch input:checked + .toggle-slider { background: #2563eb; }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+        th.sortable { cursor: pointer; user-select: none; transition: color 0.2s; }
+        th.sortable:hover { color: #60a5fa; }
+        th.sortable .sort-icon { margin-left: 4px; font-size: 0.6rem; opacity: 0.4; }
+        th.sortable.active .sort-icon { opacity: 1; color: #60a5fa; }
+        th.sortable.active { color: #60a5fa; background: rgba(59, 130, 246, 0.08); }
+        th.sortable .sort-icon { transition: transform 0.2s ease, opacity 0.2s ease; display: inline-block; }
+        th.sortable.active.asc .sort-icon { transform: rotate(0deg); }
+        th.sortable.active.desc .sort-icon { transform: rotate(180deg); }
+        #pos-asset-filter { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 12px; color: #e2e8f0; font-size: 0.8rem; cursor: pointer; }
+        #pos-asset-filter:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+        .positions-count { background: #1e3a5f33; color: #60a5fa; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; margin-left: 8px; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+        .animate-slide-in { animation: slideIn 0.3s ease-out; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 h-screen overflow-hidden flex flex-col">
+    
+    <!-- TOP HEADER (Replicated from Dashboard) -->
+    <header class="h-14 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-6 shrink-0">
+        <div class="flex items-center gap-6">
+            <div class="text-sm">Equity <span class="text-white font-bold">$33.08</span></div>
+            <div class="text-sm">Today P/L <span class="text-green-500 font-bold">+$0.00</span></div>
+            <span class="px-2 py-0.5 bg-green-900 text-green-400 text-xs rounded-full animate-pulse">Live</span>
+        </div>
+        <div class="flex items-center gap-4 text-sm">
+            <span class="text-gray-400">{{ user.email if user else "" }}</span>
+            <span class="px-2 py-1 bg-gray-800 rounded text-xs font-bold">ADMIN</span>
+            <a href="/logout" class="text-red-400 hover:underline">Sign Out</a>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        
+        <!-- SIDEBAR NAVIGATION (Replicated from Dashboard) -->
+        <aside class="w-60 bg-gray-900 text-gray-300 flex flex-col border-r border-gray-800 shrink-0 overflow-y-auto">
+            <div class="p-4 text-xl font-bold text-yellow-500 border-b border-gray-800">🤖 MBIO</div>
+            <nav class="flex-1 p-2 space-y-1 text-sm">
+                <a href="/" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">📊 Dashboard</a>
+                <a href="/trade" class="flex items-center gap-3 px-4 py-2 bg-gray-800 text-yellow-400 rounded-lg font-bold border-l-4 border-yellow-500">⚡ Trade Terminal</a>
+                <a href="/positions" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">📈 Positions</a>
+                <a href="/orders" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">📝 Order Desk</a>
+                <a href="/robots" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">🤖 My Robots</a>
+                <a href="/grid" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">🔲 Grid Bots</a>
+                <a href="/analytics" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">📈 Analytics</a>
+                <a href="/history" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">📜 Trade History</a>
+                <a href="/audit" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">📋 Audit Log</a>
+                
+                <div class="pt-4 mt-4 border-t border-gray-800">
+                    <a href="/settings" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">⚙️ Settings</a>
+                    <a href="/safety" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">🛡 Safety</a>
+                    <a href="/system" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">🖥 System</a>
+                    <a href="/alerts" class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-800 transition">🔔 Alerts</a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- MAIN TRADING WORKSPACE -->
+        <main class="flex-1 flex flex-col overflow-hidden p-2 bg-gray-950">
+            <!-- Asset Category Tabs & Header -->
+            <div class="flex justify-between items-center mb-2 px-2 shrink-0">
+                <div class="flex gap-4 border-b border-gray-800">
+                    <button class="pb-2 text-yellow-500 border-b-2 border-yellow-500 font-bold">PERP (231)</button>
+                    <button class="pb-2 text-gray-500 hover:text-white transition">SPOT (0)</button>
+                    <button class="pb-2 text-gray-500 hover:text-white transition">TRADFI (0)</button>
+                </div>
+                <div class="flex gap-3 items-center">
+                    <select id="assetSelector" class="bg-gray-800 text-white px-3 py-1 rounded border border-gray-700 text-sm">
+                        <option value="BTC">BTC-PERP</option>
+                        <option value="ETH">ETH-PERP</option>
+                        <option value="SOL">SOL-PERP</option>
+                    </select>
+                    <span class="text-xl font-bold text-white">$63,216.50</span>
+                    <span class="text-green-500 text-sm">+2.14%</span>
+                </div>
+            </div>
+
+            <!-- Institutional Grid Layout -->
+            <div class="flex-1 grid grid-cols-12 gap-2 min-h-0">
+                
+                <!-- LEFT: ORDER BOOK (2 cols) -->
+                <div class="col-span-2 bg-gray-900 border border-gray-800 rounded p-2 overflow-hidden flex flex-col">
+                    <h3 class="text-xs font-bold text-gray-500 mb-2">ORDER BOOK</h3>
+                    <div class="flex-1 overflow-y-auto text-xs font-mono space-y-1">
+                        <div class="text-red-500 flex justify-between"><span>63220.5</span><span>0.124</span></div>
+                        <div class="text-red-500 flex justify-between"><span>63219.0</span><span>0.552</span></div>
+                        <div class="text-center my-2 text-white font-bold border-y border-gray-800 py-1">63216.5</div>
+                        <div class="text-green-500 flex justify-between"><span>63215.0</span><span>0.882</span></div>
+                        <div class="text-green-500 flex justify-between"><span>63214.5</span><span>2.104</span></div>
+                    </div>
+                </div>
+
+                <!-- CENTER: TRADINGVIEW LIGHTWEIGHT CHART (8 cols) -->
+                <div class="col-span-8 bg-gray-900 border border-gray-800 rounded p-2 flex flex-col min-h-0">
+                    <div id="tv-chart" class="flex-1 w-full min-h-0"></div>
+                </div>
+
+                <!-- RIGHT: EXECUTION PANEL (2 cols) -->
+                <div class="col-span-2 bg-gray-900 border border-gray-800 rounded p-3 flex flex-col gap-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded text-sm">Buy / Long</button>
+                        <button class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded text-sm">Sell / Short</button>
+                    </div>
+                    <div class="space-y-2 text-sm">
+                        <div>
+                            <label class="text-xs text-gray-500">Price (USD)</label>
+                            <input type="text" value="63216.5" class="w-full bg-gray-950 border border-gray-800 rounded p-1.5 text-white">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500">Size (BTC)</label>
+                            <input type="text" value="0.001" class="w-full bg-gray-950 border border-gray-800 rounded p-1.5 text-white">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500">Leverage</label>
+                            <div class="flex gap-1">
+                                <button class="flex-1 bg-gray-950 border border-gray-800 rounded py-1 text-xs">10x</button>
+                                <button class="flex-1 bg-gray-950 border border-gray-800 rounded py-1 text-xs">20x</button>
+                                <button class="flex-1 bg-yellow-600 border border-yellow-500 rounded py-1 font-bold text-xs">50x</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="mt-auto bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded">Place Order</button>
+                </div>
+            </div>
+
+            <!-- BOTTOM: PORTFOLIO PANEL -->
+            <div class="h-40 bg-gray-900 border border-gray-800 rounded p-2 mt-2 flex flex-col shrink-0">
+                <div class="flex gap-4 border-b border-gray-800 mb-2">
+                    <button class="pb-2 text-yellow-500 border-b-2 border-yellow-500 font-bold text-sm">Positions (1)</button>
+                    <button class="pb-2 text-gray-500 hover:text-white text-sm">Open Orders (0)</button>
+                </div>
+                <div class="flex-1 overflow-y-auto text-sm">
+                    <table class="w-full text-left">
+                        <thead class="text-xs text-gray-500 border-b border-gray-800">
+                            <tr>
+                                <th class="pb-1">Market</th>
+                                <th class="pb-1">Size</th>
+                                <th class="pb-1">Entry</th>
+                                <th class="pb-1">Mark</th>
+                                <th class="pb-1">PNL (ROE%)</th>
+                                <th class="pb-1">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-b border-gray-800">
+                                <td class="py-1 font-bold">ETH-PERP <span class="text-xs text-gray-500">20x</span></td>
+                                <td class="py-1 text-green-500">0.0066 L</td>
+                                <td class="py-1">1743.20</td>
+                                <td class="py-1">1745.10</td>
+                                <td class="py-1 text-green-500">+$0.012 (2.14%)</td>
+                                <td class="py-1"><button class="text-red-500 text-xs hover:underline">Close</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- TradingView Lightweight Charts™ Engine -->
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <script>
+        // === STATE & INITIALIZATION ===
+        const state = { asset: 'BTC', chart: null, series: null, data: null };
+        const chartContainer = document.getElementById('tv-chart');
+        
+        state.chart = LightweightCharts.createChart(chartContainer, {
+            width: chartContainer.clientWidth, height: chartContainer.clientHeight,
+            layout: { background: { type: 'solid', color: '#111827' }, textColor: '#9ca3af' },
+            grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
+            crosshair: { mode: 1 }, rightPriceScale: { borderColor: '#1f2937' },
+            timeScale: { borderColor: '#1f2937', timeVisible: true }, attributionLogo: true
+        });
+        state.series = state.chart.addCandlestickSeries({
+            upColor: '#10b981', downColor: '#ef4444', borderDownColor: '#ef4444',
+            borderUpColor: '#10b981', wickDownColor: '#ef4444', wickUpColor: '#10b981'
+        });
+
+        // === DATA FETCHING & UI RENDERING ===
+        async function loadTerminalData() {
+            try {
+                const res = await fetch('/api/terminal/data');
+                state.data = await res.json();
+                renderTabs();
+                renderDropdown();
+                updateHeader();
+            } catch (e) { console.error('Data load failed:', e); }
+        }
+
+        function renderTabs() {
+            const tabs = document.querySelectorAll('.flex.gap-4.border-b button');
+            if (tabs.length >= 3 && state.data) {
+                tabs[0].textContent = `PERP (${state.data.categories.PERP.length})`;
+                tabs[1].textContent = `SPOT (${state.data.categories.SPOT.length})`;
+                tabs[2].textContent = `TRADFI (${state.data.categories.TRADFI.length})`;
+            }
+        }
+
+        function renderDropdown() {
+            const sel = document.getElementById('assetSelector');
+            if (!sel || !state.data) return;
+            sel.innerHTML = '';
+            const assets = [...state.data.categories.PERP, ...state.data.categories.SPOT, ...state.data.categories.TRADFI];
+            assets.slice(0, 50).forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = a; opt.textContent = a;
+                if (a === state.asset) opt.selected = true;
+                sel.appendChild(opt);
+            });
+        }
+
+        function updateHeader() {
+            if (!state.data) return;
+            const price = state.data.prices[state.asset] || 0;
+            document.getElementById('markPrice').textContent = `$${price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        }
+
+        // === CHART WIRING ===
+        async function loadCandles() {
+            try {
+                const res = await fetch('/api/terminal/candles', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ coin: state.asset, interval: '15m' })
+                });
+                const raw = await res.json();
+                if (Array.isArray(raw)) {
+                    const formatted = raw.map(c => ({
+                        time: Math.floor(c.t / 1000),
+                        open: parseFloat(c.o), high: parseFloat(c.h),
+                        low: parseFloat(c.l), close: parseFloat(c.c)
+                    }));
+                    state.series.setData(formatted);
+                    state.chart.timeScale().fitContent();
+                }
+            } catch (e) { console.error('Candle load failed:', e); }
+        }
+
+        // === EVENT BINDINGS ===
+        document.getElementById('assetSelector').addEventListener('change', (e) => {
+            state.asset = e.target.value;
+            updateHeader();
+            loadCandles();
+        });
+
+        window.addEventListener('resize', () => {
+            state.chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight });
+        });
+
+        // === BOOT SEQUENCE ===
+        loadTerminalData();
+        loadCandles();
+        setInterval(() => { loadTerminalData(); }, 3000); // Live price poll
+    </script>
+</body>
+</html>

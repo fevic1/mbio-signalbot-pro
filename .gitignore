@@ -33,3 +33,39 @@ SESSION_LOG.md
 POST
 node_modules/
 frontend/node_modules/
+
+# AIOS
+.ai/memory/*.local
+.ai/cache/
+.ai/logs/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Logs
+*.log
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment
+.env
+.env.local
+
+# Backups
+*.backup
+*.bak
+*.broken
+
+# Runtime
+data/
+state/
+tmp/
+cache/
+
+# macOS
+.DS_Store
