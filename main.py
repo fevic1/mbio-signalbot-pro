@@ -115,9 +115,14 @@ if _os.path.isdir("frontend/static"):
     api.mount("/static", StaticFiles(directory="frontend/static"), name="dashboard_static")
     # Phase 14: Static assets for new modular frontend
     import os as _os
-    _v2_dist = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "frontend-v2-dist")
-    if _os.path.isdir(_v2_dist):
-        api.mount("/assets", StaticFiles(directory=_os.path.join(_v2_dist, "assets")), name="v2_assets")
+# [DISABLED]     _v2_dist = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "frontend-v2-dist")
+# [DISABLED]     if _os.path.isdir(_v2_dist):
+# Safely mount frontend assets ONLY if the directory exists
+# [DISABLED] # [DISABLED] _assets_dir = _os.path.join(_v2_dist, "assets")
+# [DISABLED] # [DISABLED] if _os.path.exists(_assets_dir):
+# [DISABLED] # # [DISABLED]     api.mount("/assets", StaticFiles(directory=_assets_dir), name="v2_assets")
+# [DISABLED] else:
+# [DISABLED] # [DISABLED]     print(f"⚠️ Frontend assets directory '{_assets_dir}' not found. Skipping mount. (Nginx will serve the frontend)")
 
 @api.get("/login")
 async def serve_login():
@@ -126,7 +131,6 @@ async def serve_login():
 @api.get("/dashboard")
 async def serve_dashboard():
     return FileResponse("frontend/index.html")
->>>>>>> main
 
 
 @api.get("/")
@@ -166,7 +170,6 @@ async def serve_spa(full_path: str):
     return FileResponse(os.path.join(base_dir, "frontend", "index.html"))
 
 
->>>>>>> main
 def run_api():
     if ENABLE_API_SERVER:
         try:
