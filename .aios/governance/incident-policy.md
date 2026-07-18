@@ -1,4 +1,4 @@
-# risk governance
+# incident policy
 
 Status: Active
 

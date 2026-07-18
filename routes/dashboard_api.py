@@ -981,7 +981,7 @@ async def get_system_status(user: dict = Depends(get_current_user)):
         "full_analysis", "slot_hunter", "trailing_dca",
         "profit_target_monitor", "grid_monitor",
     ]
-    tasks = {}
+    tasks = []
     try:
         import core.state as state
         task_states = getattr(state, 'BACKGROUND_TASKS', {})
@@ -1002,18 +1002,17 @@ async def get_system_status(user: dict = Depends(get_current_user)):
                 status = "not_started"
             if error_count > 5:
                 status = "degraded"
-            tasks[name] = {"status": status, "last_run": last_run, "error_count": error_count}
+            tasks.append({"id": name, "name": name, "status": status, "last_run": last_run, "error_count": error_count})
     except Exception as e:
         logger.error(f"System status fetch: {e}")
         for name in known_tasks:
-            tasks[name] = {"status": "unknown", "last_run": "", "error_count": 0}
+            tasks.append({"id": name, "name": name, "status": "unknown", "last_run": "", "error_count": 0})
 
     return {
         "tasks": tasks,
         "auto_trading": os.environ.get("ENABLE_AUTO_TRADING", "false").lower() == "true",
         "uptime_sec": int(time.time() - _start_time),
     }
-
 
 # ============================================================
 # ALERT CONFIGURATION (Phase 5: Master toggle + group filters)

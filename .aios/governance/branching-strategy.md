@@ -1,4 +1,4 @@
-# risk governance
+# branching strategy
 
 Status: Active
 

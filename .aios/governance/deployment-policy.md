@@ -1,4 +1,4 @@
-# risk governance
+# deployment policy
 
 Status: Active
 

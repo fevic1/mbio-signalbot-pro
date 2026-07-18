@@ -1,4 +1,4 @@
-# risk governance
+# release policy
 
 Status: Active
 

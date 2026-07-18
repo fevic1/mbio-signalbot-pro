@@ -7,25 +7,28 @@ echo "=========================================="
 echo " AIOS Enterprise Builder v1.0"
 echo "=========================================="
 
-mkdir -p "$ROOT"/{
-agents/{ai,engineering,governance,infrastructure,trading},
-architecture,
-commands,
-compatibility,
-governance,
-hooks,
-incidents,
-knowledge,
-memory,
-metrics,
-playbooks,
-prompts,
-research,
-reviews,
-runbooks,
-templates,
-workflows
-}
+mkdir -p \
+"$ROOT/agents/ai" \
+"$ROOT/agents/engineering" \
+"$ROOT/agents/governance" \
+"$ROOT/agents/infrastructure" \
+"$ROOT/agents/trading" \
+"$ROOT/architecture" \
+"$ROOT/commands" \
+"$ROOT/compatibility" \
+"$ROOT/governance" \
+"$ROOT/hooks" \
+"$ROOT/incidents" \
+"$ROOT/knowledge" \
+"$ROOT/memory" \
+"$ROOT/metrics" \
+"$ROOT/playbooks" \
+"$ROOT/prompts" \
+"$ROOT/research" \
+"$ROOT/reviews" \
+"$ROOT/runbooks" \
+"$ROOT/templates" \
+"$ROOT/workflows"
 
 ########################################
 # GOVERNANCE
@@ -48,15 +51,15 @@ cat > "$ROOT/governance/$f.md" <<EOF
 
 Status: Active
 
-Purpose
+## Purpose
 
-Responsibilities
+## Responsibilities
 
-Policies
+## Policies
 
-Required Validation
+## Required Validation
 
-Audit Requirements
+## Audit Requirements
 
 EOF
 done
@@ -85,13 +88,13 @@ do
 cat > "$ROOT/knowledge/$f.md" <<EOF
 # ${f//-/ }
 
-Purpose
+## Purpose
 
-Institutional Concepts
+## Institutional Concepts
 
-Implementation Notes
+## Implementation Notes
 
-References
+## References
 
 EOF
 done
@@ -113,13 +116,13 @@ do
 cat > "$ROOT/workflows/$f.md" <<EOF
 # ${f}
 
-Workflow
+## Workflow
 
-Inputs
+## Inputs
 
-Outputs
+## Outputs
 
-Quality Gates
+## Quality Gates
 
 EOF
 done
@@ -139,7 +142,7 @@ do
 cat > "$ROOT/reviews/$f.md" <<EOF
 # ${f}
 
-Checklist
+## Checklist
 
 EOF
 done
@@ -160,13 +163,13 @@ do
 cat > "$ROOT/runbooks/$f.md" <<EOF
 # ${f//-/ }
 
-Detection
+## Detection
 
-Diagnosis
+## Diagnosis
 
-Recovery
+## Recovery
 
-Verification
+## Verification
 
 EOF
 done
@@ -185,11 +188,11 @@ do
 cat > "$ROOT/metrics/$f.md" <<EOF
 # ${f}
 
-KPIs
+## KPIs
 
-Targets
+## Targets
 
-Alerts
+## Alerts
 
 EOF
 done
@@ -210,11 +213,11 @@ do
 cat > "$ROOT/commands/$f.md" <<EOF
 # ${f}
 
-Purpose
+## Purpose
 
-Procedure
+## Procedure
 
-Expected Output
+## Expected Output
 
 EOF
 done

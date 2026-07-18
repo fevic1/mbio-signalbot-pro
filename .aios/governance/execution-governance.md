@@ -1,4 +1,4 @@
-# risk governance
+# execution governance
 
 Status: Active
 

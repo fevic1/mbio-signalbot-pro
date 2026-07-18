@@ -1,4 +1,4 @@
-# risk governance
+# security policy
 
 Status: Active
 
