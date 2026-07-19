@@ -1,9 +1,23 @@
 services:
+  # 1. AUTOMATED FRONTEND BUILDER
+  # This container spins up, compiles the frontend, and exits.
+  frontend-builder:
+    image: node:20-alpine
+    container_name: mbio-frontend-builder
+    volumes:
+      - ./dashboard-v3:/app            # Mounts your source code
+      - frontend-dist:/app/dist        # Named volume for the compiled output
+    working_dir: /app
+    # Installs dependencies and builds the frontend
+    command: sh -c "npm install && npm run build"
+    restart: "no"                      # Only runs when explicitly triggered
+
+  # 2. PYTHON BACKEND
   mbio-bot:
     build: .
     container_name: mbio-signalbot
     ports:
-      - "8000:8000" # Kept for direct API testing and health checks
+      - "8000:8000" 
     volumes:
       - ./main.py:/app/main.py:ro
       - ./config:/app/config:ro
@@ -30,6 +44,7 @@ services:
     networks:
       - mbio-network
 
+  # 3. REDIS CACHE
   redis:
     image: redis:7-alpine
     container_name: mbio-redis
@@ -37,15 +52,17 @@ services:
     networks:
       - mbio-network
 
+  # 4. NGINX REVERSE PROXY & STATIC SERVER
   nginx:
     image: nginx:1.25-alpine
     container_name: mbio-nginx
     ports:
       - "80:80"
     volumes:
-      - ./dashboard-v3/dist:/usr/share/nginx/html:ro
+      - ./dashboard-v3/dist:/usr/share/nginx/html:ro  # Reads from the built volume
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
+      - frontend-builder  # Ensures frontend is built before Nginx starts
       - mbio-bot
     restart: unless-stopped
     networks:
@@ -54,3 +71,7 @@ services:
 networks:
   mbio-network:
     driver: bridge
+
+# 5. NAMED VOLUMES DEFINITION
+volumes:
+  frontend-dist:

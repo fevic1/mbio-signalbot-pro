@@ -20,6 +20,43 @@ import { CandleChart } from "@/components/CandleChart"
 import { BotsMiniList } from "@/components/BotsMiniList"
 import { AssetUniversePanel } from "@/components/AssetUniversePanel"
 
+type MonitorStatus = { id: string; label: string; status: "ok" | "warn"; detail?: string; }
+
+function useHealthMonitors() {
+  const [monitors, setMonitors] = useState<MonitorStatus[]>([
+    { id: "position_monitor", label: "position monitor", status: "ok" },
+    { id: "quick_scanner", label: "quick scanner", status: "ok" },
+    { id: "entry_scanner", label: "entry scanner", status: "ok" },
+    { id: "full_analysis", label: "full analysis", status: "ok" },
+    { id: "slot_hunter", label: "slot hunter", status: "warn", detail: "Task registered but returns immediately — confirmed dead stub, not a live outage." },
+    { id: "trailing_dca", label: "trailing dca", status: "ok" },
+    { id: "profit_target_monitor", label: "profit target monitor", status: "ok" },
+    { id: "grid_monitor", label: "grid monitor", status: "ok" },
+  ]);
+
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const res = await apiFetch<any>("/system/status");
+        if (res && res.tasks) {
+          setMonitors(prev => prev.map(h => {
+            const task = res.tasks.find((t: any) => t.name === h.id || t.id === h.id);
+            if (task) {
+              return { ...h, status: (task.status === "running" || task.status === "active") ? "ok" : "warn" } as MonitorStatus;
+            }
+            return h;
+          }));
+        }
+      } catch (e) { /* ignore fetch errors */ }
+    };
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return monitors;
+}
+
 const NAV = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "assets", label: "Assets", icon: Grid3x3 },
@@ -27,19 +64,10 @@ const NAV = [
   { id: "positions", label: "Positions", icon: TrendingUp },
   { id: "orders", label: "Orders", icon: ListOrdered },
   { id: "signals", label: "Activity", icon: Radio },
+  { id: "settings", label: "Settings", icon: Settings },
 ] as const
 
 type TabId = typeof NAV[number]["id"]
-const HEALTH = [
-  { id: "position_monitor", label: "position monitor", status: "ok" as const },
-  { id: "quick_scanner", label: "quick scanner", status: "ok" as const },
-  { id: "entry_scanner", label: "entry scanner", status: "ok" as const },
-  { id: "full_analysis", label: "full analysis", status: "ok" as const },
-  { id: "slot_hunter", label: "slot hunter", status: "warn" as const, detail: "Task registered but returns immediately — confirmed dead stub, not a live outage." },
-  { id: "trailing_dca", label: "trailing dca", status: "ok" as const },
-  { id: "profit_target_monitor", label: "profit target monitor", status: "ok" as const },
-  { id: "grid_monitor", label: "grid monitor", status: "ok" as const },
-]
 
 type TicketContext =
   | { type: "edit_bot"; coin: string }
@@ -402,12 +430,13 @@ function Ticket({ context, onClose, onResult, triggerRefresh, triggerGridRefresh
 }
 
 function HealthBar({ selected, onSelect }: { selected: string | null; onSelect: (id: string | null) => void }) {
-  const detail = HEALTH.find((h) => h.id === selected)
+  const healthMonitors = useHealthMonitors();
+  const detail = healthMonitors.find((h) => h.id === selected)
   return (
     <div className="border-t border-border">
       <div className="flex flex-wrap items-center gap-2 bg-card px-4 py-2">
         <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        {HEALTH.map((h) => {
+        {healthMonitors.map((h) => {
           const ok = h.status === "ok"
           return (
             <button
@@ -447,6 +476,9 @@ function Dashboard() {
   const [ticketExpanded, setTicketExpanded] = useState(true)
   const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null)
   const [confirmStop, setConfirmStop] = useState(false)
+  
+  // FIX: Call the hook at the top level of the component
+  const healthMonitors = useHealthMonitors();
   
   const notify = (msg: string, isError = false) => {
     setToast({ msg, isError })
@@ -546,6 +578,26 @@ function Dashboard() {
             )}
             {tab === "orders" && <OrdersPanel />}
             {tab === "signals" && <ActivityPanel />}
+            {tab === "settings" && (
+              <Card>
+                <CardHeader><h2 className="text-lg font-semibold">Monitor Settings</h2></CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {healthMonitors.map((h) => (
+                      <div key={h.id} className="flex items-center justify-between border-b border-border pb-2">
+                        <div>
+                          <p className="font-medium capitalize">{h.label.replace(/_/g, ' ')}</p>
+                          <p className="text-xs text-muted-foreground">Status: {h.status === 'ok' ? 'Active' : 'Warning'}</p>
+                        </div>
+                        <button className={`px-3 py-1 rounded text-xs ${h.status === 'ok' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'}`}>
+                          {h.status === 'ok' ? 'Enabled' : 'Review'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
           <HealthBar selected={selectedHealth} onSelect={setSelectedHealth} />
         </div>

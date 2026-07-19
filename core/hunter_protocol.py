@@ -121,7 +121,7 @@ async def _execute_swap(stagnant_asset: str, candidate: Dict):
         
         # 1. Close the stagnant position (reduce_only)
         close_side = "SELL" if stagnant_pos.get("side") == "BUY" else "BUY"
-        close_size = stagnant_pos.get("size", 0)
+        close_size = float(stagnant_pos.get("size", 0))
         
         logger.info(f"🏹 Closing stagnant position: {stagnant_asset} {close_side} {close_size}")
         close_result = execute_hl_order(
@@ -217,56 +217,83 @@ async def _execute_fill(candidate: Dict):
         logger.error(f"❌ Hunter Protocol: Fill execution failed: {e}")
 
 async def hunter_monitor_loop():
-    """Continuous background monitor that runs every 5 minutes."""
-    logger.info("🏹 Hunter Monitor: Starting continuous background monitoring...")
+    """Continuous background monitor. Checks stagnant positions every 5 mins, analyzes assets in staggered 30-min phases."""
+    logger.info("🏹 Hunter Monitor: Starting continuous background monitoring (Staggered 30-min phases)...")
+    
+    current_phase = 1  # Tracks which phase to run (1, 2, or 3)
+    iteration = 0      # Tracks 5-minute intervals
     
     while True:
         try:
-            await asyncio.sleep(300)  # 5 minutes
+            # Wait 5 minutes between loop iterations
+            await asyncio.sleep(300)
+            iteration += 1
             
-            logger.info("🏹 Hunter Monitor: Running periodic check...")
+            # 1. ALWAYS check for stagnant positions every 5 minutes
+            stagnant_assets = check_stagnant_positions()
+            if stagnant_assets:
+                logger.info(f"🏹 Hunter Monitor: Found {len(stagnant_assets)} stagnant assets. Executing hunt...")
+                await run_hunter_protocol_idle([], stagnant_assets)
             
-            try:
-                from core.signal_generator import analyze_batch
-                from config.config import get_config
+            # 2. Every 30 minutes (6 iterations of 5 mins), analyze the next phase of assets
+            if iteration % 6 == 0:
+                logger.info(f"🏹 Hunter Monitor: Running Phase {current_phase} asset analysis...")
                 
-                cfg = get_config()
-                assets = cfg.get("hyperliquid", {}).get("assets", [])
-                
-                # Analyze all assets EXCEPT the ones we already have open
-                open_assets = set(state.OPEN_POSITIONS.keys())
-                items = {asset: {} for asset in assets if asset not in open_assets}
-                
-                if not items:
-                    logger.info("🏹 Hunter Monitor: No new assets to analyze.")
-                    continue
-                
-                results, provider = await analyze_batch(items, cfg)
-                
-                # Build pending signals for hunting
-                pending_signals = []
-                for asset_name, data in items.items():
-                    result = results.get(asset_name) or {}
-                    signal = result.get("signal", "HOLD")
-                    conf = result.get("confidence", 50)
+                try:
+                    from core.signal_generator import analyze_batch
+                    from config.config import get_config
                     
-                    if conf >= MIN_CONFIDENCE and "HOLD" not in signal.upper():
-                        pending_signals.append({
-                            "asset": asset_name,
-                            "signal": signal,
-                            "confidence": conf,
-                            "data": data
-                        })
-                
-                # Execute hunt (swap or fill)
-                stagnant_assets = check_stagnant_positions()
-                if pending_signals or stagnant_assets:
-                    await run_hunter_protocol_idle(pending_signals, None)
-                else:
-                    logger.info("🏹 Hunter Monitor: No hunted candidates or stagnant positions. All healthy.")
+                    cfg = get_config()
+                    assets = cfg.get("hyperliquid", {}).get("assets", [])
                     
-            except Exception as e:
-                logger.error(f"🏹 Hunter Monitor: Failed to analyze for swap/fill: {e}")
+                    # Analyze all assets EXCEPT the ones we already have open
+                    open_assets = set(state.OPEN_POSITIONS.keys())
+                    items = {asset: {} for asset in assets if asset not in open_assets}
+                    
+                    if not items:
+                        logger.info("🏹 Hunter Monitor: No new assets to analyze.")
+                    else:
+                        BATCH_SIZE = 15
+                        items_list = list(items.items())
+                        
+                        # Calculate the slice for the current phase
+                        start_idx = (current_phase - 1) * BATCH_SIZE
+                        end_idx = start_idx + BATCH_SIZE
+                        chunk = dict(items_list[start_idx:end_idx])
+                        
+                        if chunk:
+                            logger.info(f"🧠 Analyzing asset Phase {current_phase} ({len(chunk)} assets)...")
+                            results, provider = await analyze_batch(chunk, cfg)
+                            
+                            # Build pending signals for hunting
+                            pending_signals = []
+                            for asset_name, data in chunk.items():
+                                result = results.get(asset_name) or {}
+                                signal = result.get("signal", "HOLD")
+                                conf = result.get("confidence", 50)
+                                
+                                if conf >= MIN_CONFIDENCE and "HOLD" not in signal.upper():
+                                    pending_signals.append({
+                                        "asset": asset_name,
+                                        "signal": signal,
+                                        "confidence": conf,
+                                        "data": data
+                                    })
+                            
+                            # Execute hunt (swap or fill)
+                            if pending_signals:
+                                await run_hunter_protocol_idle(pending_signals, None)
+                            else:
+                                logger.info("🏹 Hunter Monitor: No hunted candidates in this phase. All healthy.")
+                        else:
+                            logger.info(f"🏹 Hunter Monitor: Phase {current_phase} has no assets to analyze.")
+                            
+                except Exception as e:
+                    import traceback
+                    logger.error(f"🏹 Hunter Monitor: Failed to analyze Phase {current_phase}: {e}\n{traceback.format_exc()}")
+                
+                # Advance to the next phase (1 -> 2 -> 3 -> 1)
+                current_phase = (current_phase % 3) + 1
                 
         except Exception as e:
             logger.error(f"🏹 Hunter Monitor: Loop error: {e}")
