@@ -69,3 +69,12 @@ cache/
 
 # macOS
 .DS_Store
+node_modules/
+frontend/node_modules/
+dashboard-v3/node_modules/
+dist/
+frontend-v2-dist/
+install_dir/
+google-cloud-sdk/
+*.pyc
+__pycache__/
