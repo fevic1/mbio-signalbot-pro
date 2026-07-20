@@ -6,75 +6,56 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
 .Python
 venv/
 env/
+.venv/
 
-# IDE & OS
+# IDE
 .DS_Store
 .vscode/
 .idea/
 
-# Project specific junk (Prevent committing broken/test files)
-.archive_cleanup_*/
-*.broken
-*.save
-*.bak
-test_*.py
-verify_*.sh
-apply_fixes.sh
-restore_baseline.py
-wire_asset_universe_final.py
-latest_logs.txt
-SESSION_LOG.md
-26.1.2
-POST
+# Node
 node_modules/
 frontend/node_modules/
 
-# AIOS
-.ai/memory/*.local
-.ai/cache/
-.ai/logs/
-
-# Python
-__pycache__/
-*.pyc
-.pytest_cache/
-
 # Logs
 *.log
+logs/
+latest_logs.txt
 
 # Databases
 *.db
 *.sqlite
 *.sqlite3
 
-# Environment
-.env
-.env.local
-
 # Backups
 *.backup
 *.bak
 *.broken
+*.save
 
-# Runtime
+# Test artifacts
+test_*.py
+verify_*.sh
+apply_fixes.sh
+restore_baseline.py
+
+# Runtime data
 data/
 state/
 tmp/
-cache/
 
-# macOS
-.DS_Store
-node_modules/
-frontend/node_modules/
-dashboard-v3/node_modules/
-dist/
-frontend-v2-dist/
-install_dir/
-google-cloud-sdk/
-*.pyc
-__pycache__/
+# AIOS runtime
+.aios/sessions/
+.aios/state/
+.aios/cache/
+.aios/logs/
+
+# Local AIOS files
+*.local
+
+# Project cleanup
+.archive_cleanup_*/
