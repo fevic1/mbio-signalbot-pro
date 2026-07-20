@@ -1,0 +1,40 @@
+providers:
+
+  groq:
+    enabled: true
+    env: GROQ_API_KEY
+
+  cerebras:
+    enabled: true
+    env: CEREBRAS_API_KEY
+
+  openrouter:
+    enabled: true
+    env: OPENROUTER_API_KEY
+
+  claude:
+    enabled: false
+    env: ANTHROPIC_API_KEY
+
+routing:
+
+  architect:
+    provider: cerebras
+
+  chief_quant:
+    provider: cerebras
+
+  strategy:
+    provider: cerebras
+
+  reviewer:
+    provider: groq
+
+  documentation:
+    provider: groq
+
+  research:
+    provider: openrouter
+
+  fallback:
+    provider: groq

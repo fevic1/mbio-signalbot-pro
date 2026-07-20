@@ -1,0 +1,25 @@
+memory:
+
+  root: .aios/memory
+
+  load:
+
+    - project.md
+    - project-state.md
+    - architecture.md
+    - decisions.md
+    - coding-standards.md
+    - risk-policy.md
+    - api-spec.md
+    - product.md
+    - known-bugs.md
+    - tech-debt.md
+    - changelog.md
+
+  autosave: true
+
+  sync_interval: 300
+
+  archive:
+    enabled: true
+    directory: .aios/archive

@@ -1,23 +1,39 @@
 services:
-  # 1. AUTOMATED FRONTEND BUILDER
-  # This container spins up, compiles the frontend, and exits.
+
+  # 1. FRONTEND BUILDER (RUN ON DEPLOY ONLY)
   frontend-builder:
     image: node:20-alpine
     container_name: mbio-frontend-builder
-    volumes:
-      - ./dashboard-v3:/app            # Mounts your source code
-      - frontend-dist:/app/dist        # Named volume for the compiled output
-    working_dir: /app
-    # Installs dependencies and builds the frontend
-    command: sh -c "npm install && npm run build"
-    restart: "no"                      # Only runs when explicitly triggered
 
-  # 2. PYTHON BACKEND
+    volumes:
+      - ./dashboard-v3:/app
+      - frontend-dist:/app/dist
+
+    working_dir: /app
+
+    command: >
+      sh -c "npm install &&
+             npm run build"
+
+    restart: "no"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+
+  # 2. PYTHON BACKEND / TRADING ENGINE
   mbio-bot:
     build: .
+
     container_name: mbio-signalbot
+
     ports:
-      - "8000:8000" 
+      - "8000:8000"
+
+
     volumes:
       - ./main.py:/app/main.py:ro
       - ./config:/app/config:ro
@@ -25,53 +41,152 @@ services:
       - ./execution:/app/execution:ro
       - ./routes:/app/routes:ro
       - ./monitoring:/app/monitoring:ro
+
+      # persistent state
       - ./data:/app/data
       - ./db:/app/db
+
       - ./templates:/app/templates:ro
+
+
     environment:
-      - HL_PRIVATE_KEY=${HL_PRIVATE_KEY}
-      - HL_ACCOUNT_ADDRESS=${HL_ACCOUNT_ADDRESS}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - MBIO_SESSION_SECRET=${MBIO_SESSION_SECRET}
-      - MBIO_ADMIN_PASSWORD=${MBIO_ADMIN_PASSWORD}
-      - MBIO_ADMIN_EMAIL=${MBIO_ADMIN_EMAIL}
+      HL_PRIVATE_KEY: ${HL_PRIVATE_KEY}
+      HL_ACCOUNT_ADDRESS: ${HL_ACCOUNT_ADDRESS}
+
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+
+      MBIO_SESSION_SECRET: ${MBIO_SESSION_SECRET}
+
+      MBIO_ADMIN_PASSWORD: ${MBIO_ADMIN_PASSWORD}
+      MBIO_ADMIN_EMAIL: ${MBIO_ADMIN_EMAIL}
+
+
     env_file:
       - .env
+
+
     depends_on:
-      - redis
+
+      redis:
+        condition: service_healthy
+
+
     restart: unless-stopped
+
+
+    healthcheck:
+
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/status')"
+        ]
+
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+
     networks:
       - mbio-network
 
-  # 3. REDIS CACHE
+
+
+  # 3. REDIS MEMORY CACHE
   redis:
+
     image: redis:7-alpine
+
     container_name: mbio-redis
+
+
     restart: unless-stopped
+
+
+    healthcheck:
+
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ]
+
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+
     networks:
       - mbio-network
 
-  # 4. NGINX REVERSE PROXY & STATIC SERVER
+
+
+  # 4. NGINX FRONTEND + API GATEWAY
   nginx:
+
     image: nginx:1.25-alpine
+
     container_name: mbio-nginx
+
+
     ports:
       - "80:80"
+
+
     volumes:
-      - ./dashboard-v3/dist:/usr/share/nginx/html:ro  # Reads from the built volume
+
+      - ./dashboard-v3/dist:/usr/share/nginx/html:ro
+
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+
+
     depends_on:
-      - frontend-builder  # Ensures frontend is built before Nginx starts
-      - mbio-bot
+
+      mbio-bot:
+        condition: service_healthy
+
+
     restart: unless-stopped
+
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+
     networks:
       - mbio-network
 
+
+
 networks:
+
   mbio-network:
     driver: bridge
 
-# 5. NAMED VOLUMES DEFINITION
+
+
 volumes:
+
   frontend-dist:

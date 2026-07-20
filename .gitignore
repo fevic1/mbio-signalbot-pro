@@ -59,3 +59,14 @@ tmp/
 
 # Project cleanup
 .archive_cleanup_*/
+
+# Google Cloud SDK accidental installs
+install_dir/
+google-cloud-sdk/
+*Installation directory*
+
+# Runtime junk
+*.log
+*.db
+*.sqlite
+SESSION_LOG.md

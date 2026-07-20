@@ -1,0 +1,28 @@
+project:
+
+  name: Hyperliquid Agent Scout
+
+repository:
+
+  branch: main
+
+trading:
+
+  exchanges:
+
+    - Hyperliquid
+    - Bybit
+
+risk:
+
+  fail_closed: true
+
+  require_validation: true
+
+deployment:
+
+  production_requires_review: true
+
+documentation:
+
+  mandatory: true

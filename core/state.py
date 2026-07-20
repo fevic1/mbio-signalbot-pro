@@ -22,7 +22,7 @@ daily_pnl: float = 0.0
 TRADE_HISTORY: list = []
 daily_pnl_reset_date: str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-STATE_FILE = Path("state.json")
+STATE_FILE = Path("data/state.json")
 
 # Auto-DCA persistence variables (populated by dca_lifecycle module)
 auto_dca_active: dict = {}

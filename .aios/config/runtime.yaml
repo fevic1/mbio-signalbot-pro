@@ -1,0 +1,23 @@
+version: 1
+
+runtime:
+  mode: production
+  startup:
+    bootstrap: true
+    load_context: true
+    load_memory: true
+    validate_repository: true
+    sync_memory: true
+
+session:
+  auto_resume: true
+  save_on_exit: true
+  heartbeat_seconds: 60
+
+quality:
+  run_quality_gate: true
+  block_on_failure: true
+
+logging:
+  level: INFO
+  directory: .aios/logs

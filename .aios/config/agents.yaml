@@ -1,0 +1,41 @@
+agents:
+
+  architect:
+    enabled: true
+
+  chief_quant:
+    enabled: true
+
+  execution:
+    enabled: true
+
+  strategy:
+    enabled: true
+
+  risk:
+    enabled: true
+
+  reviewer:
+    enabled: true
+
+  documentation:
+    enabled: true
+
+  security:
+    enabled: true
+
+  devops:
+    enabled: true
+
+  qa:
+    enabled: true
+
+coordination:
+
+  parallel: true
+
+  consensus:
+    minimum_reviews: 2
+
+  escalation:
+    reviewer_required: true

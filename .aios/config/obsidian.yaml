@@ -1,0 +1,29 @@
+vault:
+
+  enabled: true
+
+  path: docs/obsidian
+
+notes:
+
+  architecture: Architecture
+  decisions: Decisions
+  bugs: Bugs
+  roadmap: Roadmap
+  changelog: Changelog
+  sessions: Sessions
+  research: Research
+
+sync:
+
+  export_memory: true
+  export_sessions: true
+  export_decisions: true
+
+graph:
+
+  enabled: true
+
+daily_notes:
+
+  enabled: true
