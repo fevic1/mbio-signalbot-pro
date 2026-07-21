@@ -105,7 +105,6 @@ class DecisionEngine:
 
         if context:
 
-            context.metadata["decision"] = result
 
             context.emit(
                 "decision_created",
