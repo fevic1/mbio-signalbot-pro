@@ -1,3 +1,6 @@
+import pandas as pd
+from core.strategy.regime_analyzer import RegimeAnalyzer
+from core.strategy.grid_optimizer import GridOptimizer, validate_and_fallback
 """
 core/grid_manager.py — Reversal Grid Trading Engine
 Mean-reversion grid that flips filled nodes to opposite side ±1 step.
@@ -5,7 +8,11 @@ Capital-efficient: recycles funds per completed cycle.
 Fully isolated via GRID:: namespace. Sync HLExecutor API.
 """
 import logging
+from core.strategy.regime_analyzer import RegimeAnalyzer
+from core.strategy.grid_optimizer import GridOptimizer, validate_and_fallback
 import math
+from core.strategy.regime_analyzer import RegimeAnalyzer
+from core.strategy.grid_optimizer import GridOptimizer, validate_and_fallback
 from typing import Dict, List, Optional
 from core.grid_persistence import save_grid_state
 from datetime import datetime, timezone
@@ -431,3 +438,43 @@ class GridManager:
             "investment": f"${config['investment_amount']:.2f}",
             "realized_pnl": f"${config.get('total_realized_pnl', 0):+.4f}",
         }
+
+
+    def get_optimized_grid_params(
+        self, 
+        asset: str, 
+        current_price: float, 
+        candles_df: Optional[pd.DataFrame] = None,
+        static_lower: Optional[float] = None,
+        static_upper: Optional[float] = None,
+        static_nodes: Optional[int] = None
+    ) -> Dict[str, float]:
+        """
+        Calculates dynamic grid parameters using RegimeAnalyzer and GridOptimizer,
+        with a strict Hard Check fallback to static parameters.
+        """
+        # 1. Define static fallback parameters
+        static_params = {
+            "lower_price": static_lower if static_lower is not None else current_price * 0.95,
+            "upper_price": static_upper if static_upper is not None else current_price * 1.05,
+            "node_count": static_nodes if static_nodes is not None else 10,
+            "range_percentage": 10.0
+        }
+
+        # 2. Attempt dynamic calculation
+        try:
+            if candles_df is not None and len(candles_df) >= 20:
+                analyzer = RegimeAnalyzer(lookback=20)
+                regime_data = analyzer.analyze(candles_df)
+                
+                optimizer = GridOptimizer(base_range_pct=0.05, base_nodes=10)
+                dynamic_params = optimizer.calculate_parameters(regime_data, current_price)
+                
+                # 3. HARD CHECK: Validate and fallback if invalid
+                return validate_and_fallback(dynamic_params, static_params, asset)
+            else:
+                logger.info(f"[HARD CHECK] Insufficient candle data for {asset}. Using static params.")
+                return static_params
+        except Exception as e:
+            logger.error(f"[HARD CHECK EXCEPTION] Failed to calculate dynamic params for {asset}: {e}. Reverting to static.")
+            return static_params

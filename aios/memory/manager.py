@@ -1,24 +1,38 @@
-from .config import MemoryConfig
+from .obsidian import ObsidianWriter
+from .validator import MemoryValidator
 
 
 class MemoryManager:
 
     def __init__(self):
-        self.config = MemoryConfig()
 
-    def initialize(self):
-        self.config.validate()
+        self.writer = ObsidianWriter()
+        self.validator = MemoryValidator()
 
-        return {
-            "status": "ready",
-            "memory": str(
-                self.config.memory_path
-            ),
-            "vault": str(
-                self.config.vault_path
+
+    def remember(
+        self,
+        memory_type,
+        title,
+        content,
+        metadata=None
+    ):
+
+        valid = self.validator.validate(
+            memory_type,
+            content
+        )
+
+
+        if not valid:
+            raise ValueError(
+                "Memory rejected by validator"
             )
-        }
 
-    def validate(self):
-        return self.config.validate()
 
+        return self.writer.write_memory(
+            memory_type=memory_type,
+            title=title,
+            content=content,
+            metadata=metadata
+        )

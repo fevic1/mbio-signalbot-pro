@@ -19,6 +19,7 @@ from routes.dashboard_auth import (
 )
 from routes.dashboard_sse import dashboard_sse_stream
 from core.app_context import app_context
+from core.mcp_registry import MCPServerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -1739,3 +1740,113 @@ async def stream_prices():
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+# ============================================================
+# DYNAMIC ASSET UNIVERSE & STATE SYNC (Appended safely)
+# ============================================================
+
+@router.get("/assets")
+async def get_available_assets(current_user: dict = Depends(get_current_user)):
+    """Return ALL available perpetual assets from HIP-4 exchange API (no hardcoded limits)."""
+    try:
+        from core.asset_universe import get_universe
+        universe = get_universe()
+        perp_assets = [asset if isinstance(asset, str) else asset.get('name', asset.get('coin', '')) for asset in universe]
+        logger.info(f"Assets fetched: {len(perp_assets)} perpetual assets")
+        return perp_assets
+    except Exception as e:
+        logger.error(f"Failed to fetch assets from HIP-4: {e}")
+        return []
+
+@router.post("/sync-state")
+async def sync_bot_state(current_user: dict = Depends(get_current_user)):
+    """Synchronize bot's internal state with exchange reality."""
+    try:
+        from core.state import GRID_STATES
+        from core.app_context import app_context
+        
+        executor = app_context.hl_executor
+        exchange_positions = await executor.get_positions() if hasattr(executor, 'get_positions') else []
+        exchange_asset_set = {pos.get('coin') for pos in exchange_positions}
+        
+        stale_grids = []
+        for asset in list(GRID_STATES.keys()):
+            if asset not in exchange_asset_set:
+                stale_grids.append(asset)
+                del GRID_STATES[asset]
+        
+        logger.info(f"Synced state: removed {len(stale_grids)} stale grid states: {stale_grids}")
+        return {"status": "success", "stale_grids_removed": stale_grids, "active_positions": len(exchange_positions)}
+    except Exception as e:
+        logger.error(f"State sync failed: {e}")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# MCP REGISTRY MANAGEMENT (Write Operations)
+# ============================================================
+
+@router.post("/mcp/register")
+async def register_mcp_server(
+    config: MCPServerConfig,
+    current_user: dict = Depends(get_current_user)
+):
+    """Register a new MCP server dynamically."""
+    success = await mcp_registry.register_server(config)
+    if not success:
+        raise HTTPException(status_code=409, detail=f"Server ID '{config.server_id}' already exists or is invalid.")
+    return {"status": "success", "server_id": config.server_id}
+
+@router.post("/mcp/unregister/{server_id}")
+async def unregister_mcp_server(
+    server_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Remove an MCP server dynamically."""
+    success = await mcp_registry.unregister_server(server_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Server not found.")
+    return {"status": "success"}
+
+# ============================================================
+# MARKET REGIME ENDPOINT (Dashboard)
+# Reuses existing RegimeAnalyzer - no new dependencies
+# ============================================================
+@router.get("/regime")
+async def get_regime(asset: str = "BTC"):
+    """Fetch live GTJA-191 market regime analysis for the dashboard."""
+    try:
+        from core.strategy.regime_analyzer import RegimeAnalyzer
+        import pandas as pd
+        import requests
+        import time
+        
+        url = "https://api.hyperliquid.xyz/info"
+        end_time = int(time.time() * 1000)
+        start_time = end_time - (100 * 3600 * 1000)
+        
+        resp = requests.post(url, json={
+            "type": "candleSnapshot",
+            "req": {"coin": asset.upper(), "interval": "1h", "startTime": start_time, "endTime": end_time}
+        }, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        if not data:
+            raise ValueError(f"No candle data for {asset}")
+            
+        df = pd.DataFrame(data)
+        df = df.rename(columns={'t': 'time', 'o': 'open', 'h': 'high', 'l': 'low', 'c': 'close', 'v': 'volume'})
+        df['time'] = pd.to_datetime(df['time'], unit='ms')
+        df = df.astype({'open': float, 'high': float, 'low': float, 'close': float, 'volume': float})
+        
+        analyzer = RegimeAnalyzer(lookback=20)
+        result = analyzer.analyze(df)
+        
+        if not result:
+            raise ValueError("Regime analysis returned empty result")
+            
+        return result
+    except Exception as e:
+        logger.error(f"get_regime failed for {asset}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

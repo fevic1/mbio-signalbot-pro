@@ -6,6 +6,9 @@ import asyncio
 from core.state import BACKGROUND_TASKS
 import logging
 import os
+from core.mcp_registry import mcp_registry, MCPServerConfig
+from routes.mcp_gateway import router as mcp_gateway_router
+from core.mcp_tools import init_mcp_tools
 os.environ["CHROMA_TELEMETRY_DISABLED"] = "true"
 import threading
 import time
@@ -24,12 +27,6 @@ load_dotenv()
 
 from config_loader import get_config
 from core.data_fetcher import get_account_balance, get_mtf_data
-from core.risk_manager import (
-    RiskManager,
-    calculate_position_size,
-    calculate_trade_plan,
-    is_correlation_blocked,
-    is_drawdown_halted)
 from core.signal_generator import analyze_batch, init_ai_clients
 from core.hunter_protocol import update_hold_tracking, run_hunter_protocol_idle, hunter_monitor_loop
 from core.state import OPEN_POSITIONS, SIGNAL_CACHE, TIER_TIMESTAMPS, reset_daily_pnl_if_new_day
@@ -150,6 +147,9 @@ async def health():
 
 # Phase 13: HIP-4 Multi-Asset API Routes
 from routes.hip4_api import router as hip4_router
+
+# Register MCP Gateway Router (High Priority)
+api.include_router(mcp_gateway_router)
 api.include_router(hip4_router)
 
 @api.get("/{full_path:path}")
@@ -502,6 +502,7 @@ async def main() -> None:
         logger.info(f"🌐 API: http://0.0.0.0:{API_PORT}")
 
     logger.info("🚀 MBIO SignalBot Pro v9.0 started...")
+    await setup_mcp_servers()
 
     # 🏹 HUNTER PROTOCOL: Start continuous background monitoring
     try:
@@ -634,9 +635,46 @@ async def _sync_exchange_positions() -> None:
         logger.error(f"❌ Exchange sync failed: {e}")
 
 
+
 if __name__ == "__main__":
     import asyncio
     import time
-    asyncio.run(main())
+    
+    async def setup_mcp_servers():
+        """Initialize Multi-MCP Registry with environment-based credentials."""
+        # Register Vibe-Trading MCP server
+        vibe_config = MCPServerConfig(
+            server_id="vibe-trading",
+            name="Vibe Trading Research",
+            description="Alpha factor analysis and backtesting tools",
+            api_key=os.getenv("MCP_VIBE_TRADING_API_KEY", "dev_key_change_in_env"),
+            rate_limit_per_min=int(os.getenv("MCP_VIBE_RATE_LIMIT", "30"))
+        )
+        await mcp_registry.register_server(vibe_config)
+        
+        # Register Risk Analyzer MCP server
+        risk_config = MCPServerConfig(
+            server_id="risk-analyzer",
+            name="Institutional Risk Manager",
+            description="Pre-trade risk validation and exposure checks",
+            api_key=os.getenv("MCP_RISK_ANALYZER_API_KEY", "dev_key_change_in_env"),
+            rate_limit_per_min=int(os.getenv("MCP_RISK_RATE_LIMIT", "100"))
+        )
+        await mcp_registry.register_server(risk_config)
+        
+        logger.info("✅ Multi-MCP Registry initialized with 2 servers.")
+
+        await init_mcp_tools()
+    async def main_with_mcp():
+        # 1. Run your existing main() logic (state sync, executor init, etc.)
+        await main()
+        
+        # 2. Initialize MCP servers AFTER core systems are ready
+        await setup_mcp_servers()
+
+    # Run the wrapped entry point
+    asyncio.run(main_with_mcp())
+    
+    # Keep the process alive if main() returns
     while True:
         time.sleep(3600)
