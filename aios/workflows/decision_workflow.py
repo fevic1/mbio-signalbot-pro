@@ -97,5 +97,5 @@ class DecisionWorkflow:
         return {
             "proposal": proposal.summary(),
             "deliberation": deliberation,
-            "decision": decision,
+            "decision": decision.to_dict(),
         }
