@@ -91,7 +91,7 @@ class DecisionWorkflow:
         )
 
 
-        context.metadata["decision"] = decision
+        context.metadata["decision"] = decision.to_dict()
 
 
         return {
