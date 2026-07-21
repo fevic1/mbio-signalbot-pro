@@ -14,7 +14,10 @@ from aios.governance import (
     AuditLogger,
 )
 
-from aios.decision import DecisionEngine
+from aios.decision import (
+    DecisionEngine,
+    DecisionPolicy,
+)
 
 from aios.workflows.decision_workflow import DecisionWorkflow
 
@@ -58,6 +61,7 @@ class SystemBootstrap:
         decision = DecisionEngine(
             approval_manager=approval,
             audit=audit,
+            event_bus=event_bus,
         )
 
 
@@ -71,6 +75,9 @@ class SystemBootstrap:
             memory_manager=self.memory,
             execution_planner=execution_planner,
         )
+
+
+        system.decision_policy = DecisionPolicy()
 
 
         # Core services

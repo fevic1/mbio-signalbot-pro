@@ -3,6 +3,8 @@ from aios.decision import (
     DeliberationEngine,
     DecisionEvaluator,
     DecisionEngine,
+    DecisionResult,
+    PolicyResult,
 )
 
 
@@ -50,20 +52,47 @@ class DecisionWorkflow:
 
         results = context.results
 
+
         proposal = self.builder.build(
             task,
             results,
         )
 
+
         deliberation = self.deliberation.evaluate(
             proposal
         )
 
-        decision = self.decision_engine.decide(
+
+        raw_decision = self.decision_engine.decide(
             proposal,
             deliberation,
             context=context,
         )
+
+
+        policy = self.system.decision_policy.validate(
+            deliberation
+        )
+
+
+        decision = DecisionResult(
+            proposal_id=raw_decision["proposal_id"],
+            decision=raw_decision["decision"],
+            confidence=raw_decision["confidence"],
+            policy=PolicyResult(
+                allowed=policy["allowed"],
+                issues=policy["issues"],
+            ),
+            timestamp=raw_decision["timestamp"],
+            approval_required=raw_decision["approval_required"],
+            approval_id=raw_decision["approval_id"],
+            approval_status=raw_decision["approval_status"],
+        )
+
+
+        context.metadata["decision"] = decision
+
 
         return {
             "proposal": proposal.summary(),

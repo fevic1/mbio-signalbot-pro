@@ -1,96 +1,78 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-import uuid
+from typing import List, Optional
 
 
 @dataclass
 class EvidenceRecord:
-
     source: str
-
-    claim: str
-
-    verified: bool = False
-
+    evidence: str
     confidence: float = 0.0
+
+
+@dataclass
+class RiskFlag:
+    category: str
+    severity: str
+    description: str
+
+
+@dataclass
+class BiasReport:
+    bias_type: str
+    description: str
+    severity: str = "medium"
+
+
+@dataclass
+class PolicyResult:
+    allowed: bool
+    issues: List[str] = field(default_factory=list)
+
+
+@dataclass
+class DecisionResult:
+
+    proposal_id: str
+
+    decision: str
+
+    confidence: float
+
+    policy: PolicyResult
 
     timestamp: str = field(
         default_factory=lambda:
             datetime.utcnow().isoformat()
     )
 
+    approval_required: bool = False
 
-@dataclass
-class RiskFlag:
+    approval_id: Optional[str] = None
 
-    category: str
-
-    description: str
-
-    severity: str = "medium"
-
-
-@dataclass
-class BiasReport:
-
-    detected: bool = False
-
-    indicators: list = field(
-        default_factory=list
-    )
-
-    score: float = 0.0
-
-
-@dataclass
-class DecisionResult:
-
-    decision: str
-
-    confidence: float
-
-    proposal_id: str
-
-    risk_level: str = "unknown"
-
-    issues: list = field(
-        default_factory=list
-    )
-
-    bias_report: BiasReport | None = None
-
-    id: str = field(
-        default_factory=lambda:
-            str(uuid.uuid4())
-    )
-
-    created_at: str = field(
-        default_factory=lambda:
-            datetime.utcnow().isoformat()
-    )
+    approval_status: Optional[str] = None
 
 
     def to_dict(self):
 
         return {
-
-            "id": self.id,
-
+            "proposal_id": self.proposal_id,
             "decision": self.decision,
-
             "confidence": self.confidence,
 
-            "proposal_id": self.proposal_id,
+            "policy": {
+                "allowed": self.policy.allowed,
+                "issues": self.policy.issues,
+            },
 
-            "risk_level": self.risk_level,
+            "timestamp": self.timestamp,
 
-            "issues": self.issues,
+            "approval_required":
+                self.approval_required,
 
-            "bias_report":
-                self.bias_report.__dict__
-                if self.bias_report
-                else None,
+            "approval_id":
+                self.approval_id,
 
-            "created_at": self.created_at,
-
+            "approval_status":
+                self.approval_status,
         }
