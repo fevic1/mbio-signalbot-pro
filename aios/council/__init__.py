@@ -4,6 +4,7 @@ from .council import Council
 __all__ = [
     "Council",
     "CouncilDecision",
+    "CouncilManager",
     "CouncilIssue",
     "AgentOpinion",
 ]
