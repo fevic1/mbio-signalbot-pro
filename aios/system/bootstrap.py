@@ -1,6 +1,9 @@
 from aios.orchestrator import AIOSOrchestrator
 from aios.system.system import AIOSSystem
 
+from aios.project import ProjectManager
+from aios.council import CouncilManager
+
 from aios.execution import ExecutionPlanner
 
 from aios.registry import AgentRegistry
@@ -29,41 +32,28 @@ from aios.workflows import (
 
 class SystemBootstrap:
 
-    def __init__(
-        self,
-        memory=None,
-    ):
-
+    def __init__(self, memory=None):
         self.memory = memory
-
 
     def boot(self):
 
         registry = AgentRegistry()
-
         task_manager = TaskManager()
-
         approval = ApprovalManager()
-
         audit = AuditLogger()
-
         event_bus = EventBus()
-
         execution_planner = ExecutionPlanner()
-
 
         AgentBootstrap(
             registry=registry,
             memory=self.memory,
         ).load_agents()
 
-
         decision = DecisionEngine(
             approval_manager=approval,
             audit=audit,
             event_bus=event_bus,
         )
-
 
         system = AIOSSystem(
             event_bus=event_bus,
@@ -76,27 +66,19 @@ class SystemBootstrap:
             execution_planner=execution_planner,
         )
 
-
+        system.council = CouncilManager()
+        system.project_manager = ProjectManager()
         system.decision_policy = DecisionPolicy()
 
+        system.orchestrator = AIOSOrchestrator(system)
 
-        # Core services
+        system.workflow_engine = WorkflowEngine(system)
 
-        system.orchestrator = AIOSOrchestrator(
-            system
-        )
+        system.multi_agent_workflow = MultiAgentWorkflow(system)
 
-        system.workflow_engine = WorkflowEngine(
-            system
-        )
+        system.decision_workflow = DecisionWorkflow(system)
 
-        system.multi_agent_workflow = MultiAgentWorkflow(
-            system
-        )
-
-        system.decision_workflow = DecisionWorkflow(
-            system
-        )
-
+        # inject council into workflow
+        system.decision_workflow.council = system.council
 
         return system
