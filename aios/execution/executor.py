@@ -1,4 +1,12 @@
 from .context import ExecutionContext
+from .blackboard import Blackboard
+from .queue import ExecutionQueue
+from .scheduler import Scheduler
+from .dispatcher import Dispatcher
+from .worker import Worker
+from .monitor import ExecutionMonitor
+from .checkpoint import CheckpointManager
+from .recovery import RecoveryManager
 
 
 class ExecutionExecutor:
@@ -8,62 +16,76 @@ class ExecutionExecutor:
         system,
         planner,
     ):
-
         self.system = system
         self.planner = planner
 
+        self.blackboard = Blackboard()
+        self.queue = ExecutionQueue()
+        self.scheduler = Scheduler()
+        self.dispatcher = Dispatcher()
+        self.worker = Worker(system)
+        self.monitor = ExecutionMonitor()
+        self.checkpoint = CheckpointManager()
+        self.recovery = RecoveryManager()
 
     def execute(
         self,
         task,
     ):
 
-        pipeline = self.planner.get_pipeline(
-            task["category"]
-        )
-
-
         context = ExecutionContext(
             task,
             event_bus=self.system.event_bus,
         )
 
-
         context.start()
-
 
         try:
 
-            for agent_name in pipeline:
+            pipeline = self.planner.get_pipeline(
+                task["category"]
+            )
 
-                record = self.system.registry.get(
-                    agent_name
+            for agent in pipeline:
+                self.queue.push(agent)
+
+            while not self.queue.empty():
+
+                ready = self.scheduler.next(
+                    self.queue
                 )
 
+                if ready is None:
+                    break
 
-                if record is None:
-
-                    raise ValueError(
-                        f"Unknown agent: {agent_name}"
-                    )
-
-
-                agent = record["agent"]
-
-
-                output = agent.execute(
-                    context
+                agent_name = self.dispatcher.dispatch(
+                    ready
                 )
 
+                output = self.worker.run(
+                    agent_name,
+                    context,
+                )
+
+                self.blackboard.store(
+                    agent_name,
+                    output,
+                )
 
                 context.add_result(
                     agent_name,
                     output,
                 )
 
+                self.monitor.record_success(
+                    agent_name
+                )
+
+                self.checkpoint.save(
+                    context
+                )
 
             context.complete()
-
 
             if self.system.decision_workflow:
 
@@ -72,20 +94,23 @@ class ExecutionExecutor:
                     context,
                 )
 
-
                 context.set_metadata(
                     "decision",
                     decision,
                 )
 
-
         except Exception as error:
 
-            context.fail(
-                error
+            self.monitor.record_failure(
+                str(error)
             )
 
-            raise
+            self.recovery.handle(
+                error,
+                context,
+            )
 
+            context.fail(error)
+            raise
 
         return context
