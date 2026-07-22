@@ -39,6 +39,7 @@ class AIOSSystem:
 
         self.decision_workflow = None
 
+        self.project_manager = None
 
     def status(self):
 

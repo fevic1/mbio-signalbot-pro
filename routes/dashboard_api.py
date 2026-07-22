@@ -20,6 +20,8 @@ from routes.dashboard_auth import (
 from routes.dashboard_sse import dashboard_sse_stream
 from core.app_context import app_context
 from core.mcp_registry import MCPServerConfig
+from core.executor_utils import run_executor_method
+from core.exchange_limits import get_exchange_limits, can_trade
 
 logger = logging.getLogger(__name__)
 
@@ -406,7 +408,7 @@ async def dashboard_health(user: dict = Depends(get_current_user)):
 
 @router.get("/overview")
 async def dashboard_overview(user: dict = Depends(get_current_user)):
-    result = {"hl_balance": 0.0, "bybit_balance": 0.0, "total_balance": 0.0, 
+    result = {"hl_balance": 0.0, "total_balance": 0.0, 
               "equity": 0.0, "deployed_pct": 0.0, "notional": 0.0, "open_positions": 0,
               "daily_pnl_pct": 0.0, "realized_pnl_usd": 0.0, "unrealized_pnl_usd": 0.0,
               "win_rate": "N/A", "total_trades": 0, "active_grids": 0}
@@ -417,17 +419,7 @@ async def dashboard_overview(user: dict = Depends(get_current_user)):
         result["hl_balance"] = round(get_account_balance(), 2)
     except Exception: pass
     
-    # 2. Bybit Balance
-    try:
-        from execution.bybit_executor import get_bybit_executor
-        bybit_ex = get_bybit_executor()
-        if bybit_ex and bybit_ex.client:
-            res = bybit_ex.client.get_wallet_balance(accountType="UNIFIED")
-            if res["retCode"] == 0:
-                result["bybit_balance"] = round(float(res["result"]["list"][0]["totalEquity"]), 2)
-    except Exception: pass
-    
-    result["total_balance"] = round(result["hl_balance"] + result["bybit_balance"], 2)
+    result["total_balance"] = round(result["hl_balance"], 2)
     result["balance"] = result["total_balance"] # Backward compatibility
     try:
         import core.state as state
@@ -445,8 +437,8 @@ async def dashboard_overview(user: dict = Depends(get_current_user)):
         result["realized_pnl_usd"] = round(stats.get("realized_pnl_usd", 0), 2)
         result["unrealized_pnl_usd"] = round(stats.get("unrealized_pnl_usd", 0), 2)
         result["daily_pnl_pct"] = round(stats.get("realized_pnl_pct", 0) + stats.get("unrealized_pnl_pct", 0), 2)
-        result["total_trades"] = stats.get("closed_trades", 0)
-        if stats.get("closed_trades", 0) > 0: result["win_rate"] = f"{stats['win_rate']:.1f}%"
+        result["total_trades"] = stats.get("total_trades", 0)
+        if stats.get("total_trades", 0) > 0: result["win_rate"] = f"{stats['win_rate']:.1f}%"
     except Exception: pass
     result["equity"] = round(result["total_balance"] + result["unrealized_pnl_usd"], 2)
     return result
@@ -491,28 +483,6 @@ async def dashboard_positions(user: dict = Depends(get_current_user)):
                               "exchange": "Hyperliquid"})
     except Exception as e: logger.error(f"Positions fetch error: {e}")
     
-    # Fetch Bybit Positions
-    try:
-        from execution.bybit_executor import get_bybit_executor
-        bybit_ex = get_bybit_executor()
-        if bybit_ex and bybit_ex.client:
-            bybit_positions = bybit_ex.get_open_positions()
-            for p in bybit_positions:
-                side = "BUY" if p["side"] == "long" else "SELL"
-                size = p["size"]
-                entry = p["entry_price"]
-                current = float(mids.get(p["coin"], entry)) # Fallback to entry if mid missing
-                upnl = ((current - entry) * size if side == "BUY" else (entry - current) * size) if current > 0 else 0
-                pnl_pct = (((current - entry) / entry * 100) if side == "BUY" else ((entry - current) / entry * 100)) if entry > 0 else 0
-                positions.append({
-                    "asset": p["coin"], "side": side, "size": round(size, 8), "entry": round(entry, 4),
-                    "current": round(current, 4), "upnl": round(upnl, 4), "pnl_pct": round(pnl_pct, 2),
-                    "value": round(size * current, 2), "margin_used": 0.0, "liquidation_px": 0.0,
-                    "sl": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0,
-                    "strategy": "BYBIT", "opened_at": "", "exchange": "Bybit"
-                })
-    except Exception as e: 
-        logger.error(f"Bybit positions fetch error: {e}")
         
     return {"positions": positions, "count": len(positions)}
 
@@ -676,10 +646,10 @@ async def dashboard_orders(user: dict = Depends(get_current_user)):
         # SDK BUG WORKAROUND: open_orders sometimes returns empty if address formatting is strict.
         # We log the address to verify, and attempt the call.
         logger.debug(f"Fetching open orders for address: {executor.address}")
-        raw_orders = executor.info.open_orders(executor.address)
+        raw_orders = executor.get_open_orders()
         
         if not raw_orders:
-            logger.warning("⚠️ SDK open_orders returned empty. This is a known SDK version issue. Relying on internal state.")
+            logger.debug("ℹ️ No open orders on exchange")
         else:
             for o in raw_orders:
                 orders.append({
@@ -788,7 +758,7 @@ async def grid_open(request: Request, user: dict = Depends(require_role("ADMIN",
     except Exception as e: logger.warning(f"Position limit check: {e}")
     try:
         from core.grid_manager import GridManager, grid_state_key; gm = GridManager(app_context.executor)
-        result = gm.create_grid(asset=asset, lower_price=lower, upper_price=upper, investment_amount=investment, grid_quantity=num_nodes)
+        result = await gm.create_grid(asset=asset, lower_price=lower, upper_price=upper, investment_amount=investment, grid_quantity=num_nodes)
         # Register in global state and persist to disk so the monitor can pick it up
         state.OPEN_POSITIONS[grid_state_key(asset)] = result
         state.save_state()
@@ -811,13 +781,29 @@ async def grid_close(request: Request, user: dict = Depends(require_role("ADMIN"
         config = state.OPEN_POSITIONS.get(grid_state_key(asset))
         if not config:
             raise HTTPException(status_code=400, detail=f"No active grid for {asset}")
-        result = gm.close_grid(asset=asset, config=config)
+        result = await gm.close_grid(asset=asset, config=config)
         state.save_state()  # Persist enabled=False to prevent grid from reappearing
         log_audit(user["id"], "GRID_CLOSE", resource=asset, details=json.dumps(result, default=str)[:500], ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Grid closed for {asset}", "result": result}
     except Exception as e:
         log_audit(user["id"], "GRID_CLOSE_FAILED", resource=asset, details=str(e)[:500], ip_address=ip, otp_verified=True)
         raise HTTPException(status_code=500, detail=f"Grid close failed: {str(e)[:200]}")
+
+
+@router.get("/dca/preview")
+async def dca_preview(asset: str = "", side: str = "LONG", exchange: str = None, user: dict = Depends(get_current_user)):
+    """Read-only DCA plan preview. Computes the exact parameters the open path
+    will use (size, entry, SL/TP, ladder, exchange-min checks, warnings) WITHOUT
+    placing any order or mutating state. The modal renders this before OTP.
+    Per LLM INSTRUCTIONS: OTP is required for EXECUTION, not for a read-only preview."""
+    try:
+        import main as _main
+        from core.dca_lifecycle import _compute_dca_plan
+        plan = _compute_dca_plan(asset, side, _main.dca_strategy, exchange=exchange)
+        return plan
+    except Exception as e:
+        logger.error(f"DCA preview failed for {asset}: {e}")
+        raise HTTPException(status_code=500, detail=f"DCA preview failed: {str(e)[:200]}")
 
 
 @router.post("/dca/open")
@@ -882,6 +868,124 @@ async def dca_close(request: Request, user: dict = Depends(require_role("ADMIN",
     except Exception as e:
         log_audit(user["id"], "DCA_CLOSE_FAILED", resource=asset, details=str(e)[:500], ip_address=ip, otp_verified=True)
         raise HTTPException(status_code=500, detail=f"DCA close failed: {str(e)[:200]}")
+
+
+
+# === SMART ORDER PREVIEW (Phase 1: Read-only calculation, no execution) ===
+# Per CODING_STANDARD: One responsibility. No hidden side effects. No magic numbers.
+# Per RISK_POLICY: Every order requires validation. This endpoint provides pre-validation.
+# Per LLM INSTRUCTIONS: Never bypass OTP. This is preview only; execution requires OTP via /order/market.
+@router.get("/smart-order")
+async def smart_order_preview(asset: str = "", user: dict = Depends(get_current_user)):
+    """Calculate pre-filled order parameters for Quick Ticket.
+    Read-only. Does NOT execute. User confirms via /order/market with OTP."""
+    asset = asset.strip().upper()
+    if not asset:
+        raise HTTPException(status_code=400, detail="Asset parameter required")
+
+    try:
+        from core.exchange_limits import get_exchange_limits, get_effective_min_notional, can_trade
+        from config_loader import get_config
+
+        executor = app_context.executor
+        limits = get_exchange_limits()
+        eff_min = get_effective_min_notional()
+        cfg = get_config()
+        risk_cfg = cfg.get("risk", {})
+
+        # 1. Fetch current price (single bounded API call)
+        mids = await run_executor_method(executor.info.all_mids)
+        if not mids or asset not in mids:
+            raise HTTPException(status_code=404, detail=f"Asset {asset} not found on exchange")
+        price = float(mids[asset])
+        if price <= 0:
+            raise HTTPException(status_code=400, detail=f"Invalid price for {asset}")
+
+        # 2. Fetch balance
+        from core.data_fetcher import get_account_balance
+        balance = get_account_balance()
+
+        # 3. Calculate position size from risk config (no magic numbers)
+        threshold = float(risk_cfg.get("small_account_threshold", 100))
+        if balance < threshold:
+            risk_pct = float(risk_cfg.get("small_account_max_pct", 0.5))
+        else:
+            risk_pct = float(risk_cfg.get("large_account_max_pct", 0.2))
+        size_usd = round(balance * risk_pct, 2)
+        size_coin = round(size_usd / price, 6) if price > 0 else 0
+
+        # 4. Calculate SL/TP using ATR approximation (same pattern as position_tracker)
+        atr = price * 0.02
+        direction = "BUY"  # Default; overridden by signal if available
+        confidence = 0
+        regime = "UNKNOWN"
+
+        # 5. Check signal cache for direction (defensive — may be empty)
+        import core.state as state
+        sig = state.SIGNAL_CACHE.get(asset) or state.LIVE_SIGNALS.get(asset)
+        if isinstance(sig, dict):
+            sig_dir = sig.get("direction", sig.get("side", ""))
+            if sig_dir in ("BUY", "SELL", "LONG", "SHORT"):
+                direction = "BUY" if sig_dir in ("BUY", "LONG") else "SELL"
+                confidence = int(sig.get("confidence", sig.get("score", 0)))
+            regime = sig.get("regime", "UNKNOWN")
+
+        # 6. Calculate SL/TP based on direction
+        if direction == "BUY":
+            sl = round(price - (1.5 * atr), 2)
+            tp1 = round(price + (1.0 * atr), 2)
+            tp2 = round(price + (2.0 * atr), 2)
+            tp3 = round(price + (3.0 * atr), 2)
+        else:
+            sl = round(price + (1.5 * atr), 2)
+            tp1 = round(price - (1.0 * atr), 2)
+            tp2 = round(price - (2.0 * atr), 2)
+            tp3 = round(price - (3.0 * atr), 2)
+
+        # 7. Build warnings (exchange minimum awareness)
+        warnings = []
+        tradeable = can_trade(balance)
+        if not tradeable:
+            min_bal = limits.get("min_balance_for_trading", 12.0)
+            warnings.append(f"Balance ${balance:.2f} below safe trading threshold ${min_bal:.2f}")
+        if size_usd < eff_min:
+            warnings.append(
+                f"Calculated size ${size_usd:.2f} below exchange minimum "
+                f"${eff_min:.2f} (${limits['min_notional_usd']} x {limits['min_notional_buffer']} buffer). "
+                f"Increase risk % or balance."
+            )
+        notional = round(size_coin * price, 2)
+        if notional < limits["min_notional_usd"]:
+            warnings.append(
+                f"Notional ${notional:.2f} below Hyperliquid minimum ${limits['min_notional_usd']}"
+            )
+
+        return {
+            "asset": asset,
+            "price": price,
+            "direction": direction,
+            "confidence": confidence,
+            "regime": regime,
+            "size_usd": size_usd,
+            "size_coin": size_coin,
+            "notional": notional,
+            "sl": sl,
+            "tp1": tp1,
+            "tp2": tp2,
+            "tp3": tp3,
+            "balance": balance,
+            "risk_pct": risk_pct,
+            "exchange_min_notional": limits["min_notional_usd"],
+            "effective_min_notional": eff_min,
+            "can_trade": tradeable,
+            "warnings": warnings,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Smart order preview failed for {asset}: {e}")
+        raise HTTPException(status_code=500, detail=f"Smart order calculation failed: {str(e)[:200]}")
 
 
 @router.post("/order/market")
@@ -1093,9 +1197,9 @@ async def emergency_stop(request: Request, user: dict = Depends(require_role("AD
         # _get_executor replaced by app_context
         executor = app_context.executor
         try:
-            open_orders = executor.info.open_orders(executor.address)
+            open_orders = executor.get_open_orders()
             for order in open_orders:
-                try: executor.cancel_order(order["order"]["oid"]); results["cancelled_orders"] += 1
+                try: await run_executor_method(executor.cancel_order, order["order"]["oid"]); results["cancelled_orders"] += 1
                 except Exception as e: results["errors"].append(f"Cancel: {str(e)[:100]}")
         except Exception as e: results["errors"].append(f"Fetch orders: {str(e)[:100]}")
         try:
@@ -1205,7 +1309,7 @@ async def open_order(request: Request, user: dict = Depends(require_role("ADMIN"
         # 3. FINANCIAL RISK GUARD: Balance Check (LLM Instruction: > $10)
         from core.data_fetcher import get_account_balance, get_current_price
         current_balance = get_account_balance()
-        if current_balance < 10.0:
+        if not can_trade(current_balance):
             raise HTTPException(status_code=400, detail=f"Insufficient balance (${current_balance:.2f}). Minimum $10 required.")
 
         # 4. CONVERT USD SIZE TO COIN SIZE
@@ -1216,7 +1320,7 @@ async def open_order(request: Request, user: dict = Depends(require_role("ADMIN"
         size_coin = size_usd / current_price
         
         # 4.1 FINANCIAL RISK GUARD: Minimum Notional Check
-        min_notional = 10.0  # Hyperliquid minimum
+        min_notional = get_exchange_limits()["min_notional_usd"]
         if size_coin * current_price < min_notional:
             raise HTTPException(
                 status_code=400,
@@ -1658,7 +1762,7 @@ async def dashboard_close_position(request: Request, user: dict = Depends(requir
         _pre_close_size = 0.0
         _pre_close_side = ""
         try:
-            _positions = executor.get_open_positions()
+            _positions = await run_executor_method(executor.get_open_positions)
             _target = next((p for p in _positions if p.get("coin") == asset.upper()), None)
             if _target:
                 _pre_close_size = float(_target.get("size", 0))
@@ -1850,3 +1954,51 @@ async def get_regime(asset: str = "BTC"):
     except Exception as e:
         logger.error(f"get_regime failed for {asset}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# MCP SERVER REGISTRY ENDPOINTS (Dashboard)
+# Exposes internal MCP registry to frontend via JWT-authenticated API
+# ============================================================
+@router.get("/mcp/servers")
+async def get_mcp_servers(current_user: dict = Depends(get_current_user)):
+    """List all registered MCP servers. Requires valid JWT session."""
+    try:
+        from core.mcp_registry import mcp_registry
+        servers = await mcp_registry.list_servers()
+        return {"servers": servers}
+    except Exception as e:
+        logger.error(f"get_mcp_servers failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/mcp/register")
+async def register_mcp_server(
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Register a new MCP server. Requires valid JWT session + OTP for write ops."""
+    try:
+        from core.mcp_registry import mcp_registry
+        from core.mcp_models import MCPServerConfig
+        
+        config = MCPServerConfig(**payload)
+        await mcp_registry.register_server(config)
+        logger.info(f"MCP server registered: {config.server_id} by {current_user.get('email')}")
+        return {"success": True, "server_id": config.server_id}
+    except Exception as e:
+        logger.error(f"register_mcp_server failed: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/mcp/unregister/{server_id}")
+async def unregister_mcp_server(
+    server_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Unregister an MCP server. Requires valid JWT session."""
+    try:
+        from core.mcp_registry import mcp_registry
+        await mcp_registry.unregister_server(server_id)
+        logger.info(f"MCP server unregistered: {server_id} by {current_user.get('email')}")
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"unregister_mcp_server failed: {e}")
+        raise HTTPException(status_code=404, detail=str(e))

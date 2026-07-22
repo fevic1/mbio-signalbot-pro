@@ -1,3 +1,4 @@
+import { safeToFixed } from '../utils/format';
 import { useEffect, useState, useCallback } from "react"
 import { apiFetch, ApiError } from "@/lib/api"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
@@ -94,15 +95,15 @@ export function OverviewPanel() {
           )}
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Stat label="HL Balance" value={`$${data.hl_balance.toFixed(2)}`} />
-          <Stat label="Bybit Balance" value={`$${data.bybit_balance.toFixed(2)}`} />
-          <Stat label="Total Balance" value={`$${data.total_balance.toFixed(2)}`} />
-          <Stat label="Total Equity" value={`$${data.equity.toFixed(2)}`} />
-          <Stat label="Deployed" value={`${data.deployed_pct.toFixed(1)}%`} />
-          <Stat label="Notional" value={`$${data.notional.toFixed(2)}`} />
-          <Stat label="Daily PnL" value={`${data.daily_pnl_pct >= 0 ? "+" : ""}${data.daily_pnl_pct.toFixed(2)}%`} tone={pnlTone(data.daily_pnl_pct)} />
-          <Stat label="Realized" value={`$${data.realized_pnl_usd.toFixed(2)}`} tone={pnlTone(data.realized_pnl_usd)} />
-          <Stat label="Unrealized" value={`$${data.unrealized_pnl_usd.toFixed(2)}`} tone={pnlTone(data.unrealized_pnl_usd)} />
+          <Stat label="HL Balance" value={`$${safeToFixed(data?.hl_balance)}`} />
+          <Stat label="Bybit Balance" value={`$${safeToFixed(data?.bybit_balance)}`} />
+          <Stat label="Total Balance" value={`$${safeToFixed(data?.total_balance)}`} />
+          <Stat label="Total Equity" value={`$${safeToFixed(data?.equity)}`} />
+          <Stat label="Deployed" value={`${safeToFixed(data?.deployed_pct, 1)}%`} />
+          <Stat label="Notional" value={`$${safeToFixed(data?.notional)}`} />
+          <Stat label="Daily PnL" value={`${data.daily_pnl_pct >= 0 ? "+" : ""}${safeToFixed(data?.daily_pnl_pct, 2)}%`} tone={pnlTone(data.daily_pnl_pct)} />
+          <Stat label="Realized" value={`$${safeToFixed(data?.realized_pnl_usd)}`} tone={pnlTone(data.realized_pnl_usd)} />
+          <Stat label="Unrealized" value={`$${safeToFixed(data?.unrealized_pnl_usd)}`} tone={pnlTone(data.unrealized_pnl_usd)} />
           <Stat label="Win Rate" value={data.win_rate} />
         </CardContent>
       </Card>

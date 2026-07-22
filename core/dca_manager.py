@@ -5,8 +5,10 @@ Adapted to verified HLExecutor API: place_order(limit_price=), cancel_order(coin
 get_open_positions() → {coin, side, size, entry_price}
 """
 import logging
+from core.executor_utils import run_executor_method
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
+import core.state as state
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +111,22 @@ class DCAManager:
             except Exception as e:
                 logger.error(f"❌ DCA order placement failed for {asset} level {level['level']}: {e}")
         config["active_orders"] = placed
+        
+        # PERSISTENCE: Write DCA position state to disk (CODING_STANDARD: Persistence layer)
+        if placed:
+            async with state.STATE_LOCK:
+                state.DCA_POSITIONS[asset] = {
+                    "entry_price": entry_price,
+                    "base_size": base_size,
+                    "direction": config.get("direction", "LONG"),
+                    "levels": placed,
+                    "is_waiting_for_fill": config.get("is_waiting_for_fill", False),
+                    "last_fill_price": config.get("last_fill_price"),
+                    "opened_at": datetime.now(timezone.utc).isoformat(),
+                }
+                state.save_state()
+                logger.info(f"💾 DCA position persisted for {asset}: {len(placed)} levels")
+        
         return placed
 
     async def close_dca_position(self, asset: str, config: Dict, close_side: str) -> Dict:
@@ -117,7 +135,7 @@ class DCAManager:
         for order in config.get("active_orders", []):
             if order.get("status") == "active" and order.get("order_id"):
                 try:
-                    cancel_result = self.executor.cancel_order(coin=asset, order_id=int(order["order_id"]))
+                    cancel_result = await run_executor_method(self.executor.cancel_order, coin=asset, order_id=int(order["order_id"]))
                     if cancel_result.get("success"):
                         results["dca_cancelled"] += 1
                         logger.info(f"🗑️ Cancelled DCA order {order['order_id']} for {asset}")
@@ -127,7 +145,7 @@ class DCAManager:
                     results["errors"].append(f"Cancel error: {str(e)}")
         # 2. Close filled positions using verified normalized format
         try:
-            positions = self.executor.get_open_positions() or []
+            positions = (await run_executor_method(self.executor.get_open_positions)) or []
             asset_positions = [p for p in positions if isinstance(p, dict) and p.get("coin") == asset]
             for pos in asset_positions:
                 size = float(pos.get("size", 0))
@@ -152,6 +170,14 @@ class DCAManager:
             results["errors"].append(f"Position close error: {str(e)}")
         config["enabled"] = False
         config["closed_at"] = datetime.now(timezone.utc).isoformat()
+        
+        # PERSISTENCE: Remove closed DCA position from state (CODING_STANDARD: Persistence layer)
+        async with state.STATE_LOCK:
+            removed = state.DCA_POSITIONS.pop(asset, None)
+            state.save_state()
+            if removed:
+                logger.info(f"🗑️ DCA position removed from state for {asset} | Total PnL: ${results['total_pnl']:+.4f}")
+        
         return results
 
     async def close_dca_position_partial(self, asset: str, config: Dict,
@@ -160,13 +186,13 @@ class DCAManager:
         for order in config.get("active_orders", []):
             if order.get("status") == "active" and order.get("order_id"):
                 try:
-                    cancel_result = self.executor.cancel_order(coin=asset, order_id=int(order["order_id"]))
+                    cancel_result = await run_executor_method(self.executor.cancel_order, coin=asset, order_id=int(order["order_id"]))
                     if cancel_result.get("success"):
                         results["dca_cancelled"] += 1
                 except Exception as e:
                     results["errors"].append(f"Cancel error: {str(e)}")
         try:
-            positions = self.executor.get_open_positions() or []
+            positions = (await run_executor_method(self.executor.get_open_positions)) or []
             asset_positions = [p for p in positions if isinstance(p, dict) and p.get("coin") == asset]
             for pos in asset_positions:
                 total_size = float(pos.get("size", 0))
@@ -210,7 +236,7 @@ class DCAManager:
         for order in config.get("active_orders", []):
             if order.get("status") == "active" and order.get("order_id"):
                 try:
-                    cancel_result = self.executor.cancel_order(coin=asset, order_id=int(order["order_id"]))
+                    cancel_result = await run_executor_method(self.executor.cancel_order, coin=asset, order_id=int(order["order_id"]))
                     if cancel_result.get("success"):
                         results["cancelled"] += 1
                 except Exception as e:

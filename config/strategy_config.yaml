@@ -160,9 +160,18 @@ execution:
   ratchet_min_net_profit_usd: 1.0
   taker_fee_pct: 0.00035
 dca:
+  enabled: true
   max_levels: 3
   level_spacing_pct: 2.0
   size_multiplier: 1.5
+  # Manual DCA open path (Telegram /open_dca + dashboard modal).
+  # Values match the previously-hardcoded live behavior — no behavior change.
+  manual:
+    risk_pct: 0.01              # 1% of balance = max loss per DCA
+    min_sl_distance_pct: 0.055  # liquidation buffer at 20x leverage
+    max_levels: 3
+    spacing_pct: 1.2
+    size_multiplier: 1.25
   tp_pct: 1.0
   sl_pct: 4.0
   tp_recalc_on_fill: true
@@ -187,6 +196,7 @@ auto_dca:
   reuse_last_params: true
   telegram_notify_reentry: true
 grid:
+  enabled: false
   default_profit_per_grid_pct: 0.5
   default_grid_quantity: 10
   min_grid_quantity: 2

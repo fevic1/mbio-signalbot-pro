@@ -1,7 +1,11 @@
 from .models import Project, Goal
+from .planner import ProjectPlanner
 
 
 class ProjectManager:
+
+    def __init__(self):
+        self.planner = ProjectPlanner()
 
     def create(self, title: str, description: str = "") -> Project:
 
@@ -11,6 +15,8 @@ class ProjectManager:
             description=description,
         )
 
-        return Project(
-            goal=goal
+        project = Project(
+            goal=goal,
         )
+
+        return self.planner.generate(project)

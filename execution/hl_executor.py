@@ -7,6 +7,7 @@ import threading
 import logging
 from typing import Optional, Dict
 from core.hip4_metadata import HIP4MetadataManager
+from core.exchange_limits import get_exchange_limits
 
 
 logger = logging.getLogger(__name__)
@@ -186,6 +187,42 @@ class HLExecutor:
             logger.error(f"Failed to get open positions: {e}")
             return []
 
+    def get_position(self, asset: str) -> float:
+        """Return position size for specific asset. 0 if no position.
+        Per CODING_STANDARD: Single responsibility. Filters get_open_positions."""
+        positions = self.get_open_positions()
+        for p in positions:
+            if p.get("coin", "").upper() == asset.upper():
+                return float(p.get("size", 0))
+        return 0.0
+
+    def get_open_orders(self) -> list:
+        """Fetch open orders via direct HTTP (bypasses SDK v0.24.0 bug).
+        Same proven pattern as get_open_positions(). Per CODING_STANDARD:
+        No duplicated business logic. Every external call: timeout."""
+        try:
+            import requests
+            query_address = os.getenv("HL_ACCOUNT_ADDRESS", self.address)
+            resp = requests.post(
+                "https://api.hyperliquid.xyz/info",
+                json={"type": "openOrders", "user": query_address},
+                timeout=15
+            )
+            if resp.status_code != 200:
+                logger.error(f"Failed to fetch open orders: HTTP {resp.status_code}")
+                return []
+            orders = resp.json()
+            if not isinstance(orders, list):
+                logger.warning(f"Unexpected openOrders response type: {type(orders)}")
+                return []
+            logger.debug(f"📋 Fetched {len(orders)} open orders from exchange")
+            return orders
+        except Exception as e:
+            logger.error(f"Failed to get open orders: {e}")
+            return []
+
+
+
     def place_order(
         self,
         coin: str,
@@ -223,16 +260,16 @@ class HLExecutor:
             # Hyperliquid minimum order protection
             notional = abs(sz * px)
 
-            if notional < 10:
+            if notional < get_exchange_limits()["min_notional_usd"]:
                 logger.warning(
                     f"⛔ Skipping order: {coin} {side} "
                     f"size={sz} px={px} "
-                    f"notional=${notional:.2f} < $10 minimum"
+                    f"notional=${notional:.2f} < ${get_exchange_limits()['min_notional_usd']} minimum"
                 )
 
                 return {
                     "success": False,
-                    "error": f"Order value ${notional:.2f} below Hyperliquid $10 minimum"
+                    "error": f"Order value ${notional:.2f} below Hyperliquid ${get_exchange_limits()['min_notional_usd']} minimum"
                 }
 
             result = self.exchange.order(coin, is_buy, sz, px, {"limit": {"tif": "Gtc"}}, reduce_only)
@@ -364,31 +401,6 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
                 logger.warning(f"⚠️ Failed to record trade in tracker: {e}")
         # ---------------------------------
 
-        # 🚀 PARALLEL BYBIT EXECUTION (Strategy A)
-        # Fires in a daemon thread so it never blocks or fails the primary HL execution.
-        if result and result.get("success"):
-            try:
-                import threading
-                from execution.bybit_executor import get_bybit_executor
-                
-                def _fire_bybit():
-                    try:
-                        bybit_ex = get_bybit_executor()
-                        if bybit_ex.client:
-                            bybit_ex.place_order(
-                                coin=coin,
-                                side=side,
-                                size=size,
-                                limit_price=limit_px,
-                                order_type=kwargs.get("order_type", "Market"),
-                                reduce_only=kwargs.get("reduce_only", False)
-                            )
-                    except Exception as bye:
-                        logger.warning(f"⚠️ Parallel Bybit execution failed: {bye}")
-                
-                threading.Thread(target=_fire_bybit, daemon=True).start()
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to trigger parallel Bybit execution: {e}")
 
         return result or {"success": False, "error": "None returned"}
     except Exception as e:

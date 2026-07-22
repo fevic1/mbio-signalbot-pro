@@ -1,3 +1,4 @@
+import os
 """
 MCP Server for Vibe-Trading Integration
 Enables AI agents to interact with MBIO execution engine via Model Context Protocol.
@@ -222,14 +223,14 @@ async def place_grid(
         
         # Use the optimized grid params method if available
         # For now, use direct creation
-        result = grid_manager.create_grid(
+        result = await grid_manager.create_grid(
             asset=asset,
             lower_price=lower_price,
             upper_price=upper_price,
             grid_quantity=nodes,
             investment_amount=investment,
             profit_per_grid_pct=0.5,
-            exchange="hyperliquid"
+            exchange=os.getenv("DEFAULT_EXCHANGE", "hyperliquid")
         )
         
         audit_mcp_call(api_key, "place_grid", {

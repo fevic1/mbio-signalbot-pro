@@ -16,14 +16,17 @@ from core.strategy.grid_optimizer import GridOptimizer, validate_and_fallback
 from typing import Dict, List, Optional
 from core.grid_persistence import save_grid_state
 from datetime import datetime, timezone
+from core.executor_utils import run_executor_method
+from core.exchange_limits import get_exchange_limits
 
 logger = logging.getLogger(__name__)
 
 GRID_PREFIX = "GRID::"
 
 
-def grid_state_key(asset: str) -> str:
-    return f"{GRID_PREFIX}{asset.upper()}"
+def grid_state_key(asset: str, exchange: str = "") -> str:
+    ex_prefix = f"{exchange.upper()}::" if exchange else ""
+    return f"{GRID_PREFIX}{ex_prefix}{asset.upper()}"
 
 
 def is_grid_position(key: str) -> bool:
@@ -40,11 +43,17 @@ class GridManager:
     def __init__(self, executor):
         self.executor = executor
 
-    def create_grid(self, asset: str, lower_price: float, upper_price: float,
+    async def create_grid(self, asset: str, lower_price: float, upper_price: float,
                     grid_quantity: int, investment_amount: float,
                     profit_per_grid_pct: float = 0.5,
-                    exchange: str = "hyperliquid") -> Dict:
+                    exchange: str = "") -> Dict:
         """Create reversal grid configuration with arithmetic node map."""
+        # Resolve exchange: explicit param > env var > safe default
+        # Per CODING_STANDARD: No hidden side effects. Preserve backward compatibility.
+        if not exchange:
+            import os
+            exchange = os.getenv("DEFAULT_EXCHANGE", "hyperliquid").lower().strip()
+            logger.info(f"ℹ️ Grid using default exchange: {exchange}")
         price_range = upper_price - lower_price
         step_size = price_range / (grid_quantity - 1) if grid_quantity > 1 else price_range
         import config_loader as _cfg_mod
@@ -67,7 +76,7 @@ class GridManager:
             # Enforce $10 minimum notional with margin for rounding loss
             import config_loader as _cfg_mod
             _dca_cfg = _cfg_mod.get_config().get("dca", {})
-            min_notional = float(_dca_cfg.get("min_notional", 10.0)) * float(_dca_cfg.get("min_notional_buffer", 1.15))
+            min_notional = float(_dca_cfg.get("min_notional", get_exchange_limits()["min_notional_usd"])) * float(_dca_cfg.get("min_notional_buffer", 1.15))
             min_size = min_notional / price if price > 0 else 0
             size = math.ceil(max(raw_size, min_size) * 100000) / 100000
 
@@ -108,8 +117,20 @@ class GridManager:
 
         return config
 
-    def place_grid_orders(self, asset: str, config: Dict, current_price: float,
+    async def place_grid_orders(self, asset: str, config: Dict, current_price: float,
                           max_concurrent: int = 4) -> Dict:
+        # SAFETY CHECK: Verify base position exists before deploying grid orders
+        try:
+            current_pos = self.executor.get_position(asset)
+            if current_pos == 0:
+                # Per RISK_POLICY: No base position = no grid deployment. No exceptions.
+                logger.error(f"❌ GRID SAFETY HALT: No base position for {asset}. Refusing to place grid orders to prevent naked exposure.")
+                return {"placed": 0, "failed": len(config.get("nodes", [])), "errors": ["No base position found"], "skipped": 0}
+        except Exception as e:
+            # Per RISK_POLICY: Every order requires Account validation. No exceptions.
+            # Per TRADING_PRINCIPLES: Capital preservation is priority one.
+            logger.error(f"❌ GRID SAFETY HALT: Position verification failed for {asset}: {e}. Aborting deployment.")
+            return {"placed": 0, "failed": len(config.get("nodes", [])), "errors": [f"Position verification failed: {e}"], "skipped": 0}
         """Deploy only the nearest N orders to market. Reversal grids don't seed all levels."""
         from execution.hl_executor import execute_hl_order
 
@@ -126,7 +147,7 @@ class GridManager:
 
             # Enforce $10 minimum after rounding
             actual_notional = order_size * order_price
-            if actual_notional < 10.0 and order_price > 0:
+            if actual_notional < get_exchange_limits()["min_notional_usd"] and order_price > 0:
                 order_size = math.ceil((float(config.get("dca", {}).get("min_notional", 10.0)) / order_price) * 100000) / 100000
 
             # Skip BUY orders at/above market and SELL orders at/below market
@@ -168,7 +189,7 @@ class GridManager:
         config["last_update"] = datetime.now(timezone.utc).isoformat()
         return results
 
-    def handle_fill_event(self, asset: str, config: Dict, filled_node: Dict,
+    async def handle_fill_event(self, asset: str, config: Dict, filled_node: Dict,
                           fill_price: float) -> Optional[Dict]:
         """Core reversal logic: flip filled node to opposite side ±1 step."""
         step_size = config.get("step_size", 0)
@@ -220,7 +241,7 @@ class GridManager:
 
         return new_node
 
-    def monitor_grid_fills(self, asset: str, config: Dict) -> Dict:
+    async def monitor_grid_fills(self, asset: str, config: Dict) -> Dict:
         """Detect fills via pending order sync + position check. Triggers reversal flips."""
         from execution.hl_executor import execute_hl_order
 
@@ -228,7 +249,18 @@ class GridManager:
         
         # NEW: Direct order-existence verification to prevent zombie cancellation loops
         try:
-            open_orders = self.executor.info.open_orders(self.executor.address)
+            # Per LLM INSTRUCTIONS: SDK v0.24.0 open_orders() returns empty. Use direct HTTP.
+            import requests as _req
+            try:
+                _resp = _req.post(
+                    "https://api.hyperliquid.xyz/info",
+                    json={"type": "openOrders", "user": self.executor.address},
+                    timeout=10
+                )
+                open_orders = _resp.json() if _resp.status_code == 200 else []
+            except Exception as _e:
+                logger.error(f"❌ openOrders HTTP failed: {_e}")
+                open_orders = []
             live_order_ids = {str(o.get("oid")) for o in open_orders if o.get("coin") == asset}
             
             for node in config.get("nodes", []):
@@ -242,13 +274,13 @@ class GridManager:
             results["errors"].append(f"Order check failed: {str(e)}")
 
         # PRIMARY: Sync against exchange open_orders (most reliable fill detection)
-        sync_result = self.sync_pending_orders(asset, config)
+        sync_result = await self.sync_pending_orders(asset, config)
         results["fills_detected"] += sync_result.get("fills_detected", 0)
         results["errors"].extend(sync_result.get("errors", []))
         nodes = config.get("nodes", [])
 
         try:
-            positions = self.executor.get_open_positions() or []
+            positions = await run_executor_method(self.executor.get_open_positions) or []
             asset_positions = [p for p in positions if isinstance(p, dict) and p.get("coin") == asset]
 
             for pos in asset_positions:
@@ -270,7 +302,7 @@ class GridManager:
                             order_size = flipped["size"]
                             order_price = flipped["price"]
                             actual_notional = order_size * order_price
-                            if actual_notional < 10.0 and order_price > 0:
+                            if actual_notional < get_exchange_limits()["min_notional_usd"] and order_price > 0:
                                 order_size = math.ceil((float(config.get("dca", {}).get("min_notional", 10.0)) / order_price) * 100000) / 100000
 
                             try:
@@ -293,7 +325,7 @@ class GridManager:
         config["last_update"] = datetime.now(timezone.utc).isoformat()
         return results
 
-    def close_grid(self, asset: str, config: Dict) -> Dict:
+    async def close_grid(self, asset: str, config: Dict) -> Dict:
         """Cancel all open nodes + close any residual positions."""
         from execution.hl_executor import execute_hl_order
 
@@ -303,7 +335,7 @@ class GridManager:
         for node in config.get("nodes", []):
             if node["status"] == "OPEN" and node.get("order_id"):
                 try:
-                    cancel = self.executor.cancel_order(coin=asset, order_id=int(node["order_id"]))
+                    cancel = await run_executor_method(self.executor.cancel_order, coin=asset, order_id=int(node["order_id"]))
                     # Mark as CANCELLED even if exchange says "already canceled" to prevent loop
                     cancel_result = cancel.get("result", {})
                     statuses = cancel_result.get("response", {}).get("data", {}).get("statuses", [])
@@ -315,7 +347,7 @@ class GridManager:
                     results["errors"].append(f"Cancel L{node['level_index']}: {str(e)}")
 
         try:
-            positions = self.executor.get_open_positions() or []
+            positions = await run_executor_method(self.executor.get_open_positions) or []
             asset_positions = [p for p in positions if isinstance(p, dict) and p.get("coin") == asset]
             for pos in asset_positions:
                 size = abs(float(pos.get("size", pos.get("szi", 0))))
@@ -342,7 +374,7 @@ class GridManager:
         return results
 
 
-    def sync_pending_orders(self, asset: str, config: Dict) -> Dict:
+    async def sync_pending_orders(self, asset: str, config: Dict) -> Dict:
         """Detect grid fills via user_state position snapshot comparison.
         More reliable than open_orders() which returns empty on this SDK version."""
         results = {"synced": 0, "fills_detected": 0, "errors": []}
@@ -407,7 +439,7 @@ class GridManager:
         
         return results
 
-    def check_exit_conditions(self, asset: str, config: Dict, current_price: float) -> Optional[str]:
+    async def check_exit_conditions(self, asset: str, config: Dict, current_price: float) -> Optional[str]:
         sl_pct = config.get("stop_loss_pct")
         if sl_pct and current_price <= config["lower_price"] * (1 - sl_pct / 100):
             return f"Stop-loss: ${current_price} <= ${config['lower_price'] * (1 - sl_pct / 100):.2f}"
@@ -418,7 +450,7 @@ class GridManager:
             return f"Out of range: ${current_price} outside ${config['lower_price'] * 0.95:.2f}-${config['upper_price'] * 1.05:.2f}"
         return None
 
-    def get_grid_status(self, asset: str, state_positions: Dict) -> Optional[Dict]:
+    async def get_grid_status(self, asset: str, state_positions: Dict) -> Optional[Dict]:
         key = grid_state_key(asset)
         config = state_positions.get(key)
         if not config or not config.get("enabled"):
@@ -440,7 +472,7 @@ class GridManager:
         }
 
 
-    def get_optimized_grid_params(
+    async def get_optimized_grid_params(
         self, 
         asset: str, 
         current_price: float, 

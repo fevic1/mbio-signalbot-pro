@@ -17,6 +17,7 @@ from core.dca_lifecycle import handle_position_close_event
 from core.trade_ledger import record_trade
 from core.grid_persistence import save_grid_state, clear_grid_state
 import core.state as state
+from core.executor_utils import run_executor_method
 
 os.environ.setdefault("CHROMA_TELEMETRY_DISABLED", "true")
 
@@ -325,7 +326,7 @@ async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         # Query live exchange using verified normalized format
         from core.app_context import app_context
-        _live_positions = app_context.executor.get_open_positions() or []
+        _live_positions = (await run_executor_method(app_context.executor.get_open_positions)) or []
         _live_pos = None
         for _item in _live_positions:
             if isinstance(_item, dict) and _item.get("coin") == asset:
@@ -914,11 +915,13 @@ async def cmd_open_grid(update, context):
             return
         
         grid = GridManager(executor)
-        config = grid.create_grid(asset, lower_price, upper_price, grid_quantity, investment, profit_pct)
+        import os
+        _exchange = os.getenv("DEFAULT_EXCHANGE", "hyperliquid").lower().strip()
+        config = await grid.create_grid(asset, lower_price, upper_price, grid_quantity, investment, profit_pct, exchange=_exchange)
         
         _grid_cfg = _cfg_mod.get_config().get("grid", {}).get("reversal", {})
         max_conc = _grid_cfg.get("max_concurrent_orders", 4)
-        result = grid.place_grid_orders(asset, config, current_price, max_concurrent=max_conc)
+        result = await grid.place_grid_orders(asset, config, current_price, max_concurrent=max_conc)
         
         state.OPEN_POSITIONS[grid_state_key(asset)] = config
         state.save_state()
@@ -1046,7 +1049,7 @@ async def cmd_close_grid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         await update.message.reply_text(f"🔄 Closing GRID bot for {asset}...")
 
-        result = grid.close_grid(asset, config)
+        result = await grid.close_grid(asset, config)
 
         # Remove ONLY the grid state key — DCA state untouched
         state.OPEN_POSITIONS.pop(key, None)
@@ -1110,7 +1113,7 @@ async def grid_monitor_task():
 
                 asset = grid_asset_from_key(key)
 
-                sync_result = grid_mgr.sync_pending_orders(asset, config)
+                sync_result = await grid_mgr.sync_pending_orders(asset, config)
                 fills = sync_result.get("fills_detected", 0)
                 errors = sync_result.get("errors", [])
 

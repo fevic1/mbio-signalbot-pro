@@ -1,9 +1,11 @@
+import os
 import asyncio
 import logging
 from core.app_context import app_context
 from datetime import datetime, timezone
 from typing import Dict, List
 import core.state as state
+from core.exchange_limits import get_exchange_limits
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +155,7 @@ async def _execute_swap(stagnant_asset: str, candidate: Dict):
         target_notional = 12.0  # Safely above $10 min notional rule
         new_size = round(target_notional / current_price, 4)
         
-        if new_size * current_price < 10.0:
+        if new_size * current_price < get_exchange_limits()["min_notional_usd"]:
             new_size = round(11.0 / current_price, 4)
             
         open_side = "BUY" if candidate['signal'] == "BUY" else "SELL"
@@ -193,7 +195,7 @@ async def _execute_fill(candidate: Dict):
         target_notional = 12.0
         new_size = round(target_notional / current_price, 4)
         
-        if new_size * current_price < 10.0:
+        if new_size * current_price < get_exchange_limits()["min_notional_usd"]:
             new_size = round(11.0 / current_price, 4)
             
         open_side = "BUY" if candidate['signal'] == "BUY" else "SELL"
@@ -244,7 +246,8 @@ async def hunter_monitor_loop():
                     from config.config import get_config
                     
                     cfg = get_config()
-                    assets = cfg.get("hyperliquid", {}).get("assets", [])
+                    ex_name = os.getenv("DEFAULT_EXCHANGE", "hyperliquid").lower()
+                    assets = cfg.get(ex_name, {}).get("assets", [])
                     
                     # Analyze all assets EXCEPT the ones we already have open
                     open_assets = set(state.OPEN_POSITIONS.keys())

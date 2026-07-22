@@ -1,3 +1,4 @@
+import os
 """
 MCP Tool Definitions and Registration
 Binds existing bot capabilities to the Multi-MCP Registry.
@@ -73,10 +74,10 @@ async def place_grid(
         executor = app_context.executor
         grid_manager = GridManager(executor)
         
-        result = grid_manager.create_grid(
+        result = await grid_manager.create_grid(
             asset=asset, lower_price=lower_price, upper_price=upper_price,
             grid_quantity=nodes, investment_amount=investment,
-            profit_per_grid_pct=0.5, exchange="hyperliquid"
+            profit_per_grid_pct=0.5, exchange=os.getenv("DEFAULT_EXCHANGE", "hyperliquid")
         )
         logger.info(f"MCP: Grid deployed for {asset}")
         return {"success": True, "data": result}

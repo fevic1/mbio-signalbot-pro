@@ -1,7 +1,9 @@
 """
 core/state.py — Shared runtime state with disk persistence.
 Saves state every 60s to prevent loss on crash.
+Exchange-agnostic: Compatible with all adapters.
 """
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -9,8 +11,11 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Live open positions keyed by asset name
+# Live open positions keyed by asset name (exchange-agnostic)
 OPEN_POSITIONS: dict = {}
+DCA_POSITIONS: dict = {}   # Isolated DCA position state (CODING_STANDARD: one responsibility)
+QT_POSITIONS: dict = {}    # Isolated Quick Ticket position state
+STATE_LOCK = asyncio.Lock()  # Per LLM INSTRUCTIONS: asyncio.Lock() required on all state writes
 SIGNAL_CACHE: dict = {}
 TIER_TIMESTAMPS: dict = {"crypto": 0.0}
 LIVE_SIGNALS: dict = {}
@@ -34,6 +39,8 @@ def save_state() -> None:
     try:
         data = {
             "open_positions": OPEN_POSITIONS,
+            "dca_positions": DCA_POSITIONS,
+            "qt_positions": QT_POSITIONS,
             "signal_cache": SIGNAL_CACHE,
             "tier_timestamps": TIER_TIMESTAMPS,
             "daily_pnl": daily_pnl,
@@ -53,12 +60,14 @@ def save_state() -> None:
 
 def load_state() -> None:
     """Load state from disk on startup."""
-    global OPEN_POSITIONS, SIGNAL_CACHE, TIER_TIMESTAMPS, daily_pnl, daily_pnl_reset_date, TRADE_HISTORY
+    global OPEN_POSITIONS, DCA_POSITIONS, QT_POSITIONS, SIGNAL_CACHE, TIER_TIMESTAMPS, daily_pnl, daily_pnl_reset_date, TRADE_HISTORY
     global auto_dca_active, auto_dca_params, auto_dca_consec_losses
     try:
         if STATE_FILE.exists():
             data = json.loads(STATE_FILE.read_text())
             OPEN_POSITIONS = data.get("open_positions", {})
+            DCA_POSITIONS = data.get("dca_positions", {})
+            QT_POSITIONS = data.get("qt_positions", {})
             SIGNAL_CACHE = data.get("signal_cache", {})
             TIER_TIMESTAMPS = data.get("tier_timestamps", {"crypto": 0.0})
             daily_pnl = data.get("daily_pnl", 0.0)
@@ -70,7 +79,7 @@ def load_state() -> None:
             auto_dca_params = data.get("auto_dca_params", {})
             auto_dca_consec_losses = data.get("auto_dca_consec_losses", {})
             
-            logger.info(f"✅ State loaded from disk: {len(OPEN_POSITIONS)} positions, {len(TRADE_HISTORY)} historical trades")
+            logger.info(f"✅ State loaded from disk: {len(OPEN_POSITIONS)} signal positions, {len(DCA_POSITIONS)} DCA positions, {len(QT_POSITIONS)} QT positions, {len(TRADE_HISTORY)} historical trades")
             if auto_dca_active:
                 logger.info("🔄 Restored Auto-DCA state: %s", list(auto_dca_active.keys()))
     except Exception as e:
@@ -187,4 +196,3 @@ def get_live_performance_stats():
         "avg_win": avg_win,
         "avg_loss": avg_loss
     }
-

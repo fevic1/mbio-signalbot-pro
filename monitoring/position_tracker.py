@@ -9,6 +9,8 @@ from core.data_fetcher import get_all_live_prices, get_current_price
 from core.risk_manager import is_drawdown_halted
 from monitoring.alert_manager import send_closure, send_tp_hit
 from execution.hl_executor import execute_hl_order
+from core.executor_utils import run_executor_method
+from core.exchange_limits import get_exchange_limits
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +125,9 @@ async def check_and_close_positions(chat_id: str) -> None:
                     notional = close_size * current_price
                     
                     # Check minimum order size ($10)
-                    if notional < 10:
-                        logger.warning(f"⚠️ {asset} partial close skipped: ${notional:.2f} < $10 minimum")
+                    _min_notional = get_exchange_limits()["min_notional_usd"]
+                    if notional < _min_notional:
+                        logger.warning(f"⚠️ {asset} partial close skipped: ${notional:.2f} < ${_min_notional} minimum")
                         pos["sl"] = entry * 1.002
                         pos["tp1_hit"] = True
                         await send_tp_hit(asset, "TP1 (skipped - too small)", current_price, entry, chat_id)
@@ -215,8 +218,9 @@ async def check_and_close_positions(chat_id: str) -> None:
                     notional = close_size * current_price
                     
                     # Check minimum order size ($10)
-                    if notional < 10:
-                        logger.warning(f"⚠️ {asset} partial close skipped: ${notional:.2f} < $10 minimum")
+                    _min_notional = get_exchange_limits()["min_notional_usd"]
+                    if notional < _min_notional:
+                        logger.warning(f"⚠️ {asset} partial close skipped: ${notional:.2f} < ${_min_notional} minimum")
                         pos["sl"] = entry * 0.998
                         pos["tp1_hit"] = True
                         await send_tp_hit(asset, "TP1 (skipped - too small)", current_price, entry, chat_id)
@@ -397,7 +401,7 @@ async def position_monitor_loop(chat_id: str) -> None:
             if state.OPEN_POSITIONS:
                 try:
                     executor = app_context.executor
-                    live_positions = executor.get_open_positions()
+                    live_positions = await run_executor_method(executor.get_open_positions)
                     live_coins = {p["coin"] for p in live_positions}
                     for tracked_asset in list(state.OPEN_POSITIONS.keys()):
                         if tracked_asset.startswith("GRID::"):
@@ -418,10 +422,12 @@ async def position_monitor_loop(chat_id: str) -> None:
                 # Also try to sync from exchange if state is empty
                 # HLExecutor now from app_context
                 executor = app_context.executor
-                exchange_positions = executor.get_open_positions()
+                exchange_positions = await run_executor_method(executor.get_open_positions)
                 if exchange_positions:
                     for p in exchange_positions:
                         coin = p["coin"]
+                        if coin in state.DCA_POSITIONS:
+                            continue  # DCA positions managed by dca_manager, not reconciled here
                         if coin not in state.OPEN_POSITIONS:
                             entry = float(p["entry_price"])
                             size = float(p["size"])
@@ -554,6 +560,13 @@ async def monitor_dca_profit_targets():
 async def monitor_grid_bots():
     """Background task: Monitor GRID bots for fills and exit conditions.
     Only processes GRID:: namespaced positions — DCA unaffected."""
+    # Per config: skip grid monitoring when disabled (CODING_STANDARD: no hidden side effects)
+    _cfg = get_config()
+    if not _cfg.get("grid", {}).get("enabled", True):
+        logger.info("🔲 Grid strategy disabled via config. Grid monitor idle.")
+        while True:
+            await asyncio.sleep(300)  # Sleep 5 min, re-check never needed but keeps task alive
+        return
     while True:
         await asyncio.sleep(120)
         try:
@@ -577,10 +590,10 @@ async def monitor_grid_bots():
                 if current_price <= 0:
                     continue
 
-                exit_reason = grid.check_exit_conditions(asset, config, current_price)
+                exit_reason = await grid.check_exit_conditions(asset, config, current_price)
                 if exit_reason:
                     logger.info(f"🔲 GRID exit for {asset}: {exit_reason}")
-                    grid.close_grid(asset, config)
+                    await grid.close_grid(asset, config)
                     OPEN_POSITIONS.pop(key, None)
                     import core.state as _st
                     _st.save_state()
@@ -603,13 +616,16 @@ async def monitor_grid_bots():
                 if len(active_nodes) == 0 and len(pending_nodes) > 0:
                     logger.info(f"🔲 {asset}: Grid has {len(pending_nodes)} pending nodes but no active orders — deploying")
                     max_conc = 4  # Deploy closest 4 nodes
-                    deploy_result = grid.place_grid_orders(asset, config, current_price, max_concurrent=max_conc)
+                    deploy_result = await grid.place_grid_orders(asset, config, current_price, max_concurrent=max_conc)
                     logger.info(f"🔲 {asset}: Deployed {deploy_result['placed']} orders, {deploy_result['failed']} failed")
-                    import core.state as _st
-                    _st.save_state()
+                    # Only persist state if orders were actually placed.
+                    # Safety halt (0 placed) should NOT re-persist ghost grid.
+                    if deploy_result.get("placed", 0) > 0:
+                        import core.state as _st
+                        _st.save_state()
                     continue  # Skip fill monitoring this cycle, orders just placed
                 
-                fill_result = grid.monitor_grid_fills(asset, config)
+                fill_result = await grid.monitor_grid_fills(asset, config)
                 if fill_result["fills_detected"] > 0:
                     logger.info(
                         f"🔲 {asset}: {fill_result['fills_detected']} fills, "

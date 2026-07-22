@@ -1,3 +1,4 @@
+import { safeToFixed } from '../utils/format';
 import { useEffect, useState, useCallback } from "react"
 import { apiFetch, ApiError } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
@@ -92,7 +93,7 @@ export function PositionsPanel({ onClose, refreshKey }: { onClose: (pos: Positio
               <td className="py-2">${p.entry.toLocaleString()}</td>
               <td className="py-2">${p.current.toLocaleString()}</td>
               <td className={cn("py-2", p.upnl >= 0 ? "text-long" : "text-short")}>
-                ${p.upnl.toFixed(2)} ({p.pnl_pct >= 0 ? "+" : ""}{p.pnl_pct.toFixed(2)}%)
+                ${safeToFixed(p?.upnl)} ({p.pnl_pct >= 0 ? "+" : ""}{safeToFixed(p?.pnl_pct)}%)
               </td>
               <td className="py-2 text-muted-foreground">{p.liquidation_px > 0 ? `$${p.liquidation_px.toLocaleString()}` : "—"}</td>
               <td className="py-2 text-right font-sans">

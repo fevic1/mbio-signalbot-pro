@@ -91,11 +91,18 @@ class DecisionWorkflow:
         )
 
 
+        project = self.system.project_manager.create(
+            title=task["name"],
+            description=task.get("description", "")
+        )
+
+        context.metadata["project"] = project
+
         context.metadata["decision"] = decision.to_dict()
 
-
         return {
-            "proposal": proposal.summary(),
-            "deliberation": deliberation,
-            "decision": decision.to_dict(),
+           "proposal": proposal.summary(),
+           "deliberation": deliberation,
+           "decision": decision.to_dict(),
+           "project": project,
         }

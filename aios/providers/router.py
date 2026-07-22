@@ -1,47 +1,60 @@
+from time import perf_counter
+
+from .metrics import metrics
 from .registry import registry
+from .scoring import score
 
 
 ORDER = [
     "groq",
-    "openrouter",
     "cerebras",
+    "openrouter",
     "anthropic",
 ]
 
 
 def chat(request, preferred="groq"):
-    """
-    Route request through available AI providers.
-    Uses preferred provider first.
-    Falls back automatically.
-    """
 
-    providers = [preferred] + [
-        p for p in ORDER if p != preferred
-    ]
+    providers = sorted(
+        [
+            provider
+            for provider in (
+                registry.get(name)
+                for name in ORDER
+            )
+            if provider is not None
+        ],
+        key=score,
+        reverse=True,
+    )
 
     last_error = None
 
-    for name in providers:
+    for provider in providers:
 
-        provider = registry.get(name)
+        name = provider.name
 
-        if provider is None:
+        if not provider.available():
             continue
 
-        # Skip providers without API keys
-        if hasattr(provider, "available"):
-            if not provider.available():
-                continue
+        start = perf_counter()
 
         try:
-            return provider.chat(request)
+            response = provider.chat(request)
 
-        except Exception as e:
-            last_error = e
+            metrics.record_success(
+                name,
+                perf_counter() - start,
+            )
+
+            return response
+
+        except Exception as exc:
+
+            metrics.record_failure(name)
+            metrics.record_retry(name)
+
+            last_error = exc
             continue
 
-    if last_error:
-        raise last_error
-
-    raise RuntimeError("No AI providers available")
+    raise last_error

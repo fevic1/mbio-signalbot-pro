@@ -4,6 +4,7 @@ Integrates seamlessly with main.py and falls back to legacy logic if anything fa
 """
 import logging
 from typing import Dict, Optional
+from core.exchange_limits import get_exchange_limits
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,18 @@ def calculate_safe_position_size(
                 f"via {result['method']} | Risk: {result['risk_pct']}%"
             )
             
+        # EXCHANGE FLOOR ENFORCEMENT (CODING_STANDARD: No magic numbers)
+        # Ensure calculated position meets exchange minimum notional
+        _limits = get_exchange_limits()
+        _effective_min = _limits["min_notional_usd"] * _limits["min_notional_buffer"]
+        _size_usd = result.get('size_usd', 0)
+        if _size_usd > 0 and _size_usd < _effective_min:
+            logger.warning(
+                f"⚠️ [DynamicSizer] Calculated ${_size_usd:.2f} below effective "
+                f"min ${_effective_min:.2f}. Skipping trade."
+            )
+            return None
+
         return result
         
     except Exception as e:

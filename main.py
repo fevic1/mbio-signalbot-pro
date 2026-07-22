@@ -16,7 +16,9 @@ from datetime import datetime, timezone
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import Request, FastAPI
+from fastapi import Request, FastAPI, Depends
+from core.auth import get_current_user
+from core.app_context import AppContext
 from routes.tradingview_webhook import router as tv_router
 from routes.dashboard_api import router as dashboard_router
 from routes.auth import router as auth_router
@@ -48,6 +50,7 @@ from monitoring.position_tracker import (
     monitor_grid_bots)
 from core.strategy_manager import StrategyManager
 from core.strategy_registry import get_strategy_class, list_strategies
+from core.executor_utils import run_executor_method
 from strategies.institutional_dca import InstitutionalDcaStrategy, PositionState
 from strategies.sideways_grid import SidewaysGridStrategy, GridState
 
@@ -152,6 +155,48 @@ from routes.hip4_api import router as hip4_router
 api.include_router(mcp_gateway_router)
 api.include_router(hip4_router)
 
+
+@api.get("/api/dashboard/status")
+async def get_status(current_user: dict = Depends(get_current_user)) -> dict:
+    """Return account summary with balance, equity, positions count."""
+    try:
+        executor = app_context.executor
+        # Non-blocking call with timeout
+        result = await run_executor_method(executor.get_account_summary, timeout=5.0)
+        return {
+            "hl_balance": float(result.get("hl_balance", 0)),
+            "bybit_balance": float(result.get("bybit_balance", 0)),
+            "total_balance": float(result.get("total_balance", 0)),
+            "equity": float(result.get("equity", 0)),
+            "deployed_pct": float(result.get("deployed_pct", 0)),
+            "notional": float(result.get("notional", 0)),
+            "daily_pnl_pct": float(result.get("daily_pnl_pct", 0)),
+            "realized_pnl_usd": float(result.get("realized_pnl_usd", 0)),
+            "unrealized_pnl_usd": float(result.get("unrealized_pnl_usd", 0)),
+            "open_positions": int(result.get("open_positions", 0)),
+        }
+    except asyncio.TimeoutError:
+        logger.error("❌ Status endpoint timeout after 5s")
+        return {"error": "timeout"}
+    except Exception as e:
+        logger.error(f"❌ Status endpoint failed: {e}", exc_info=True)
+        return {"error": str(e)}
+
+
+@api.get("/api/dashboard/positions")
+async def get_positions(current_user: dict = Depends(get_current_user)) -> dict:
+    """Return open positions list."""
+    try:
+        executor = app_context.executor
+        result = await run_executor_method(executor.get_open_positions, timeout=5.0)
+        return {"positions": result}
+    except asyncio.TimeoutError:
+        logger.error("❌ Positions endpoint timeout after 5s")
+        return {"error": "timeout"}
+    except Exception as e:
+        logger.error(f"❌ Positions endpoint failed: {e}", exc_info=True)
+        return {"error": str(e)}
+
 @api.get("/{full_path:path}")
 async def serve_spa(full_path: str):
     """Catch-all route: serve index.html for all non-API frontend paths.
@@ -168,6 +213,84 @@ async def serve_spa(full_path: str):
     if os.path.exists(new_index):
         return FileResponse(new_index)
     return FileResponse(os.path.join(base_dir, "frontend", "index.html"))
+
+
+
+async def start_api_server():
+    """Start FastAPI server with explicit error handling."""
+    if not ENABLE_API_SERVER:
+        logger.info("ℹ️ API server disabled via config")
+        return
+    
+    # Validate app instance exists
+    if 'api' not in globals() or api is None:
+        logger.error("❌ FastAPI app 'api' not initialized. Cannot start server.")
+        return
+    
+    try:
+        config = uvicorn.Config(
+            api, 
+            host="0.0.0.0", 
+            port=API_PORT, 
+            log_level="info",
+            access_log=False,
+            loop="asyncio"
+        )
+        server = uvicorn.Server(config)
+        
+        logger.info(f"🌐 Starting API server on http://0.0.0.0:{API_PORT}")
+        
+        # Start server in background task to avoid blocking main loop
+        serve_task = asyncio.create_task(server.serve())
+        
+        # Wait for server to initialize
+        await asyncio.sleep(3)
+        
+        # Verify ACTUAL socket bind by testing connectivity
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        try:
+            result = sock.connect_ex(('127.0.0.1', API_PORT))
+            if result == 0:
+                logger.info(f"✅ API server socket VERIFIED on port {API_PORT}")
+                
+                # Also verify HTTP response
+                import urllib.request
+                try:
+                    resp = urllib.request.urlopen(f'http://127.0.0.1:{API_PORT}/status', timeout=2)
+                    if resp.status == 200:
+                        logger.info("✅ API server HTTP endpoint VERIFIED")
+                    else:
+                        logger.warning(f"⚠️ API server returned status {resp.status}")
+                except Exception as http_err:
+                    logger.error(f" API server HTTP test failed: {http_err}")
+            else:
+                logger.error(f"❌ API server socket NOT bound on port {API_PORT} (connect_ex returned {result})")
+                serve_task.cancel()
+                try:
+                    await serve_task
+                except asyncio.CancelledError:
+                    pass
+                return
+        except Exception as e:
+            logger.error(f"❌ Socket verification failed: {e}", exc_info=True)
+            serve_task.cancel()
+            try:
+                await serve_task
+            except asyncio.CancelledError:
+                pass
+            return
+        finally:
+            sock.close()
+        
+        # Keep task alive for lifetime of bot
+        await serve_task
+        
+    except Exception as e:
+        logger.error(f"❌ API server crashed during startup: {type(e).__name__}: {e}", exc_info=True)
+        raise
+
 
 
 def run_api():
@@ -498,7 +621,7 @@ async def main() -> None:
         return
     logger.info(f"🤖 Auto Trading: {'ENABLED' if ENABLE_AUTO_TRADING else 'DISABLED'}")
     if ENABLE_API_SERVER:
-        threading.Thread(target=run_api, daemon=True).start()
+        asyncio.create_task(start_api_server())
         logger.info(f"🌐 API: http://0.0.0.0:{API_PORT}")
 
     logger.info("🚀 MBIO SignalBot Pro v9.0 started...")
@@ -549,7 +672,9 @@ async def main() -> None:
 
     # Run all background loops concurrently with health tracking
     _bg_tasks = []
-    for _task_name, _coro in [
+    # Per config: conditionally register grid_monitor (CODING_STANDARD: no hidden side effects)
+    _grid_enabled = get_config().get("grid", {}).get("enabled", True)
+    _task_list = [
         ("position_monitor", position_monitor_loop(TELEGRAM_CHAT_ID)),
         ("quick_scanner", quick_signal_scanner(TELEGRAM_CHAT_ID)),
         ("entry_scanner", entry_scanner_loop(run_trade, TELEGRAM_CHAT_ID)),
@@ -557,8 +682,12 @@ async def main() -> None:
         ("slot_hunter", autonomous_slot_hunter(TELEGRAM_CHAT_ID)),
         ("trailing_dca", update_trailing_dca()),
         ("profit_target_monitor", monitor_dca_profit_targets()),
-        ("grid_monitor", monitor_grid_bots()),
-    ]:
+    ]
+    if _grid_enabled:
+        _task_list.append(("grid_monitor", monitor_grid_bots()))
+    else:
+        logger.info("🔲 Grid strategy disabled via config. Grid monitor not registered.")
+    for _task_name, _coro in _task_list:
         _t = asyncio.create_task(_tracked_task(_task_name, _coro))
         _bg_tasks.append(_t)
 

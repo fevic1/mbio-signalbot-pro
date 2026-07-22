@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 from hyperliquid.info import Info
 from hyperliquid.exchange import Exchange
 from hyperliquid.utils import constants
+from core.exchange_limits import get_exchange_limits
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ class HyperliquidClient:
         lot_size = 10 ** (-sz_decimals)
 
         # Min notional: Hyperliquid standard is $10 for perps, varies for spot
-        min_notional = 10.0
+        min_notional = get_exchange_limits()["min_notional_usd"]
         if info["type"] == "SPOT":
             min_notional = 1.0
         elif info["type"] == "TRADFI":

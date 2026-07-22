@@ -1,0 +1,28 @@
+# config/exchange_limits.yaml — Exchange-Specific Trading Limits
+# Single source of truth for all exchange constraints.
+# Per CODING_STANDARD: No magic numbers. No duplicated business logic.
+# Per RISK_POLICY: Every order requires validation. No exceptions.
+
+hyperliquid:
+  # Minimum order notional value in USD (exchange-enforced)
+  min_notional_usd: 10.0
+  
+  # Buffer multiplier to account for price movement between calculation and execution
+  # Effective minimum = min_notional_usd * min_notional_buffer
+  min_notional_buffer: 1.15
+  
+  # Minimum account balance required to attempt ANY trade
+  # Must cover min_notional + fees + margin buffer
+  min_balance_for_trading: 12.0
+  
+  # Maximum leverage (exchange-enforced per asset, this is global cap)
+  max_leverage: 20
+  
+  # API rate limits
+  api_rate_limit_per_second: 10
+  api_rate_limit_burst: 20
+
+# Future exchanges (Vertex, Bybit) will be added here
+# vertex:
+#   min_notional_usd: 5.0
+#   ...
