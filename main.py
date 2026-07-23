@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import Request, FastAPI, Depends
+from contextlib import asynccontextmanager
+from aios.bootstrap.loader import BootstrapLoader
 from core.auth import get_current_user
 from core.app_context import AppContext
 from routes.tradingview_webhook import router as tv_router
@@ -81,7 +83,33 @@ API_PORT = int(os.environ.get("API_PORT", "8000"))
 if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
     raise ValueError("❌ Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
 
-api = FastAPI(title="MBIO SignalBot Pro API", version="9.0")
+aios_system = None
+
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+
+    global aios_system
+
+
+    logger.info("Starting AIOS Enterprise runtime")
+
+    aios_system = BootstrapLoader().boot()
+
+    app.state.aios = aios_system
+
+
+    logger.info("AIOS runtime ready")
+
+
+    yield
+
+
+    logger.info("Stopping AIOS Enterprise runtime")
+
+
+api = FastAPI(title="MBIO SignalBot Pro API", version="9.0", lifespan=lifespan)
 api.add_middleware(
     CORSMiddleware,
     allow_origins=[
