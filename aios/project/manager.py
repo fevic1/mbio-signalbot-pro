@@ -1,4 +1,5 @@
-from .models import Project, Goal
+from .models import Project
+from aios.goals.models import Goal
 from .planner import ProjectPlanner
 
 

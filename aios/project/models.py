@@ -1,13 +1,7 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from aios.goals.models import Goal
+from typing import List
 import uuid
-
-
-@dataclass
-class Goal:
-    id: str
-    title: str
-    description: str = ""
 
 
 @dataclass
@@ -28,6 +22,6 @@ class Milestone:
 @dataclass
 class Project:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    goal: Optional[Goal] = None
+    goal: Goal | None = None
     milestones: List[Milestone] = field(default_factory=list)
     status: str = "created"
