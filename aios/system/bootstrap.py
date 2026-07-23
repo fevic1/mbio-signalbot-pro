@@ -74,7 +74,6 @@ class SystemBootstrap:
 
         system.capability_health = capability_health
         system.capability_registry = registry
-        system.skill_registry = skill_registry
 
         system.council = CouncilManager(
             event_bus=event_bus,
