@@ -5,6 +5,7 @@ from aios.project import ProjectManager
 from aios.council import CouncilManager
 
 from aios.execution import ExecutionPlanner
+from aios.capabilities.health import CapabilityHealthManager
 
 from aios.registry import CapabilityRegistry
 from aios.runtime import TaskManager
@@ -43,6 +44,7 @@ class SystemBootstrap:
         audit = AuditLogger()
         event_bus = EventBus()
         execution_planner = ExecutionPlanner()
+        capability_health = CapabilityHealthManager()
 
         CapabilityBootstrap(
             registry=registry,
@@ -65,6 +67,8 @@ class SystemBootstrap:
             memory_manager=self.memory,
             execution_planner=execution_planner,
         )
+
+        system.capability_health = capability_health
 
         system.council = CouncilManager()
         system.project_manager = ProjectManager()
