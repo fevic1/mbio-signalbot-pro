@@ -12,7 +12,9 @@ async def chat(request: ProviderRequest):
 
     last_error = None
 
-    for provider in provider_pool.ranked():
+    ranked = provider_pool.ranked()
+
+    for provider in ranked:
 
         name = provider.name
 
@@ -46,7 +48,6 @@ async def chat(request: ProviderRequest):
             return response
 
         except Exception as exc:
-
             metrics.record_failure(name)
             metrics.record_retry(name)
 
@@ -55,7 +56,9 @@ async def chat(request: ProviderRequest):
             last_error = exc
 
     if last_error:
-        raise last_error
+        raise RuntimeError(
+            f"Provider failures: {last_error}"
+        ) from last_error
 
     raise RuntimeError(
         "No provider available"
