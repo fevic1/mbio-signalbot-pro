@@ -1,32 +1,32 @@
 class ExecutionPlanner:
 
+
     def __init__(self):
 
         self.requirements = {
 
             "research": [
-                "research",
-                "reasoning",
-                "verification",
-                "risk_analysis",
+                "can_search",
+                "can_reason",
+                "can_verify",
             ],
 
             "trading": [
-                "market_analysis",
-                "risk_management",
-                "verification",
+                "can_reason",
+                "can_review",
+                "can_verify",
             ],
 
             "engineering": [
-                "architecture",
-                "coding",
-                "testing",
+                "can_plan",
+                "can_execute",
+                "can_verify",
             ],
 
             "security": [
-                "security_analysis",
-                "risk_analysis",
-                "verification",
+                "can_review",
+                "can_reason",
+                "can_verify",
             ],
         }
 
@@ -38,7 +38,9 @@ class ExecutionPlanner:
 
         return self.requirements.get(
             category,
-            ["research"],
+            [
+                "can_reason"
+            ],
         )
 
 
