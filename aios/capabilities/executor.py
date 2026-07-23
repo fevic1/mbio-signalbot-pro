@@ -1,6 +1,8 @@
 from time import perf_counter
 
+from aios.intelligence.llm_adapter import LLMAdapter
 from aios.providers.router import chat
+from aios.providers.router import provider_pool
 from aios.providers.types import ProviderRequest
 
 from .request import CapabilityRequest
@@ -11,6 +13,9 @@ class CapabilityExecutionError(Exception):
 
 
 class CapabilityExecutor:
+
+    def __init__(self):
+        self.adapter = LLMAdapter(provider_pool)
 
     def execute(
         self,
@@ -24,14 +29,12 @@ class CapabilityExecutor:
         ):
 
             try:
-
                 return self._execute_once(
                     request,
                     attempt,
                 )
 
             except Exception as error:
-
                 last_error = error
 
         raise CapabilityExecutionError(
@@ -44,31 +47,29 @@ class CapabilityExecutor:
         attempt: int,
     ):
 
+        prompt = self.adapter.build(
+            request.capability,
+            request,
+        )
+
         provider_request = ProviderRequest(
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "Execute capability: "
-                        f"{request.capability}"
-                    ),
+                    "content": prompt["system"],
                 },
                 {
                     "role": "user",
-                    "content": (
-                        f"Capability: {request.capability}\n"
-                        f"Permission: {request.permission}\n"
-                        f"Attempt: {attempt}\n"
-                        f"Context: {request.context}\n"
-                        "Return structured output."
-                    ),
+                    "content": str(prompt["context"]),
                 },
             ]
         )
 
         start = perf_counter()
 
-        response = chat(provider_request)
+        response = chat(
+            provider_request
+        )
 
         latency = perf_counter() - start
 
