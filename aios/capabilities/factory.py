@@ -12,7 +12,7 @@ class CapabilityWorker:
         self.capability = capability
         self.executor = CapabilityExecutor(system)
 
-    def run(
+    async def run(
         self,
         context=None,
         blackboard=None,
@@ -24,7 +24,7 @@ class CapabilityWorker:
             context=context,
         )
 
-        output = self.executor.execute(
+        output = await self.executor.execute(
             request
         )
 
