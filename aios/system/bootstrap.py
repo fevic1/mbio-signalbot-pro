@@ -5,6 +5,7 @@ from aios.project import ProjectManager
 from aios.council import CouncilManager
 
 from aios.execution import ExecutionPlanner
+from aios.skills.loader import SkillLoader
 from aios.capabilities.health import CapabilityHealthManager
 
 from aios.registry import CapabilityRegistry
@@ -50,6 +51,10 @@ class SystemBootstrap:
             registry=registry,
         ).load_capabilities()
 
+        skill_registry = SkillLoader().load()
+
+        skill_registry = SkillLoader().load()
+
         decision = DecisionEngine(
             approval_manager=approval,
             audit=audit,
@@ -68,8 +73,12 @@ class SystemBootstrap:
         )
 
         system.capability_health = capability_health
+        system.capability_registry = registry
+        system.skill_registry = skill_registry
 
-        system.council = CouncilManager()
+        system.council = CouncilManager(
+            event_bus=event_bus,
+        )
         system.project_manager = ProjectManager()
         system.decision_policy = DecisionPolicy()
 
