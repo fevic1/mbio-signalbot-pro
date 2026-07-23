@@ -9,7 +9,11 @@ class CapabilityRegistry:
         capability,
     ):
 
+        capability.validate()
+
         self._capabilities[
+            capability.name
+        ] = capability
             capability.name
         ] = capability
 
