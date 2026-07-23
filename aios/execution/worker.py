@@ -1,4 +1,4 @@
-from aios.capabilities.executor import CapabilityExecutor
+from datetime import datetime
 
 
 class Worker:
@@ -14,8 +14,6 @@ class Worker:
         self.system = system
         self.blackboard = blackboard
         self.queue = queue
-        self.executor = CapabilityExecutor()
-
 
 
     def execute(
@@ -24,39 +22,76 @@ class Worker:
         context,
     ):
 
-        capability = task.capability
+        started = datetime.utcnow()
+
+        capability = task.worker.capability.name
 
 
-        result = self.executor.execute(
-            capability
+        context.emit(
+            "capability_started",
+            {
+                "capability": capability,
+                "task": task.id,
+            },
         )
 
 
-        output = {
+        try:
 
-            "capability": capability,
-
-            "provider":
-                result.provider,
-
-            "model":
-                result.model,
-
-            "content":
-                result.content,
-
-        }
+            result = task.worker.run(
+                context=context,
+                blackboard=self.blackboard,
+            )
 
 
-        self.blackboard.store(
-            task.id,
-            output,
-        )
+            task.result = result
+
+            task.started = started.isoformat()
+
+            task.completed = datetime.utcnow().isoformat()
+
+            task.status = "completed"
 
 
-        self.queue.finish(
-            task
-        )
+            self.queue.finish(
+                task
+            )
 
 
-        return output
+            context.emit(
+                "capability_completed",
+                {
+                    "capability": capability,
+                    "provider": result.get("provider"),
+                    "model": result.get("model"),
+                    "latency": result.get("latency"),
+                },
+            )
+
+
+            return result
+
+
+        except Exception as exc:
+
+
+            task.status = "failed"
+
+            task.error = str(exc)
+
+
+            self.queue.fail(
+                task
+            )
+
+
+            context.emit(
+                "capability_failed",
+                {
+                    "capability": capability,
+                    "error": str(exc),
+                },
+            )
+
+
+            raise
