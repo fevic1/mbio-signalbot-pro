@@ -13,8 +13,14 @@ class LLMCouncilSkill(Skill):
     id = "llm-council"
     name = "LLM Council"
 
-    def __init__(self):
-        self.executor = CapabilityExecutor()
+    def __init__(
+        self,
+        system=None,
+    ):
+        self.system = system
+        self.executor = CapabilityExecutor(
+            system
+        )
         self.config = yaml.safe_load(
             (Path(__file__).parent / "manifest.yaml").read_text()
         )
