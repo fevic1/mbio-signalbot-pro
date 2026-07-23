@@ -3,7 +3,25 @@ from datetime import datetime
 
 class AIOSOrchestrator:
 
-    def __init__(self, system):
+    def __init__(
+        self,
+        system=None,
+        task_manager=None,
+        registry=None,
+        decision_engine=None,
+        workflow_engine=None,
+    ):
+
+        if system is None:
+            class CompatibilitySystem:
+                pass
+
+            system = CompatibilitySystem()
+
+            system.task_manager = task_manager
+            system.registry = registry
+            system.decision_engine = decision_engine
+            system.workflow_engine = workflow_engine
 
         self.system = system
 

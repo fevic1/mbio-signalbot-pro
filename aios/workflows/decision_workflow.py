@@ -102,6 +102,16 @@ class DecisionWorkflow:
 
         project = self.system.project_manager.create(goal)
 
+        if self.system.council:
+            council_report = self.system.council.review(project)
+
+            context.metadata["council"] = council_report
+
+            if not council_report["consensus"]["approved"]:
+                raise RuntimeError(
+                    "Council rejected project execution"
+                )
+
         context.metadata["project"] = project
 
         context.metadata["decision"] = decision.to_dict()

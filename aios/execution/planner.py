@@ -187,3 +187,14 @@ class ExecutionPlanner:
             "type": "capability",
             "target": self.get_capabilities(category),
         }
+
+
+    def get_recommendations(
+        self,
+    ):
+
+        if self.optimizer:
+
+            return self.optimizer.get_recommendations()
+
+        return []
