@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from aios.goals.models import Goal
+from .graph.models import Dependency
 from typing import List
 import uuid
 
@@ -25,3 +26,4 @@ class Project:
     goal: Goal | None = None
     milestones: List[Milestone] = field(default_factory=list)
     status: str = "created"
+    dependencies: List[Dependency] = field(default_factory=list)
