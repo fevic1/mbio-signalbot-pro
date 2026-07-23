@@ -16,12 +16,12 @@ class WorkflowEngine:
         )
 
 
-    def execute(
+    async def execute(
         self,
         task,
     ):
 
-        context = self.executor.execute(
+        context = await self.executor.execute(
             task
         )
 
