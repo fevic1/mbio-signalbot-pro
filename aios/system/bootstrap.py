@@ -10,7 +10,7 @@ from aios.registry import CapabilityRegistry
 from aios.runtime import TaskManager
 from aios.events import EventBus
 
-from aios.bootstrap import AgentBootstrap
+from aios.bootstrap import CapabilityBootstrap
 
 from aios.governance import (
     ApprovalManager,
@@ -44,10 +44,10 @@ class SystemBootstrap:
         event_bus = EventBus()
         execution_planner = ExecutionPlanner()
 
-        AgentBootstrap(
+        CapabilityBootstrap(
             registry=registry,
             memory=self.memory,
-        ).load_agents()
+        ).load_capabilities()
 
         decision = DecisionEngine(
             approval_manager=approval,

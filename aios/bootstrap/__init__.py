@@ -1,6 +1,5 @@
-from .loader import AgentBootstrap
-
+from .capability_loader import CapabilityBootstrap
 
 __all__ = [
-    "AgentBootstrap"
+    "CapabilityBootstrap",
 ]

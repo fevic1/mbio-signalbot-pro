@@ -1,3 +1,4 @@
+from aios.capabilities import CapabilityRegistry
 from aios.capabilities.models import Capability
 
 
@@ -12,7 +13,9 @@ class CapabilityBootstrap:
         self.registry = registry
 
 
-    def load(self):
+    def load_capabilities(
+        self,
+    ):
 
         capabilities = [
 
@@ -37,13 +40,8 @@ class CapabilityBootstrap:
             ),
 
             Capability(
-                name="coding",
-                permission="engineering",
-            ),
-
-            Capability(
-                name="testing",
-                permission="engineering",
+                name="market_analysis",
+                permission="research",
             ),
 
         ]
