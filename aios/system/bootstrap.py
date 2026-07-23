@@ -1,3 +1,4 @@
+from config.loader import config
 from aios.orchestrator import AIOSOrchestrator
 from aios.system.system import AIOSSystem
 
@@ -38,6 +39,8 @@ class SystemBootstrap:
         self.memory = memory
 
     def boot(self):
+
+        config.reload()
 
         registry = CapabilityRegistry()
         task_manager = TaskManager()
