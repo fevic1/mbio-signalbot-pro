@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "required": [
+    "summary",
+    "reasoning",
+    "confidence"
+  ],
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "reasoning": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "number"
+    }
+  }
+}

@@ -43,7 +43,25 @@ class PromptBuilder:
             memory=context.get("memory"),
         )
 
+        schema_file = (
+            self.root.parent
+            / "schemas"
+            / f"{capability}.json"
+        )
+
+        schema = (
+            schema_file.read_text()
+            if schema_file.exists()
+            else "{}"
+        )
+
+        system += (
+            "\n\nReturn JSON matching:\n"
+            + schema
+        )
+
         return {
             "system": system,
             "context": user,
+            "schema": schema,
         }
