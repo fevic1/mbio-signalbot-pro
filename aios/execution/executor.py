@@ -23,7 +23,7 @@ class ExecutionExecutor:
         self.queue = ExecutionQueue()
         self.scheduler = Scheduler()
         self.dispatcher = Dispatcher()
-        self.worker = Worker(system)
+        self.worker = Worker(system, self.blackboard, self.queue)
         self.monitor = ExecutionMonitor()
         self.checkpoint = CheckpointManager()
         self.recovery = RecoveryManager()
@@ -42,12 +42,10 @@ class ExecutionExecutor:
 
         try:
 
-            pipeline = self.planner.get_pipeline(
-                task["category"]
-            )
+            capabilities = self.planner.get_capabilities(task["category"])
 
-            for agent in pipeline:
-                self.queue.push(agent)
+            for capability in capabilities:
+                self.queue.push(capability)
 
             while not self.queue.empty():
 

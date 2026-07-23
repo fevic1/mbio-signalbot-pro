@@ -2,55 +2,57 @@ class ExecutionPlanner:
 
     def __init__(self):
 
-        self.pipelines = {
+        self.requirements = {
 
             "research": [
-                "ResearchAgent",
-                "FundamentalAgent",
-                "RiskAgent",
-                "SkepticAgent",
-                "VerificationAgent",
+                "research",
+                "reasoning",
+                "verification",
+                "risk_analysis",
             ],
 
             "trading": [
-                "ResearchAgent",
-                "FundamentalAgent",
-                "RiskAgent",
-                "VerificationAgent",
+                "market_analysis",
+                "risk_management",
+                "verification",
             ],
 
             "engineering": [
-                "ResearchAgent",
-                "VerificationAgent",
+                "architecture",
+                "coding",
+                "testing",
             ],
 
             "security": [
-                "ResearchAgent",
-                "RiskAgent",
-                "VerificationAgent",
+                "security_analysis",
+                "risk_analysis",
+                "verification",
             ],
         }
 
-    def get_pipeline(
+
+    def get_capabilities(
         self,
         category,
     ):
 
-        return self.pipelines.get(
+        return self.requirements.get(
             category,
-            ["ResearchAgent"],
+            ["research"],
         )
 
-    def register_pipeline(
+
+    def register_requirements(
         self,
         category,
-        pipeline,
+        capabilities,
     ):
 
-        self.pipelines[category] = pipeline
+        self.requirements[
+            category
+        ] = capabilities
 
-        return True
 
-    def list_pipelines(self):
+    def list_requirements(self):
 
-        return self.pipelines
+        return self.requirements
