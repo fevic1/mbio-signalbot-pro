@@ -49,6 +49,7 @@ from monitoring.position_tracker import (
     update_trailing_dca, monitor_dca_profit_targets,
     monitor_grid_bots)
 from core.strategy_manager import StrategyManager
+from core.llm_reasoning import LLMReasoningEngine
 from core.strategy_registry import get_strategy_class, list_strategies
 from core.executor_utils import run_executor_method
 from strategies.institutional_dca import InstitutionalDcaStrategy, PositionState
@@ -459,6 +460,7 @@ async def run_trade(asset_name: str, data: dict, signal: str, conf: int,
                 "order_id": order_id,
                 "opened_at": datetime.now(timezone.utc),
                 "strategy": "AI ensemble",
+                "llm_reasoning": {},
                 "rsi": data["1h"]["rsi"],
                 "atr": data["1h"]["atr"],
                 "signal": signal,
