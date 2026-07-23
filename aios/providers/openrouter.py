@@ -1,14 +1,14 @@
 import os
-import requests
 
 from .base import BaseProvider
-from .types import ProviderRequest, ProviderResponse
 from .exceptions import (
     AuthenticationError,
     ProviderError,
     RateLimitError,
     TimeoutError,
 )
+from .transport import http
+from .types import ProviderRequest, ProviderResponse
 
 
 class OpenRouterProvider(BaseProvider):
@@ -16,17 +16,17 @@ class OpenRouterProvider(BaseProvider):
     name = "openrouter"
 
     def __init__(self):
-
         self.key = os.getenv("OPENROUTER_API_KEY")
-
         self.model = os.getenv(
             "OPENROUTER_MODEL_NAME",
             "openai/gpt-4.1-mini",
         )
-
         self.url = "https://openrouter.ai/api/v1/chat/completions"
 
-    def chat(self, request: ProviderRequest) -> ProviderResponse:
+    async def chat(
+        self,
+        request: ProviderRequest,
+    ) -> ProviderResponse:
 
         if not self.key:
             raise AuthenticationError(
@@ -34,8 +34,7 @@ class OpenRouterProvider(BaseProvider):
             )
 
         try:
-
-            r = requests.post(
+            r = await http.post(
                 self.url,
                 headers={
                     "Authorization": f"Bearer {self.key}",
@@ -55,13 +54,10 @@ class OpenRouterProvider(BaseProvider):
                     "temperature": request.temperature,
                     "max_tokens": request.max_tokens,
                 },
-                timeout=60,
             )
-
-        except requests.Timeout as e:
-            raise TimeoutError(str(e))
-
-        except requests.RequestException as e:
+        except Exception as e:
+            if e.__class__.__name__.lower().startswith("timeout"):
+                raise TimeoutError(str(e))
             raise ProviderError(str(e))
 
         if r.status_code == 401:
@@ -82,11 +78,11 @@ class OpenRouterProvider(BaseProvider):
             raw=data,
         )
 
-    def health(self) -> bool:
+    def health(self):
         return self.key is not None
 
-    def available(self) -> bool:
+    def available(self):
         return self.key is not None
 
-    def models(self) -> list[str]:
+    def models(self):
         return [self.model]
