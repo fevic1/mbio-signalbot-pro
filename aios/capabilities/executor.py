@@ -1,8 +1,11 @@
+from time import perf_counter
+
 from aios.providers.router import chat
 from aios.providers.types import ProviderRequest
 
 
 class CapabilityExecutor:
+
 
     def execute(
         self,
@@ -28,4 +31,22 @@ class CapabilityExecutor:
             ]
         )
 
-        return chat(request)
+
+        start = perf_counter()
+
+        response = chat(
+            request
+        )
+
+        latency = perf_counter() - start
+
+
+        return {
+            "capability": capability,
+            "provider": response.provider,
+            "model": response.model,
+            "content": response.content,
+            "latency": latency,
+            "cost": 0,
+            "messages": request.messages,
+        }

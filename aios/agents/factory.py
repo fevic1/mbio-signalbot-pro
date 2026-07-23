@@ -19,15 +19,11 @@ class CapabilityWorker:
         blackboard=None,
     ):
 
-        result = self.executor.execute(
+        output = self.executor.execute(
             self.capability.name
         )
 
-        output = {
-            "capability": self.capability.name,
-            "permission": self.capability.permission,
-            "result": result,
-        }
+        output["permission"] = self.capability.permission
 
 
         if blackboard:
