@@ -35,7 +35,7 @@ class CapabilityExecutor:
         ):
 
             try:
-                return self._execute_once(
+                return await self._execute_once(
                     request,
                     attempt,
                 )
@@ -47,7 +47,7 @@ class CapabilityExecutor:
             f"{request.capability}: {last_error}"
         ) from last_error
 
-    def _execute_once(
+    async def _execute_once(
         self,
         request: CapabilityRequest,
         attempt: int,
