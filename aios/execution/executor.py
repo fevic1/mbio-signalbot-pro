@@ -49,6 +49,10 @@ class ExecutionExecutor:
 
         context.start()
 
+        self.worker.bind(
+            context
+        )
+
         try:
 
             capabilities = self.planner.get_capabilities(
