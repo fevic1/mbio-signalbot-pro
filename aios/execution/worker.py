@@ -1,12 +1,8 @@
-from datetime import datetime
-from time import perf_counter
-
+from aios.capabilities.executor import CapabilityExecutor
 
 
 class Worker:
-    """
-    Executes one capability task.
-    """
+
 
     def __init__(
         self,
@@ -14,53 +10,53 @@ class Worker:
         blackboard,
         queue,
     ):
+
         self.system = system
         self.blackboard = blackboard
         self.queue = queue
+        self.executor = CapabilityExecutor()
+
 
 
     def execute(
         self,
         task,
+        context,
     ):
 
-        started = datetime.utcnow()
-
-        try:
-
-            result = task.worker.run(
-                context=None,
-                blackboard=self.blackboard,
-            )
-
-            latency = perf_counter() - start
-
-            result["latency"] = latency
+        capability = task.capability
 
 
-            self.blackboard.store(
-                task.id,
-                result,
-            )
+        result = self.executor.execute(
+            capability
+        )
 
 
-            task.result = result
-            task.started = started.isoformat()
-            task.completed = datetime.utcnow().isoformat()
-            task.status = "completed"
+        output = {
+
+            "capability": capability,
+
+            "provider":
+                result.provider,
+
+            "model":
+                result.model,
+
+            "content":
+                result.content,
+
+        }
 
 
-            self.queue.finish(task)
+        self.blackboard.store(
+            task.id,
+            output,
+        )
 
 
-            return result
+        self.queue.finish(
+            task
+        )
 
 
-        except Exception as exc:
-
-            task.status = "failed"
-            task.error = str(exc)
-
-            self.queue.fail(task)
-
-            raise
+        return output

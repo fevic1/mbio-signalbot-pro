@@ -1,31 +1,17 @@
-from .models import Capability
-
-
 class CapabilityRegistry:
 
-
     def __init__(self):
-
         self._capabilities = {}
 
 
     def register(
         self,
-        name,
-        permission,
+        capability,
     ):
-
-        capability = Capability(
-            name=name,
-            permission=permission,
-        )
 
         self._capabilities[
             capability.name
         ] = capability
-
-
-        return capability
 
 
     def get(
@@ -38,8 +24,18 @@ class CapabilityRegistry:
         )
 
 
-    def list_capabilities(self):
+    def list(
+        self,
+    ):
 
         return list(
             self._capabilities.values()
         )
+
+
+    def has(
+        self,
+        name,
+    ):
+
+        return name in self._capabilities

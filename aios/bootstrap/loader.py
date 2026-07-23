@@ -1,59 +1,59 @@
-class AgentBootstrap:
+from aios.capabilities.models import Capability
+
+
+class CapabilityBootstrap:
 
 
     def __init__(
         self,
         registry,
-        memory=None
     ):
 
         self.registry = registry
-        self.memory = memory
 
 
-    def load_capabilities(self):
+    def load(self):
 
         capabilities = [
 
-            {
-                "name": "can_search",
-                "permission": "research",
-            },
+            Capability(
+                name="research",
+                permission="research",
+            ),
 
-            {
-                "name": "can_reason",
-                "permission": "research",
-            },
+            Capability(
+                name="reasoning",
+                permission="research",
+            ),
 
-            {
-                "name": "can_plan",
-                "permission": "planning",
-            },
+            Capability(
+                name="verification",
+                permission="verification",
+            ),
 
-            {
-                "name": "can_review",
-                "permission": "review",
-            },
+            Capability(
+                name="risk_analysis",
+                permission="research",
+            ),
 
-            {
-                "name": "can_verify",
-                "permission": "verification",
-            },
+            Capability(
+                name="coding",
+                permission="engineering",
+            ),
 
-            {
-                "name": "can_execute",
-                "permission": "execution",
-            },
+            Capability(
+                name="testing",
+                permission="engineering",
+            ),
 
         ]
 
 
-        for item in capabilities:
+        for capability in capabilities:
 
             self.registry.register(
-                item["name"],
-                item["permission"],
+                capability
             )
 
 
-        return self.registry.list_capabilities()
+        return self.registry.list()
