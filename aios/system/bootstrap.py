@@ -6,6 +6,7 @@ from aios.project import ProjectManager
 from aios.council import CouncilManager
 
 from aios.execution import ExecutionPlanner
+from aios.learning import PlannerOptimizer
 from aios.skills.loader import SkillLoader
 from aios.capabilities.health import CapabilityHealthManager
 
@@ -47,7 +48,10 @@ class SystemBootstrap:
         approval = ApprovalManager()
         audit = AuditLogger()
         event_bus = EventBus()
-        execution_planner = ExecutionPlanner()
+        planner_optimizer = PlannerOptimizer()
+        execution_planner = ExecutionPlanner(
+            optimizer=planner_optimizer,
+        )
         capability_health = CapabilityHealthManager()
 
         CapabilityBootstrap(

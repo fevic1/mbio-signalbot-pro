@@ -4,9 +4,14 @@ from aios.project.graph import TaskGraphManager
 class ExecutionPlanner:
 
 
-    def __init__(self):
+    def __init__(
+        self,
+        optimizer=None,
+    ):
 
         self.graph_manager = TaskGraphManager()
+
+        self.optimizer = optimizer
 
 
         self.requirements = {
