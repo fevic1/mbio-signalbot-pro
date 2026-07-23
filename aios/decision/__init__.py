@@ -1,3 +1,4 @@
+from .proposal import Proposal
 from .deliberation import DeliberationEngine
 from .decision_engine import DecisionEngine
 from .builder import ProposalBuilder
@@ -14,25 +15,15 @@ from .models import (
 
 
 __all__ = [
-
+    "Proposal",
     "ProposalBuilder",
-
     "DeliberationEngine",
-
     "DecisionEvaluator",
-
     "DecisionEngine",
-
     "DecisionPolicy",
-
     "DecisionResult",
-
     "EvidenceRecord",
-
     "RiskFlag",
-
     "BiasReport",
-
     "PolicyResult",
-
 ]

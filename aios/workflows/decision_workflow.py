@@ -7,6 +7,8 @@ from aios.decision import (
     PolicyResult,
 )
 
+from aios.goals.models import Goal
+
 
 class DecisionWorkflow:
 
@@ -91,10 +93,14 @@ class DecisionWorkflow:
         )
 
 
-        project = self.system.project_manager.create(
-            title=task["name"],
-            description=task.get("description", "")
+        goal = Goal(
+            objective=task["name"],
+            metadata={
+                "description": task.get("description", "")
+            },
         )
+
+        project = self.system.project_manager.create(goal)
 
         context.metadata["project"] = project
 

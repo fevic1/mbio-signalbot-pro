@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 import uuid
 
 
@@ -19,7 +19,7 @@ class Event:
 
         self.payload = payload or {}
 
-        self.time = datetime.utcnow().isoformat()
+        self.time = datetime.now(UTC).isoformat()
 
 
     def to_dict(self):

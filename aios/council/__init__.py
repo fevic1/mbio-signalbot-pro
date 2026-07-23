@@ -1,11 +1,16 @@
-from .models import CouncilDecision, CouncilIssue, AgentOpinion
+from .models import (
+    CouncilDecision,
+    CouncilIssue,
+    AgentOpinion,
+)
+
 from .council import Council
+from .manager import CouncilManager
 
 __all__ = [
     "Council",
-    "CouncilDecision",
     "CouncilManager",
+    "CouncilDecision",
     "CouncilIssue",
     "AgentOpinion",
 ]
-
