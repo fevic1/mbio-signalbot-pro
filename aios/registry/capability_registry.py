@@ -1,6 +1,7 @@
 class CapabilityRegistry:
 
     def __init__(self):
+
         self._capabilities = {}
 
 
@@ -12,8 +13,6 @@ class CapabilityRegistry:
         capability.validate()
 
         self._capabilities[
-            capability.name
-        ] = capability
             capability.name
         ] = capability
 
