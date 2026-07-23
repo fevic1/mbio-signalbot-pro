@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import yaml
@@ -15,49 +16,55 @@ class LLMCouncilSkill(Skill):
     def __init__(self):
         self.executor = CapabilityExecutor()
 
-        manifest = (
-            Path(__file__).parent / "manifest.yaml"
-        )
-
-        self.config = yaml.safe_load(
-            manifest.read_text()
-        )
+        manifest = Path(__file__).parent / "manifest.yaml"
+        self.config = yaml.safe_load(manifest.read_text())
 
     def execute(self, context):
-        result = self.run(context)
+        result = asyncio.run(self.run(context))
         context.set_metadata("council", result)
         return result
 
-    def call(self, capability, payload):
-        return self.executor.execute(
+    async def invoke(self, capability, payload):
+        return await asyncio.to_thread(
+            self.executor.execute,
             CapabilityRequest(
                 capability=capability,
                 context=payload,
-            )
+            ),
         )
 
-    def run(self, context):
+    async def run(self, context):
 
-        opinions = {}
+        advisors = self.config["advisors"]
 
-        for advisor in self.config["advisors"]:
-            opinions[advisor] = self.call(
-                advisor,
-                context.metadata,
-            )
+        opinion_results = await asyncio.gather(
+            *[
+                self.invoke(
+                    advisor,
+                    context.metadata,
+                )
+                for advisor in advisors
+            ]
+        )
 
-        reviews = {}
+        opinions = dict(zip(advisors, opinion_results))
 
-        for reviewer in self.config["advisors"]:
-            reviews[reviewer] = self.call(
-                reviewer,
-                {
-                    "stage": "peer_review",
-                    "opinions": opinions,
-                },
-            )
+        review_results = await asyncio.gather(
+            *[
+                self.invoke(
+                    reviewer,
+                    {
+                        "stage": "peer_review",
+                        "opinions": opinions,
+                    },
+                )
+                for reviewer in advisors
+            ]
+        )
 
-        decision = self.call(
+        reviews = dict(zip(advisors, review_results))
+
+        decision = await self.invoke(
             self.config["chairman"],
             {
                 "stage": "synthesis",
