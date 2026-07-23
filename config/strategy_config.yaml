@@ -43,11 +43,11 @@ correlation_groups:
   max_positions: 2
   name: High Correlation
 early_exit:
-  consecutive_checks: 2
+  consecutive_checks: 3
   cooldown_minutes: 30
   enabled: true
   pattern_threshold: LIKELY_LOSER
-  pnl_threshold: -1.5
+  pnl_threshold: -2.0
 hyperliquid:
   assets:
   - BTC

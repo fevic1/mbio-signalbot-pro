@@ -283,6 +283,12 @@ async def cmd_positions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         msg += f"├─ 🏁 <b>TP1:</b> <code>${tp1:,.4f}</code>\n"
         msg += f"├─ 🏁 <b>TP2:</b> <code>${tp2:,.4f}</code>\n"
         msg += f"└─ 🏁 <b>TP3:</b> <code>${tp3:,.4f}</code>\n"
+        reasoning_data = pos.get("llm_reasoning", {})
+        if reasoning_data:
+            msg += f"🧠 <b>Reasoning:</b> {reasoning_data.get('reasoning', 'N/A')}\n"
+            msg += f"🤖 <b>Provider:</b> {reasoning_data.get('provider', 'N/A')}\n"
+            msg += f"🎯 <b>Confidence:</b> {reasoning_data.get('confidence', 0)}%\n"
+
         msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
 
     await update.message.reply_text(
