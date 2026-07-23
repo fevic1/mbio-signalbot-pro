@@ -1,8 +1,7 @@
 from datetime import datetime
 from time import perf_counter
 
-from aios.providers.router import chat
-from aios.providers.types import ProviderRequest
+from aios.capabilities.executor import CapabilityExecutor
 
 
 class Worker:
@@ -19,6 +18,7 @@ class Worker:
         self.system = system
         self.blackboard = blackboard
         self.queue = queue
+        self.capability_executor = CapabilityExecutor()
 
 
     def execute(
@@ -30,28 +30,10 @@ class Worker:
 
         try:
 
-            request = ProviderRequest(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are executing capability: "
-                            f"{task.capability}"
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Execute capability {task.capability} "
-                            "and provide a structured result."
-                        ),
-                    },
-                ]
+            response = self.capability_executor.execute(
+                task.capability
             )
 
-
-            start = perf_counter()
-            response = chat(request)
             latency = perf_counter() - start
 
 
