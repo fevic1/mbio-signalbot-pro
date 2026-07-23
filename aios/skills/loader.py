@@ -1,6 +1,6 @@
 from importlib import import_module
-from pathlib import Path
 
+from .core.manager import SkillManager
 from .registry import SkillRegistry
 
 
@@ -8,23 +8,18 @@ class SkillLoader:
 
     def __init__(self):
         self.registry = SkillRegistry()
+        self.manager = SkillManager("aios/skills")
 
     def load(self):
-        base = Path(__file__).parent
 
-        for manifest in base.glob("*/manifest.yaml"):
-            package = manifest.parent.name
+        for manifest in self.manager.enabled():
 
             module = import_module(
-                f"aios.skills.{package}.workflow"
+                f'aios.skills.{manifest["id"].replace("-", "_")}.workflow'
             )
 
-            for obj in module.__dict__.values():
-                if (
-                    isinstance(obj, type)
-                    and hasattr(obj, "id")
-                    and hasattr(obj, "execute")
-                ):
-                    self.registry.register(obj())
+            skill = getattr(module, "LLMCouncilSkill")()
+
+            self.registry.register(skill)
 
         return self.registry
