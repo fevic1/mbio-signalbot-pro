@@ -38,7 +38,7 @@ class ExecutionExecutor:
         self.checkpoint = CheckpointManager()
         self.recovery = RecoveryManager()
 
-    def execute(
+    async def execute(
         self,
         task,
     ):
@@ -75,7 +75,7 @@ class ExecutionExecutor:
 
             while True:
 
-                if not self.dispatcher.dispatch(
+                if not await self.dispatcher.dispatch(
                     self.worker
                 ):
                     break
