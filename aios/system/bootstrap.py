@@ -48,7 +48,6 @@ class SystemBootstrap:
 
         CapabilityBootstrap(
             registry=registry,
-            memory=self.memory,
         ).load_capabilities()
 
         decision = DecisionEngine(
