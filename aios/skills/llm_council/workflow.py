@@ -6,6 +6,7 @@ import yaml
 from aios.capabilities.executor import CapabilityExecutor
 from aios.capabilities.request import CapabilityRequest
 from aios.skills.base import Skill
+from aios.events import Event
 
 
 class LLMCouncilSkill(Skill):
@@ -40,6 +41,17 @@ class LLMCouncilSkill(Skill):
 
     async def execute_stage(self, stage, state):
 
+        if self.system and self.system.event_bus:
+            self.system.event_bus.publish(
+                Event(
+                    "council_stage_started",
+                    source="llm-council",
+                    payload={
+                        "stage": stage["stage"],
+                    },
+                )
+            )
+
         advisors = self.config["advisors"]
 
         if stage["parallel"]:
@@ -54,14 +66,42 @@ class LLMCouncilSkill(Skill):
                 ]
             )
 
-            return dict(zip(advisors, results))
+            output = dict(zip(advisors, results))
+
+            if self.system and self.system.event_bus:
+                self.system.event_bus.publish(
+                    Event(
+                        "council_stage_completed",
+                        source="llm-council",
+                        payload={
+                            "stage": stage["stage"],
+                            "advisors": advisors,
+                        },
+                    )
+                )
+
+            return output
 
         actor = stage["actor"]
 
-        return await self.invoke(
+        result = await self.invoke(
             actor,
             state,
         )
+
+        if self.system and self.system.event_bus:
+            self.system.event_bus.publish(
+                Event(
+                    "council_stage_completed",
+                    source="llm-council",
+                    payload={
+                        "stage": stage["stage"],
+                        "actor": actor,
+                    },
+                )
+            )
+
+        return result
 
     async def run(self, context):
 
