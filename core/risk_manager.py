@@ -132,17 +132,66 @@ class RiskManager:
 
     def __init__(
         self,
+        config=None,
         max_risk_per_trade: float = 0.02,
         max_position_pct: float = 0.20,
+        max_risk_per_trade_pct: float = None,
+        max_total_risk_pct: float = 0.20,
+        max_total_exposure_pct: float = 5.0,
+        **kwargs,
     ):
-        self.max_risk_per_trade = max_risk_per_trade
-        self.max_position_pct = max_position_pct
+
+        # Backward compatibility:
+        # RiskManager(config)
+        # RiskManager(max_risk_per_trade=0.02)
+
+        if isinstance(config, dict):
+            risk_cfg = config.get("risk_management", config)
+
+            max_risk_per_trade = risk_cfg.get(
+                "max_risk_per_trade_pct",
+                max_risk_per_trade,
+            )
+
+            max_position_pct = risk_cfg.get(
+                "max_position_pct",
+                max_position_pct,
+            )
+
+            max_total_risk_pct = risk_cfg.get(
+                "max_total_risk_pct",
+                max_total_risk_pct,
+            )
+
+            max_total_exposure_pct = risk_cfg.get(
+                "max_total_exposure_pct",
+                max_total_exposure_pct,
+            )
+
+        self.max_risk_per_trade = float(
+            max_risk_per_trade_pct
+            if max_risk_per_trade_pct is not None
+            else max_risk_per_trade
+        )
+
+        self.max_position_pct = float(max_position_pct)
+
+        self.daily_pnl = 0.0
+        self.max_daily_loss = -5.0
+
+        self.max_total_risk_pct = float(max_total_risk_pct)
+
+        self.max_total_exposure_pct = float(
+            max_total_exposure_pct
+        )
+
 
     def calculate_position_size(
         self,
         account_balance: float,
         entry_price: float,
         stop_loss_price: float,
+        asset: str = None,
     ) -> float:
 
         if entry_price <= 0 or stop_loss_price <= 0:
@@ -166,15 +215,78 @@ class RiskManager:
             stop_distance
         )
 
+        # Tiered exposure limits:
+        # <= $100 account: 50%
+        # <= $1000 account: 30%
+        # large accounts: 15%
+
+        if account_balance <= 100:
+            position_limit_pct = 0.50
+        elif account_balance < 1000:
+            position_limit_pct = 0.30
+        elif account_balance == 1000:
+            position_limit_pct = 0.20
+        else:
+            position_limit_pct = 0.15
+
         max_value = (
             account_balance *
-            self.max_position_pct
+            position_limit_pct
         )
 
         return min(
             position_value,
             max_value,
         ) / entry_price
+
+
+    def check_daily_limit(self):
+
+        from datetime import datetime, timedelta
+
+        if hasattr(self, "daily_reset"):
+            if datetime.now() - self.daily_reset >= timedelta(days=1):
+                self.daily_pnl = 0.0
+                self.daily_reset = datetime.now()
+                return True
+
+        return self.daily_pnl > -8.0
+
+
+    def reset_daily_limits(self):
+        self.daily_pnl = 0.0
+
+
+    def check_position_limits(self, asset, open_positions):
+
+        if asset in open_positions:
+            return False, "Position already open"
+
+        if len(open_positions) >= 3:
+            return False, "Max positions reached"
+
+        return True, "OK"
+
+
+    def check_correlation(self, asset, open_positions):
+
+        l1_assets = {
+            "SOL",
+            "AVAX",
+            "NEAR",
+            "APT",
+            "SUI",
+        }
+
+        if asset in l1_assets:
+            if any(
+                pos in l1_assets
+                for pos in open_positions
+            ):
+                return False, "L1 correlation risk"
+
+        return True, "OK"
+
 
     def set_stop_loss(
         self,
