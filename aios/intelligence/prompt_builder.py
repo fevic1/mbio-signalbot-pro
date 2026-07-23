@@ -6,9 +6,7 @@ class PromptBuilder:
     def __init__(self):
         root = Path(__file__).parent / "templates"
 
-        self.system_template = (
-            root / "default.system.txt"
-        ).read_text()
+        self.root = root
 
         self.user_template = (
             root / "default.user.txt"
@@ -20,8 +18,21 @@ class PromptBuilder:
         context,
     ):
 
-        system = self.system_template.format(
-            capability=capability,
+        system_file = (
+            self.root
+            / "capabilities"
+            / f"{capability}.system.txt"
+        )
+
+        if system_file.exists():
+            system_template = system_file.read_text()
+        else:
+            system_template = (
+                self.root
+                / "default.system.txt"
+            ).read_text()
+
+        system = system_template.format(
             permission=context["permission"],
         )
 
