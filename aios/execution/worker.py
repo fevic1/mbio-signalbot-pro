@@ -1,7 +1,6 @@
 from datetime import datetime
 from time import perf_counter
 
-from aios.capabilities.executor import CapabilityExecutor
 
 
 class Worker:
@@ -18,7 +17,6 @@ class Worker:
         self.system = system
         self.blackboard = blackboard
         self.queue = queue
-        self.capability_executor = CapabilityExecutor()
 
 
     def execute(
@@ -30,20 +28,14 @@ class Worker:
 
         try:
 
-            response = self.capability_executor.execute(
-                task.capability
+            result = task.worker.run(
+                context=None,
+                blackboard=self.blackboard,
             )
 
             latency = perf_counter() - start
 
-
-            result = {
-                "capability": task.capability,
-                "provider": response.provider,
-                "model": response.model,
-                "content": response.content,
-                "latency": latency,
-            }
+            result["latency"] = latency
 
 
             self.blackboard.store(

@@ -5,10 +5,11 @@ from uuid import uuid4
 @dataclass
 class CapabilityTask:
 
-    capability: str
+    worker: object
     id: str = None
     result: object = None
     status: str = "pending"
+    error: str = None
 
     def __post_init__(self):
 

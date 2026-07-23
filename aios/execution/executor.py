@@ -8,6 +8,7 @@ from .monitor import ExecutionMonitor
 from .checkpoint import CheckpointManager
 from .recovery import RecoveryManager
 from .task import CapabilityTask
+from aios.agents.factory import AgentFactory
 
 
 class ExecutionExecutor:
@@ -25,6 +26,7 @@ class ExecutionExecutor:
         self.scheduler = Scheduler()
         self.dispatcher = Dispatcher()
         self.worker = Worker(system, self.blackboard, self.queue)
+        self.agent_factory = AgentFactory()
         self.monitor = ExecutionMonitor()
         self.checkpoint = CheckpointManager()
         self.recovery = RecoveryManager()
@@ -45,8 +47,14 @@ class ExecutionExecutor:
 
             capabilities = self.planner.get_capabilities(task["category"])
 
-            for capability in capabilities:
-                self.queue.push(CapabilityTask(capability))
+            workers = self.agent_factory.create(
+                capabilities
+            )
+
+            for worker in workers:
+                self.queue.push(
+                    CapabilityTask(worker)
+                )
 
             while not self.queue.empty():
 
