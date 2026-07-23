@@ -15,19 +15,19 @@ class Dispatcher:
     def next(self) -> Optional[object]:
         return self.queue.pop()
 
-    def dispatch(self, worker) -> bool:
+    async def dispatch(self, worker) -> bool:
         task = self.next()
 
         if task is None:
             return False
 
-        worker.execute(task)
+        await worker.execute(task)
         return True
 
-    def drain(self, worker) -> int:
+    async def drain(self, worker) -> int:
         dispatched = 0
 
-        while self.dispatch(worker):
+        while await self.dispatch(worker):
             dispatched += 1
 
         return dispatched
