@@ -25,7 +25,7 @@ class AIOSKernel:
 
         if self.bootstrap:
 
-            self.bootstrap.load_agents()
+            self.bootstrap.load_capabilities()
 
 
         self.status = "running"
