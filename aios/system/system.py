@@ -31,7 +31,18 @@ class AIOSSystem:
 
         self.execution_planner = execution_planner
 
+
+        # Capability intelligence layer
+
+        self.capability_health = None
+
+
+        # Decision memory
+
         self.decision_history = []
+
+
+        # Runtime components
 
         self.workflow_engine = None
 
@@ -41,26 +52,62 @@ class AIOSSystem:
 
         self.project_manager = None
 
+
     def status(self):
+
+        health_status = {}
+
+        if self.capability_health:
+
+            health_status = {
+
+                name: {
+
+                    "executions":
+                        health.executions,
+
+                    "success_rate":
+                        health.success_rate,
+
+                    "average_latency":
+                        health.average_latency,
+
+                    "failures":
+                        health.failures,
+                }
+
+                for name, health
+                in self.capability_health.snapshot().items()
+
+            }
+
 
         return {
 
-            "agents":
+            "capabilities":
                 len(
                     self.registry.list()
                 ),
+
 
             "tasks":
                 len(
                     self.task_manager.list_tasks()
                 ),
 
+
             "memory":
                 self.memory_manager is not None,
+
 
             "orchestrator":
                 self.orchestrator is not None,
 
+
             "event_bus":
                 self.event_bus is not None,
+
+
+            "capability_health":
+                health_status,
         }
