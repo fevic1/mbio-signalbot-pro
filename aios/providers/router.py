@@ -4,6 +4,7 @@ from time import perf_counter
 from .circuit import circuit
 from .metrics import metrics
 from .pool import provider_pool
+from .retry import retry
 from .types import ProviderRequest
 
 
@@ -24,9 +25,13 @@ async def chat(request: ProviderRequest):
         start = perf_counter()
 
         try:
-            response = await asyncio.wait_for(
-                provider.chat(request),
-                timeout=60,
+            response = await retry(
+                lambda: asyncio.wait_for(
+                    provider.chat(request),
+                    timeout=60,
+                ),
+                retries=3,
+                delay=1.0,
             )
 
             latency = perf_counter() - start
