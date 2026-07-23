@@ -96,3 +96,89 @@ class ExecutionPlanner:
         self.requirements[
             category
         ] = tasks
+
+    def get_pipeline(
+        self,
+        category,
+    ):
+        tasks = self.requirements.get(category)
+
+        if tasks is None:
+            return None
+
+        return [
+            task["capability"]
+            for task in tasks
+        ]
+
+
+    def register_pipeline(
+        self,
+        category,
+        pipeline,
+    ):
+
+        tasks = []
+
+        previous = None
+
+        for capability in pipeline:
+
+            tasks.append(
+                {
+                    "name": capability,
+                    "capability": capability,
+                    "depends_on": (
+                        []
+                        if previous is None
+                        else [previous]
+                    ),
+                }
+            )
+
+            previous = capability
+
+        self.requirements[
+            category
+        ] = tasks
+
+
+    def list_pipelines(
+        self,
+    ):
+        return sorted(
+            self.requirements.keys()
+        )
+
+
+    def get_capabilities(
+        self,
+        category,
+    ):
+        tasks = self.requirements.get(
+            category,
+            self.requirements["research"],
+        )
+
+        return [
+            task["capability"]
+            for task in tasks
+        ]
+
+    def resolve(
+        self,
+        system,
+        category,
+    ):
+        skill = system.skill_registry.get(category)
+
+        if skill is not None:
+            return {
+                "type": "skill",
+                "target": skill,
+            }
+
+        return {
+            "type": "capability",
+            "target": self.get_capabilities(category),
+        }
