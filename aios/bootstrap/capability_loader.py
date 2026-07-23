@@ -1,4 +1,4 @@
-from aios.capabilities import CapabilityRegistry
+from aios.registry import CapabilityRegistry
 from aios.capabilities.models import Capability
 
 
