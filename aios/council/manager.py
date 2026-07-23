@@ -4,11 +4,17 @@ from .auditor import Auditor
 from .policy import PolicyEngine
 from .consensus import Consensus
 from .memory import CouncilMemory
+from aios.events import Event
 
 
 class CouncilManager:
 
-    def __init__(self):
+    def __init__(
+        self,
+        event_bus=None,
+    ):
+
+        self.event_bus = event_bus
 
         self.validator = PlanValidator()
         self.critic = Critic()
@@ -18,6 +24,17 @@ class CouncilManager:
         self.memory = CouncilMemory()
 
     def review(self, plan):
+
+        if self.event_bus:
+            self.event_bus.publish(
+                Event(
+                    "council_review_started",
+                    source="council",
+                    payload={
+                        "plan": plan,
+                    },
+                )
+            )
 
         validation_issues = self.validator.validate(plan)
 
@@ -39,6 +56,15 @@ class CouncilManager:
         report["consensus"] = self.consensus.vote(report)
 
         self.memory.store(report)
+
+        if self.event_bus:
+            self.event_bus.publish(
+                Event(
+                    "council_review_completed",
+                    source="council",
+                    payload=report,
+                )
+            )
 
         return report
 
