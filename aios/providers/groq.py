@@ -1,10 +1,9 @@
 import os
 
-import requests
-
 from .base import BaseProvider
-from .types import ProviderRequest, ProviderResponse
 from .exceptions import AuthenticationError
+from .transport import http
+from .types import ProviderRequest, ProviderResponse
 
 
 class GroqProvider(BaseProvider):
@@ -12,7 +11,6 @@ class GroqProvider(BaseProvider):
     name = "groq"
 
     def __init__(self):
-
         self.key = (
             os.getenv("GROQ_API_KEY")
             or os.getenv("GROQ_API_KEY_1")
@@ -25,7 +23,7 @@ class GroqProvider(BaseProvider):
             "llama-3.1-8b-instant",
         )
 
-    def chat(
+    async def chat(
         self,
         request: ProviderRequest,
     ) -> ProviderResponse:
@@ -35,7 +33,7 @@ class GroqProvider(BaseProvider):
                 "GROQ_API_KEY not configured"
             )
 
-        response = requests.post(
+        response = await http.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {self.key}",
@@ -47,7 +45,6 @@ class GroqProvider(BaseProvider):
                 "temperature": request.temperature,
                 "max_tokens": request.max_tokens,
             },
-            timeout=60,
         )
 
         response.raise_for_status()
@@ -61,11 +58,11 @@ class GroqProvider(BaseProvider):
             raw=data,
         )
 
-    def health(self) -> bool:
+    def health(self):
         return self.key is not None
 
-    def available(self) -> bool:
+    def available(self):
         return self.key is not None
 
-    def models(self) -> list[str]:
+    def models(self):
         return [self.model]
