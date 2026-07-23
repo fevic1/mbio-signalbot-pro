@@ -19,14 +19,13 @@ class LLMCouncilSkill(Skill):
             (Path(__file__).parent / "manifest.yaml").read_text()
         )
 
-    def execute(self, context):
-        result = asyncio.run(self.run(context))
+    async def execute(self, context):
+        result = await self.run(context)
         context.set_metadata("council", result)
         return result
 
     async def invoke(self, capability, payload):
-        return await asyncio.to_thread(
-            self.executor.execute,
+        return await self.executor.execute(
             CapabilityRequest(
                 capability=capability,
                 context=payload,
