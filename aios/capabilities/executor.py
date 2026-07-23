@@ -15,7 +15,7 @@ class CapabilityExecutionError(Exception):
 class CapabilityExecutor:
 
     def __init__(self):
-        self.adapter = LLMAdapter(provider_pool)
+        self.adapter = LLMAdapter(provider_pool, None)
 
     def execute(
         self,

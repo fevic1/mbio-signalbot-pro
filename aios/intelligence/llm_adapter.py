@@ -4,8 +4,13 @@ from .prompt_builder import PromptBuilder
 
 class LLMAdapter:
 
-    def __init__(self, router):
+    def __init__(
+        self,
+        router,
+        system=None,
+    ):
         self.router = router
+        self.system = system
         self.assembler = ContextAssembler()
         self.prompt_builder = PromptBuilder()
 
@@ -15,6 +20,7 @@ class LLMAdapter:
         request,
     ):
         context = self.assembler.assemble(
+            self.system,
             capability,
             request,
         )
