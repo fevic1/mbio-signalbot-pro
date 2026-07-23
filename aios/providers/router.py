@@ -1,42 +1,24 @@
-from time import perf_counter
-
-from .circuit import circuit
-from .metrics import metrics
 from .pool import provider_pool
+from .types import ProviderRequest
 
 
-def chat(request):
+async def chat(request: ProviderRequest):
 
     last_error = None
 
     for provider in provider_pool.ranked():
 
-        name = provider.name
-
-        if not circuit.allow(name):
-            continue
-
         if not provider.available():
             continue
 
-        start = perf_counter()
-
         try:
-            response = provider.chat(request)
+            return await provider.chat(request)
 
-            latency = perf_counter() - start
+        except Exception as e:
+            last_error = e
+            continue
 
-            metrics.record_success(name, latency)
-            circuit.success(name)
+    if last_error:
+        raise last_error
 
-            return response
-
-        except Exception as exc:
-
-            metrics.record_failure(name)
-            metrics.record_retry(name)
-            circuit.failure(name)
-
-            last_error = exc
-
-    raise last_error
+    raise RuntimeError("No provider available")
