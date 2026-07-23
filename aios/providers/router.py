@@ -1,3 +1,4 @@
+import asyncio
 from time import perf_counter
 
 from .circuit import circuit
@@ -23,7 +24,10 @@ async def chat(request: ProviderRequest):
         start = perf_counter()
 
         try:
-            response = await provider.chat(request)
+            response = await asyncio.wait_for(
+                provider.chat(request),
+                timeout=60,
+            )
 
             latency = perf_counter() - start
 
