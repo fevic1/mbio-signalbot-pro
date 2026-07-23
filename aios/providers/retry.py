@@ -1,20 +1,24 @@
-from time import sleep
+import asyncio
 
 
-def retry(operation, retries=3, delay=1.0):
-    """
-    Retry a callable before giving up.
-    """
+async def retry(
+    operation,
+    retries=3,
+    delay=1.0,
+):
 
     last_error = None
 
     for attempt in range(retries):
+
         try:
-            return operation()
+            return await operation()
+
         except Exception as exc:
+
             last_error = exc
 
             if attempt < retries - 1:
-                sleep(delay)
+                await asyncio.sleep(delay)
 
     raise last_error
