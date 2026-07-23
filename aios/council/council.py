@@ -39,5 +39,9 @@ class Council:
             issues=issues,
             actions=actions,
             opinions=opinions,
+            voting={
+                "quorum": vote.quorum,
+                "votes": vote.votes,
+            },
         )
 
