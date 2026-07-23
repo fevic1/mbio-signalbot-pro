@@ -47,7 +47,7 @@ class AIOSSystem:
 
             "agents":
                 len(
-                    self.registry.list_agents()
+                    self.registry.list()
                 ),
 
             "tasks":

@@ -14,7 +14,7 @@ class AIOSOrchestrator:
             "status": "running",
             "time": datetime.utcnow().isoformat(),
             "agents": len(
-                self.system.registry.list_agents()
+                self.system.registry.list()
             ),
             "tasks": len(
                 self.system.task_manager.list_tasks()

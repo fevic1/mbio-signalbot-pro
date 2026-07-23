@@ -6,7 +6,7 @@ from aios.council import CouncilManager
 
 from aios.execution import ExecutionPlanner
 
-from aios.registry import AgentRegistry
+from aios.registry import CapabilityRegistry
 from aios.runtime import TaskManager
 from aios.events import EventBus
 
@@ -37,7 +37,7 @@ class SystemBootstrap:
 
     def boot(self):
 
-        registry = AgentRegistry()
+        registry = CapabilityRegistry()
         task_manager = TaskManager()
         approval = ApprovalManager()
         audit = AuditLogger()

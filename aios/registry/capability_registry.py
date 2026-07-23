@@ -1,7 +1,7 @@
 from datetime import datetime
 
 
-class AgentRegistry:
+class CapabilityRegistry:
 
     def __init__(self):
 
