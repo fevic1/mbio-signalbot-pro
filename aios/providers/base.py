@@ -20,7 +20,7 @@ class BaseProvider(ABC):
         ...
 
     @abstractmethod
-    def chat(self, request) -> ProviderResponse:
+    async def chat(self, request) -> ProviderResponse:
         """Execute a chat completion."""
         ...
 
