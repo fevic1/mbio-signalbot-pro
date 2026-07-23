@@ -23,6 +23,7 @@ class CouncilDecision:
     issues: List[CouncilIssue] = field(default_factory=list)
     actions: List[str] = field(default_factory=list)
     opinions: List[AgentOpinion] = field(default_factory=list)
+    voting: dict = field(default_factory=dict)
 
     def to_dict(self):
         return {
@@ -31,4 +32,5 @@ class CouncilDecision:
             "issues": [issue.__dict__ for issue in self.issues],
             "actions": self.actions,
             "opinions": [op.__dict__ for op in self.opinions],
+            "voting": self.voting,
         }
