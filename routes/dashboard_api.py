@@ -790,8 +790,25 @@ async def grid_close(request: Request, user: dict = Depends(require_role("ADMIN"
         raise HTTPException(status_code=500, detail=f"Grid close failed: {str(e)[:200]}")
 
 
+@router.get("/dca/assets")
+async def dca_assets(user: dict = Depends(get_current_user)):
+    """Tradeable DCA asset set (config-driven single source of truth) plus which
+    assets currently have an open position. Feeds the dashboard asset bar.
+    Read-only; no order placed, no state mutated."""
+    try:
+        from config_loader import get_config
+        import core.state as state
+        dca_cfg = get_config().get("dca", {})
+        tradeable = [str(a).upper() for a in dca_cfg.get("tradeable_assets", ["BTC", "ETH"])]
+        open_assets = sorted(k for k in state.OPEN_POSITIONS.keys() if not str(k).startswith("GRID::"))
+        return {"assets": tradeable, "open": open_assets}
+    except Exception as e:
+        logger.error(f"DCA assets fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=f"DCA assets failed: {str(e)[:200]}")
+
+
 @router.get("/dca/preview")
-async def dca_preview(asset: str = "", side: str = "LONG", exchange: str = None, user: dict = Depends(get_current_user)):
+async def dca_preview(request: Request, asset: str = "", side: str = "LONG", exchange: str = None, user: dict = Depends(get_current_user)):
     """Read-only DCA plan preview. Computes the exact parameters the open path
     will use (size, entry, SL/TP, ladder, exchange-min checks, warnings) WITHOUT
     placing any order or mutating state. The modal renders this before OTP.
@@ -799,7 +816,17 @@ async def dca_preview(asset: str = "", side: str = "LONG", exchange: str = None,
     try:
         import main as _main
         from core.dca_lifecycle import _compute_dca_plan
-        plan = _compute_dca_plan(asset, side, _main.dca_strategy, exchange=exchange)
+        # Optional user overrides for the live what-if (validated server-side in _compute_dca_plan).
+        ov = {}
+        q = request.query_params
+        for k in ("risk_pct", "sl", "tp1", "tp2", "tp3", "spacing_pct", "size_multiplier"):
+            if q.get(k):
+                try: ov[k] = float(q[k])
+                except ValueError: pass
+        if q.get("levels"):
+            try: ov["levels"] = int(q["levels"])
+            except ValueError: pass
+        plan = _compute_dca_plan(asset, side, _main.dca_strategy, exchange=exchange, overrides=ov or None)
         return plan
     except Exception as e:
         logger.error(f"DCA preview failed for {asset}: {e}")
@@ -822,7 +849,13 @@ async def dca_open(request: Request, user: dict = Depends(require_role("ADMIN", 
     try:
         import main as _main
         from core.dca_lifecycle import open_dca_position
-        result = await open_dca_position(asset, side, _main.dca_strategy)
+        result = await open_dca_position(
+            asset,
+            side,
+            _main.dca_strategy,
+            exchange=body.get("exchange"),
+            overrides=body.get("overrides") or None,
+        )
         if not result.get("success"):
             log_audit(user["id"], "DCA_OPEN_FAILED", resource=asset, details=str(result.get("error"))[:500], ip_address=ip, otp_verified=True)
             raise HTTPException(status_code=400, detail=result.get("error", "DCA open failed"))
