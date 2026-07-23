@@ -20,7 +20,13 @@ class Council:
 
         opinions = self.debate.collect(plan)
 
-        approved, confidence = self.voting.decide(opinions, issues)
+        vote = self.voting.decide(
+            opinions,
+            issues,
+        )
+
+        approved = vote.approved
+        confidence = vote.confidence
 
         actions = []
         if not approved:
