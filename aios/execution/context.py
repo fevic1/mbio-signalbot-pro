@@ -101,6 +101,21 @@ class ExecutionContext:
 
         self.agent_status[agent] = "completed"
 
+        if isinstance(result, dict):
+
+            self.metadata.setdefault(
+                "llm_calls",
+                []
+            ).append(
+                {
+                    "capability": agent,
+                    "provider": result.get("provider"),
+                    "model": result.get("model"),
+                    "latency": result.get("latency"),
+                    "cost": result.get("cost"),
+                }
+            )
+
         self.emit(
             "agent_completed",
             {

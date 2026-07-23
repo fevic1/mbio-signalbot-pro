@@ -7,6 +7,7 @@ from .worker import Worker
 from .monitor import ExecutionMonitor
 from .checkpoint import CheckpointManager
 from .recovery import RecoveryManager
+from .task import CapabilityTask
 
 
 class ExecutionExecutor:
@@ -45,7 +46,7 @@ class ExecutionExecutor:
             capabilities = self.planner.get_capabilities(task["category"])
 
             for capability in capabilities:
-                self.queue.push(capability)
+                self.queue.push(CapabilityTask(capability))
 
             while not self.queue.empty():
 
@@ -60,7 +61,7 @@ class ExecutionExecutor:
                     ready
                 )
 
-                output = self.worker.run(
+                output = self.worker.execute(
                     agent_name,
                     context,
                 )
