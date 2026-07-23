@@ -1,9 +1,9 @@
 import os
-import requests
 
 from .base import BaseProvider
-from .types import ProviderResponse
 from .exceptions import AuthenticationError
+from .transport import http
+from .types import ProviderRequest, ProviderResponse
 
 
 class CerebrasProvider(BaseProvider):
@@ -14,44 +14,49 @@ class CerebrasProvider(BaseProvider):
         self.key = os.getenv("CEREBRAS_API_KEY")
         self.model = os.getenv(
             "CEREBRAS_MODEL",
-            "llama-4-scout-17b-16e-instruct"
+            "llama-4-scout-17b-16e-instruct",
         )
 
-    def chat(self, request):
-        if not self.key:
-            raise AuthenticationError("CEREBRAS_API_KEY not configured")
+    async def chat(
+        self,
+        request: ProviderRequest,
+    ) -> ProviderResponse:
 
-        r = requests.post(
+        if not self.key:
+            raise AuthenticationError(
+                "CEREBRAS_API_KEY not configured"
+            )
+
+        response = await http.post(
             "https://api.cerebras.ai/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {self.key}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": self.model,
+                "model": request.model or self.model,
                 "messages": request.messages,
                 "temperature": request.temperature,
                 "max_tokens": request.max_tokens,
             },
-            timeout=60,
         )
 
-        r.raise_for_status()
+        response.raise_for_status()
 
-        data = r.json()
+        data = response.json()
 
         return ProviderResponse(
             provider=self.name,
-            model=self.model,
+            model=request.model or self.model,
             content=data["choices"][0]["message"]["content"],
             raw=data,
         )
 
-    def health(self) -> bool:
+    def health(self):
         return self.key is not None
 
-    def available(self) -> bool:
+    def available(self):
         return self.key is not None
 
-    def models(self) -> list[str]:
+    def models(self):
         return [self.model]
