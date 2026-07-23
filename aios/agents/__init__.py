@@ -1,6 +1,5 @@
 """
-Legacy agent package.
+Deprecated agent namespace.
 
-Static agents are deprecated.
-Runtime uses aios.capabilities.
+Runtime execution uses capability workers.
 """
