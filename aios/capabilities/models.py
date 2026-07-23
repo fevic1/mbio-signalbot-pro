@@ -3,6 +3,6 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class Capability:
+
     name: str
-    description: str
-    risk_level: str = "normal"
+    permission: str

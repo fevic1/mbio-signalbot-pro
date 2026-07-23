@@ -1,12 +1,3 @@
-from aios.agents import (
-    ResearchAgent,
-    FundamentalAgent,
-    RiskAgent,
-    SkepticAgent,
-    VerificationAgent
-)
-
-
 class AgentBootstrap:
 
 
@@ -20,80 +11,49 @@ class AgentBootstrap:
         self.memory = memory
 
 
-    def load_agents(self):
+    def load_capabilities(self):
 
-        agents = [
+        capabilities = [
 
             {
-                "name": "ResearchAgent",
-                "agent": ResearchAgent(
-                    self.memory
-                ),
-                "capability":
-                    "research",
-                "permission":
-                    "research"
+                "name": "can_search",
+                "permission": "research",
             },
 
-
             {
-                "name": "FundamentalAgent",
-                "agent": FundamentalAgent(
-                    self.memory
-                ),
-                "capability":
-                    "analysis",
-                "permission":
-                    "research"
+                "name": "can_reason",
+                "permission": "research",
             },
 
-
             {
-                "name": "RiskAgent",
-                "agent": RiskAgent(
-                    self.memory
-                ),
-                "capability":
-                    "risk_analysis",
-                "permission":
-                    "research"
+                "name": "can_plan",
+                "permission": "planning",
             },
 
-
             {
-                "name": "SkepticAgent",
-                "agent": SkepticAgent(
-                    self.memory
-                ),
-                "capability":
-                    "critical_analysis",
-                "permission":
-                    "research"
+                "name": "can_review",
+                "permission": "review",
             },
 
+            {
+                "name": "can_verify",
+                "permission": "verification",
+            },
 
             {
-                "name": "VerificationAgent",
-                "agent": VerificationAgent(
-                    self.memory
-                ),
-                "capability":
-                    "verification",
-                "permission":
-                    "research"
-            }
+                "name": "can_execute",
+                "permission": "execution",
+            },
 
         ]
 
 
-        for item in agents:
+        for item in capabilities:
 
             self.registry.register(
                 item["name"],
-                item["agent"],
-                item["capability"],
-                permission=item["permission"]
+                item["permission"],
             )
 
 
-        return self.registry.list_agents()
+        return self.registry.list_capabilities()

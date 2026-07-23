@@ -3,6 +3,7 @@ from aios.capabilities.executor import CapabilityExecutor
 
 class CapabilityWorker:
 
+
     def __init__(
         self,
         capability,
@@ -18,29 +19,39 @@ class CapabilityWorker:
         blackboard=None,
     ):
 
-        response = self.executor.execute(
-            self.capability
+        result = self.executor.execute(
+            self.capability.name
         )
 
-        result = {
-            "capability": self.capability,
-            "provider": response.provider,
-            "model": response.model,
-            "content": response.content,
+        output = {
+            "capability": self.capability.name,
+            "permission": self.capability.permission,
+            "result": result,
         }
+
 
         if blackboard:
 
             blackboard.store(
-                self.capability,
-                result,
+                self.capability.name,
+                output,
             )
 
-        return result
+
+        return output
 
 
 
 class AgentFactory:
+
+
+    def __init__(
+        self,
+        capability_registry,
+    ):
+
+        self.registry = capability_registry
+
 
     def create(
         self,
@@ -49,12 +60,22 @@ class AgentFactory:
 
         workers = []
 
-        for capability in capabilities:
+
+        for name in capabilities:
+
+            capability = self.registry.get(
+                name
+            )
+
+            if capability is None:
+                continue
+
 
             workers.append(
                 CapabilityWorker(
                     capability
                 )
             )
+
 
         return workers

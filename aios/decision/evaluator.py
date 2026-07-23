@@ -44,7 +44,12 @@ class DecisionEvaluator:
             )
 
 
-            if agent == "VerificationAgent":
+            capability = opinion.get(
+                "capability",
+                ""
+            )
+
+            if capability == "can_verify":
 
                 if isinstance(result, dict):
 

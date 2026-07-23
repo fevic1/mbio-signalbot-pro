@@ -26,7 +26,7 @@ class ExecutionExecutor:
         self.scheduler = Scheduler()
         self.dispatcher = Dispatcher()
         self.worker = Worker(system, self.blackboard, self.queue)
-        self.agent_factory = AgentFactory()
+        self.agent_factory = AgentFactory(system.capability_registry)
         self.monitor = ExecutionMonitor()
         self.checkpoint = CheckpointManager()
         self.recovery = RecoveryManager()
@@ -65,27 +65,26 @@ class ExecutionExecutor:
                 if ready is None:
                     break
 
-                agent_name = self.dispatcher.dispatch(
+                task_result = self.worker.execute(
                     ready
                 )
 
-                output = self.worker.execute(
-                    agent_name,
-                    context,
-                )
+                output = task_result
+
+                capability = ready.worker.capability
 
                 self.blackboard.store(
-                    agent_name,
+                    capability,
                     output,
                 )
 
                 context.add_result(
-                    agent_name,
+                    capability,
                     output,
                 )
 
                 self.monitor.record_success(
-                    agent_name
+                    capability
                 )
 
                 self.checkpoint.save(
