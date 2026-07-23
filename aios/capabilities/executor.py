@@ -73,7 +73,7 @@ class CapabilityExecutor:
 
         start = perf_counter()
 
-        response = chat(
+        response = await chat(
             provider_request
         )
 
