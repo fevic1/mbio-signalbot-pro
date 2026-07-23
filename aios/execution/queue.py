@@ -46,12 +46,14 @@ class ExecutionQueue:
         self._failed.append(task)
 
     def retry(self, task):
+
         try:
             self._failed.remove(task)
         except ValueError:
-            pass
+            return False
 
         self._ready.appendleft(task)
+        return True
 
     # ---------- CANCEL ----------
 
@@ -76,9 +78,10 @@ class ExecutionQueue:
         try:
             self._ready.remove(task)
         except ValueError:
-            pass
+            return False
 
         self._ready.appendleft(task)
+        return True
 
     # ---------- STATUS ----------
 
