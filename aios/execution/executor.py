@@ -23,7 +23,7 @@ class ExecutionExecutor:
 
         self.blackboard = Blackboard()
         self.queue = ExecutionQueue()
-        self.scheduler = Scheduler()
+        self.scheduler = Scheduler(self.queue)
         self.dispatcher = Dispatcher(self.queue)
         self.worker = Worker(
             system,
@@ -55,18 +55,22 @@ class ExecutionExecutor:
 
         try:
 
-            capabilities = self.planner.get_capabilities(
-                task["category"]
+            plan = self.planner.resolve(
+                self.system,
+                task["category"],
             )
 
-            workers = self.capability_factory.create(
-                capabilities
-            )
-
-            for worker in workers:
-                self.queue.push(
-                    CapabilityTask(worker)
+            if plan["type"] == "skill":
+                plan["target"].execute(context)
+            else:
+                workers = self.capability_factory.create(
+                    plan["target"]
                 )
+
+                for worker in workers:
+                    self.queue.push(
+                        CapabilityTask(worker)
+                    )
 
             while True:
 
