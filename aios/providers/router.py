@@ -1,38 +1,20 @@
 from time import perf_counter
 
+from .circuit import circuit
 from .metrics import metrics
-from .registry import registry
-from .scoring import score
+from .pool import provider_pool
 
 
-ORDER = [
-    "groq",
-    "cerebras",
-    "openrouter",
-    "anthropic",
-]
-
-
-def chat(request, preferred="groq"):
-
-    providers = sorted(
-        [
-            provider
-            for provider in (
-                registry.get(name)
-                for name in ORDER
-            )
-            if provider is not None
-        ],
-        key=score,
-        reverse=True,
-    )
+def chat(request):
 
     last_error = None
 
-    for provider in providers:
+    for provider in provider_pool.ranked():
 
         name = provider.name
+
+        if not circuit.allow(name):
+            continue
 
         if not provider.available():
             continue
@@ -42,10 +24,10 @@ def chat(request, preferred="groq"):
         try:
             response = provider.chat(request)
 
-            metrics.record_success(
-                name,
-                perf_counter() - start,
-            )
+            latency = perf_counter() - start
+
+            metrics.record_success(name, latency)
+            circuit.success(name)
 
             return response
 
@@ -53,8 +35,8 @@ def chat(request, preferred="groq"):
 
             metrics.record_failure(name)
             metrics.record_retry(name)
+            circuit.failure(name)
 
             last_error = exc
-            continue
 
     raise last_error

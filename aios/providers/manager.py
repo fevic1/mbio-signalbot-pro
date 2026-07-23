@@ -1,34 +1,45 @@
-from .retry import retry
+from .metrics import metrics
 from .registry import registry
-from .router import chat
+from .scoring import score
 
 
 class ProviderManager:
-    """
-    Central interface for every AIOS component.
-    """
-
-    def __init__(self):
-        self.registry = registry
 
     def providers(self):
-        return self.registry.all()
+        return registry.all()
 
     def provider(self, name):
-        return self.registry.get(name)
-
-    def chat(self, request, preferred="groq"):
-        return retry(
-            lambda: chat(request, preferred),
-            retries=3,
-            delay=1,
-        )
+        return registry.get(name)
 
     def health(self):
         return {
             name: provider.health()
-            for name, provider in self.registry.all().items()
+            for name, provider in registry.all().items()
         }
+
+    def available(self):
+        return {
+            name: provider
+            for name, provider in registry.all().items()
+            if provider.available()
+        }
+
+    def scores(self):
+        return {
+            name: score(provider)
+            for name, provider in registry.all().items()
+        }
+
+    def best(self):
+        available = self.available()
+
+        if not available:
+            return None
+
+        return max(available.values(), key=score)
+
+    def metrics(self):
+        return metrics.providers
 
 
 provider_manager = ProviderManager()
