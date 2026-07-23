@@ -12,7 +12,6 @@ from core.trade_ledger import record_trade
 
 logger = logging.getLogger("DcaLifecycle")
 
-MIN_NOTIONAL_TARGET = 11.50
 MAX_CONSECUTIVE_LOSSES = 3
 
 
@@ -185,7 +184,7 @@ async def _execute_reentry(asset: str, chat_id: str, params: dict = None) -> Non
         logger.error(f"❌ Auto-DCA re-entry failed for {asset}: {e}")
 
 
-def _compute_dca_plan(asset: str, side: str, dca_strategy, exchange: str = None) -> dict:
+def _compute_dca_plan(asset: str, side: str, dca_strategy, exchange: str = None, overrides: dict = None) -> dict:
     """Pure DCA plan calculator — the SINGLE SOURCE OF TRUTH for the manual DCA
     open path. Read-only: NO state mutation, NO orders, so it is safe to serve
     from the dashboard preview endpoint. Consumed by GET /dca/preview (show the
@@ -220,8 +219,14 @@ def _compute_dca_plan(asset: str, side: str, dca_strategy, exchange: str = None)
     errors = out["errors"]
     warnings = out["warnings"]
 
-    if asset not in ("BTC", "ETH"):
-        errors.append("DCA Strategy only supports BTC and ETH.")
+    # Asset allow-list from config (single source of truth; replaces hardcoded BTC/ETH).
+    try:
+        from config_loader import get_config
+        _tradeable = [str(a).upper() for a in get_config().get("dca", {}).get("tradeable_assets", ["BTC", "ETH"])]
+    except Exception:
+        _tradeable = ["BTC", "ETH"]
+    if asset not in _tradeable:
+        errors.append(f"DCA not enabled for {asset}. Tradeable set: {', '.join(_tradeable)}.")
     if side not in ("LONG", "SHORT"):
         errors.append("Side must be LONG or SHORT.")
     if errors:
@@ -244,6 +249,19 @@ def _compute_dca_plan(asset: str, side: str, dca_strategy, exchange: str = None)
     max_levels = int(m.get("max_levels", 3))
     spacing_pct = float(m.get("spacing_pct", 1.2))
     size_multiplier = float(m.get("size_multiplier", 1.25))
+
+    # Apply user overrides (validated). These are the only fields a user may adjust;
+    # entry/ATR/balance stay market/account-derived. Every override is re-checked below
+    # (SL vs liquidation buffer, notional vs exchange min) so a client cannot bypass risk.
+    ov = overrides or {}
+    if ov.get("risk_pct") is not None:
+        risk_pct = float(ov["risk_pct"])
+    if ov.get("spacing_pct") is not None:
+        spacing_pct = float(ov["spacing_pct"])
+    if ov.get("size_multiplier") is not None:
+        size_multiplier = float(ov["size_multiplier"])
+    if ov.get("levels") is not None:
+        max_levels = int(ov["levels"])
     out["risk_pct"] = risk_pct
     out["max_levels"] = max_levels
     out["spacing_pct"] = spacing_pct
@@ -279,6 +297,25 @@ def _compute_dca_plan(asset: str, side: str, dca_strategy, exchange: str = None)
     out["tp2"] = round(current_price + sign * atr * dca_strategy.config.TP2_MULT, 2)
     out["tp3"] = round(current_price + sign * atr * dca_strategy.config.TP3_MULT, 2)
     out["trailing_stop"] = round(current_price - sign * atr * dca_strategy.config.TRAILING_ATR_MULT, 2)
+
+    # User SL/TP overrides (validated). SL must never breach the liquidation buffer.
+    if ov.get("sl") is not None:
+        _sl = float(ov["sl"])
+        _liq_buffer = current_price * min_sl_distance_pct
+        if side == "LONG" and _sl >= current_price - _liq_buffer:
+            errors.append(f"Stop-loss ${_sl:.2f} too close to entry (liquidation buffer ${_liq_buffer:.2f}).")
+        elif side == "SHORT" and _sl <= current_price + _liq_buffer:
+            errors.append(f"Stop-loss ${_sl:.2f} too close to entry (liquidation buffer ${_liq_buffer:.2f}).")
+        else:
+            out["sl"] = round(_sl, 2)
+    if ov.get("tp1") is not None:
+        out["tp1"] = round(float(ov["tp1"]), 2)
+    if ov.get("tp2") is not None:
+        out["tp2"] = round(float(ov["tp2"]), 2)
+    if ov.get("tp3") is not None:
+        out["tp3"] = round(float(ov["tp3"]), 2)
+    if errors:
+        return out
 
     risk_amount = balance * risk_pct
     base_size = risk_amount / sl_distance if sl_distance > 0 else 0.0
@@ -327,7 +364,7 @@ def _compute_dca_plan(asset: str, side: str, dca_strategy, exchange: str = None)
     return out
 
 
-async def open_dca_position(asset: str, side: str, dca_strategy) -> dict:
+async def open_dca_position(asset: str, side: str, dca_strategy, exchange: str = None, overrides: dict = None) -> dict:
     """
     Shared DCA-open logic — the single source of truth for opening a new DCA
     position. Used by both the Telegram /open_dca command and the dashboard's
@@ -342,7 +379,7 @@ async def open_dca_position(asset: str, side: str, dca_strategy) -> dict:
     Returns a result dict: {"success": bool, "message": str, ...details}
     """
     # Delegate all computation/validation to the single source of truth.
-    plan = _compute_dca_plan(asset, side, dca_strategy)
+    plan = _compute_dca_plan(asset, side, dca_strategy, exchange=exchange, overrides=overrides)
     if not plan.get("can_execute"):
         err = (plan.get("errors") or ["Cannot open DCA position."])[0]
         return {"success": False, "error": err}
