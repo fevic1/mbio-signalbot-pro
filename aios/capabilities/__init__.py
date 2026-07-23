@@ -1,5 +1,5 @@
 from .models import Capability
-from .registry import CapabilityRegistry
+from aios.registry import CapabilityRegistry
 from .executor import CapabilityExecutor
 
 __all__ = [
