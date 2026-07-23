@@ -122,6 +122,148 @@ async def check_asset_correlation(target_asset: str, open_assets: List[str]) -> 
         logger.error(f"check_asset_correlation failed: {e}")
         return {"approved": True, "message": "Correlation check skipped due to error (fail-safe)."}
 
+
+
+class RiskManager:
+    """
+    Position sizing and trade planning utilities.
+    Does not replace portfolio risk validation.
+    """
+
+    def __init__(
+        self,
+        max_risk_per_trade: float = 0.02,
+        max_position_pct: float = 0.20,
+    ):
+        self.max_risk_per_trade = max_risk_per_trade
+        self.max_position_pct = max_position_pct
+
+    def calculate_position_size(
+        self,
+        account_balance: float,
+        entry_price: float,
+        stop_loss_price: float,
+    ) -> float:
+
+        if entry_price <= 0 or stop_loss_price <= 0:
+            return 0.0
+
+        risk_amount = (
+            account_balance *
+            self.max_risk_per_trade
+        )
+
+        stop_distance = (
+            abs(entry_price - stop_loss_price)
+            / entry_price
+        )
+
+        if stop_distance <= 0:
+            return 0.0
+
+        position_value = (
+            risk_amount /
+            stop_distance
+        )
+
+        max_value = (
+            account_balance *
+            self.max_position_pct
+        )
+
+        return min(
+            position_value,
+            max_value,
+        ) / entry_price
+
+    def set_stop_loss(
+        self,
+        entry_price: float,
+        atr: float,
+        multiplier: float = 2.0,
+    ) -> float:
+
+        return entry_price - (
+            atr * multiplier
+        )
+
+    def set_take_profit(
+        self,
+        entry_price: float,
+        atr: float,
+        multiplier: float = 3.0,
+    ) -> float:
+
+        return entry_price + (
+            atr * multiplier
+        )
+
+    def trailing_stop(
+        self,
+        current_price: float,
+        highest_price: float,
+        entry_price: float,
+        trail_pct: float = 0.03,
+    ) -> float:
+
+        if current_price > entry_price:
+            return max(
+                highest_price * (1 - trail_pct),
+                entry_price,
+            )
+
+        return entry_price
+
+    def calculate_trade_plan(
+        self,
+        account_balance: float,
+        entry_price: float,
+        atr: float,
+    ) -> Dict:
+
+        stop_loss = self.set_stop_loss(
+            entry_price,
+            atr,
+        )
+
+        take_profit = self.set_take_profit(
+            entry_price,
+            atr,
+        )
+
+        size = self.calculate_position_size(
+            account_balance,
+            entry_price,
+            stop_loss,
+        )
+
+        return {
+            "size": size,
+            "entry_price": entry_price,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "risk_amount": (
+                account_balance *
+                self.max_risk_per_trade
+            ),
+        }
+
+
+def calculate_trade_plan(
+    account_balance: float,
+    entry_price: float,
+    atr: float,
+) -> Dict:
+
+    manager = RiskManager()
+
+    return manager.calculate_trade_plan(
+        account_balance,
+        entry_price,
+        atr,
+    )
+
+
 # ============================================================
 # RESTORED FUNCTION FOR POSITION TRACKER COMPATIBILITY
 # ============================================================
@@ -137,6 +279,23 @@ def is_drawdown_halted(threshold: float = -15.0) -> bool:
     except Exception:
         # Fail-safe: if state is unavailable, do not halt trading.
         return False
+
+
+
+def calculate_trade_plan(
+    account_balance: float,
+    entry_price: float,
+    atr: float,
+) -> Dict:
+
+    manager = RiskManager()
+
+    return manager.calculate_trade_plan(
+        account_balance,
+        entry_price,
+        atr,
+    )
+
 
 # ============================================================
 # RESTORED FUNCTION FOR POSITION TRACKER COMPATIBILITY
