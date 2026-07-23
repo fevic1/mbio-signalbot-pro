@@ -1,24 +1,22 @@
 id: llm-council
 name: LLM Council
-version: 1.0.0
+version: 2.0
 
-entrypoint: workflow.py
-
-chairman: reasoning
+enabled: true
 
 advisors:
   - research
   - reasoning
   - verification
 
-stages:
-  - opinions
-  - peer_review
-  - synthesis
+workflow:
 
-permissions:
-  - reasoning
-  - research
-  - verification
+  - stage: opinions
+    parallel: true
 
-enabled: true
+  - stage: peer_review
+    parallel: true
+
+  - stage: synthesis
+    parallel: false
+    actor: reasoning

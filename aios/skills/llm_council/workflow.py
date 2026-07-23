@@ -15,9 +15,9 @@ class LLMCouncilSkill(Skill):
 
     def __init__(self):
         self.executor = CapabilityExecutor()
-
-        manifest = Path(__file__).parent / "manifest.yaml"
-        self.config = yaml.safe_load(manifest.read_text())
+        self.config = yaml.safe_load(
+            (Path(__file__).parent / "manifest.yaml").read_text()
+        )
 
     def execute(self, context):
         result = asyncio.run(self.run(context))
@@ -33,49 +33,46 @@ class LLMCouncilSkill(Skill):
             ),
         )
 
-    async def run(self, context):
+    async def execute_stage(self, stage, state):
 
         advisors = self.config["advisors"]
 
-        opinion_results = await asyncio.gather(
-            *[
-                self.invoke(
-                    advisor,
-                    context.metadata,
-                )
-                for advisor in advisors
-            ]
+        if stage["parallel"]:
+
+            results = await asyncio.gather(
+                *[
+                    self.invoke(
+                        advisor,
+                        state,
+                    )
+                    for advisor in advisors
+                ]
+            )
+
+            return dict(zip(advisors, results))
+
+        actor = stage["actor"]
+
+        return await self.invoke(
+            actor,
+            state,
         )
 
-        opinions = dict(zip(advisors, opinion_results))
+    async def run(self, context):
 
-        review_results = await asyncio.gather(
-            *[
-                self.invoke(
-                    reviewer,
-                    {
-                        "stage": "peer_review",
-                        "opinions": opinions,
-                    },
-                )
-                for reviewer in advisors
-            ]
-        )
-
-        reviews = dict(zip(advisors, review_results))
-
-        decision = await self.invoke(
-            self.config["chairman"],
-            {
-                "stage": "synthesis",
-                "opinions": opinions,
-                "reviews": reviews,
-            },
-        )
-
-        return {
-            "manifest": self.config["id"],
-            "opinions": opinions,
-            "reviews": reviews,
-            "decision": decision,
+        state = {
+            "context": context.metadata,
         }
+
+        history = {}
+
+        for stage in self.config["workflow"]:
+
+            state.update(history)
+
+            history[stage["stage"]] = await self.execute_stage(
+                stage,
+                state,
+            )
+
+        return history
