@@ -1,4 +1,3 @@
-from .models import Dependency
 from ..models import TaskNode
 
 
@@ -15,16 +14,10 @@ class TaskGraphBuilder:
                 name=milestone.name,
             )
 
-            milestone.tasks.append(task)
-
             if previous:
+                task.depends_on.append(previous.id)
 
-                project.dependencies.append(
-                    Dependency(
-                        source=previous.id,
-                        target=task.id,
-                    )
-                )
+            milestone.tasks.append(task)
 
             previous = task
 

@@ -4,38 +4,43 @@ from collections import deque
 class TaskScheduler:
 
     def __init__(self):
-
         self.queue = deque()
-
 
     def enqueue_project(self, project):
 
+        tasks = []
+
+        for milestone in project.milestones:
+            tasks.extend(milestone.tasks)
+
         completed = set()
 
-        while True:
+        while tasks:
 
             runnable = [
-                d.target
-                for d in project.dependencies
-                if d.source in completed
+                task
+                for task in tasks
+                if task.id not in completed
+                and all(
+                    dependency in completed
+                    for dependency in getattr(
+                        task,
+                        "depends_on",
+                        [],
+                    )
+                )
             ]
 
-            if not completed:
-
-                runnable = [
-                    project.milestones[0].tasks[0].id
-                ]
-
-            for task_id in runnable:
-
-                if task_id not in self.queue:
-                    self.queue.append(task_id)
-
-            if not self.queue:
+            if not runnable:
                 break
 
-            task = self.queue.popleft()
+            for task in runnable:
+                if task.id not in self.queue:
+                    self.queue.append(task.id)
 
-            yield task
+            while self.queue:
+                task_id = self.queue.popleft()
 
-            completed.add(task)
+                yield task_id
+
+                completed.add(task_id)

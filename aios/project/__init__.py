@@ -1,3 +1,7 @@
-from .models import *
+from .models import Project
 from .manager import ProjectManager
-from .planner import ProjectPlanner
+
+__all__ = [
+    "Project",
+    "ProjectManager",
+]
