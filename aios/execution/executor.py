@@ -24,9 +24,15 @@ class ExecutionExecutor:
         self.blackboard = Blackboard()
         self.queue = ExecutionQueue()
         self.scheduler = Scheduler()
-        self.dispatcher = Dispatcher()
-        self.worker = Worker(system, self.blackboard, self.queue)
-        self.capability_factory = CapabilityFactory(system.capability_registry)
+        self.dispatcher = Dispatcher(self.queue)
+        self.worker = Worker(
+            system,
+            self.blackboard,
+            self.queue,
+        )
+        self.capability_factory = CapabilityFactory(
+            system.capability_registry
+        )
         self.monitor = ExecutionMonitor()
         self.checkpoint = CheckpointManager()
         self.recovery = RecoveryManager()
@@ -45,7 +51,9 @@ class ExecutionExecutor:
 
         try:
 
-            capabilities = self.planner.get_capabilities(task["category"])
+            capabilities = self.planner.get_capabilities(
+                task["category"]
+            )
 
             workers = self.capability_factory.create(
                 capabilities
@@ -56,50 +64,12 @@ class ExecutionExecutor:
                     CapabilityTask(worker)
                 )
 
-            while not self.queue.empty():
+            while True:
 
-                ready = self.scheduler.next(
-                    self.queue
-                )
-
-                if ready is None:
+                if not self.dispatcher.dispatch(
+                    self.worker
+                ):
                     break
-
-                task_result = self.worker.execute(
-                    ready
-                )
-
-                output = task_result
-
-                capability = ready.worker.capability
-
-                self.blackboard.store(
-                    capability,
-                    output,
-                )
-
-                context.add_result(
-                    capability,
-                    output,
-                )
-
-                context.set_metadata(
-                    f"capability:{capability}",
-                    {
-                        "provider": output.get("provider"),
-                        "model": output.get("model"),
-                        "latency": output.get("latency"),
-                        "cost": output.get("cost"),
-                    },
-                )
-
-                self.monitor.record_success(
-                    capability
-                )
-
-                self.checkpoint.save(
-                    context
-                )
 
             context.complete()
 
