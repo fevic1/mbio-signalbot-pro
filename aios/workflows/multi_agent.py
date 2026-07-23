@@ -4,25 +4,21 @@ class MultiAgentWorkflow:
         self,
         system,
     ):
-
         self.system = system
 
-
-    def execute(
+    async def execute(
         self,
         task,
+        agents=None,
     ):
 
         if self.system.workflow_engine is None:
-
             raise RuntimeError(
                 "WorkflowEngine not initialized"
             )
 
-
-        context = self.system.workflow_engine.execute(
+        context = await self.system.workflow_engine.execute(
             task
         )
-
 
         return context.snapshot()
