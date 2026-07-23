@@ -10,6 +10,11 @@ from .recovery import RecoveryManager
 from .task import CapabilityTask
 from aios.capabilities.factory import CapabilityFactory
 
+from aios.learning import (
+    ExecutionEvaluator,
+    PlannerOptimizer,
+)
+
 
 class ExecutionExecutor:
 
@@ -37,6 +42,9 @@ class ExecutionExecutor:
         self.monitor = ExecutionMonitor()
         self.checkpoint = CheckpointManager()
         self.recovery = RecoveryManager()
+
+        self.learning_evaluator = ExecutionEvaluator()
+        self.planner_optimizer = PlannerOptimizer()
 
     async def execute(
         self,
@@ -81,6 +89,26 @@ class ExecutionExecutor:
                     break
 
             context.complete()
+
+            feedback = self.learning_evaluator.evaluate(
+                context
+            )
+
+            self.planner_optimizer.update(
+                feedback
+            )
+
+            if self.system.memory_manager:
+                self.system.memory_manager.remember(
+                    memory_type="execution_feedback",
+                    title=f"Execution Feedback {context.id}",
+                    content=str(feedback),
+                    metadata={
+                        "execution_id": context.id,
+                        "status": context.status,
+                        "task": context.task,
+                    },
+                )
 
             if self.system.decision_workflow:
 

@@ -10,6 +10,6 @@ class ExecutionEvaluator:
 
         return ExecutionFeedback(
             execution_id=execution.id,
-            success=execution.success,
-            score=1.0 if execution.success else 0.0,
+            success=execution.status == "completed",
+            score=1.0 if execution.status == "completed" else 0.0,
         )
