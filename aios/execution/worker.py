@@ -69,6 +69,21 @@ class Worker:
             )
 
 
+            if self.system.capability_health:
+
+                self.system.capability_health.record_success(
+                    capability,
+                    latency=result.get(
+                        "latency",
+                        0,
+                    ),
+                    cost=result.get(
+                        "cost",
+                        0,
+                    ),
+                )
+
+
             return result
 
 
@@ -92,6 +107,13 @@ class Worker:
                     "error": str(exc),
                 },
             )
+
+
+            if self.system.capability_health:
+
+                self.system.capability_health.record_failure(
+                    capability
+                )
 
 
             raise
