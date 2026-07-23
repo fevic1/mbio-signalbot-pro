@@ -1,60 +1,98 @@
+from aios.project.graph import TaskGraphManager
+
+
 class ExecutionPlanner:
 
 
     def __init__(self):
 
+        self.graph_manager = TaskGraphManager()
+
+
         self.requirements = {
 
             "research": [
-                "can_search",
-                "can_reason",
-                "can_verify",
+
+                {
+                    "name": "research",
+                    "capability": "research",
+                    "depends_on": [],
+                },
+
+                {
+                    "name": "reasoning",
+                    "capability": "reasoning",
+                    "depends_on": [
+                        "research"
+                    ],
+                },
+
+                {
+                    "name": "verification",
+                    "capability": "verification",
+                    "depends_on": [
+                        "reasoning"
+                    ],
+                },
+
             ],
 
-            "trading": [
-                "can_reason",
-                "can_review",
-                "can_verify",
-            ],
 
             "engineering": [
-                "can_plan",
-                "can_execute",
-                "can_verify",
+
+                {
+                    "name": "architecture",
+                    "capability": "architecture",
+                    "depends_on": [],
+                },
+
+                {
+                    "name": "coding",
+                    "capability": "coding",
+                    "depends_on": [
+                        "architecture"
+                    ],
+                },
+
+                {
+                    "name": "testing",
+                    "capability": "testing",
+                    "depends_on": [
+                        "coding"
+                    ],
+                },
+
             ],
 
-            "security": [
-                "can_review",
-                "can_reason",
-                "can_verify",
-            ],
         }
 
 
-    def get_capabilities(
+
+    def create_graph(
         self,
+        project_id,
         category,
     ):
 
-        return self.requirements.get(
+        tasks = self.requirements.get(
             category,
-            [
-                "can_reason"
-            ],
+            self.requirements["research"]
         )
+
+
+        return self.graph_manager.create(
+            project_id,
+            tasks,
+        )
+
 
 
     def register_requirements(
         self,
         category,
-        capabilities,
+        tasks,
     ):
 
         self.requirements[
             category
-        ] = capabilities
-
-
-    def list_requirements(self):
-
-        return self.requirements
+        ] = tasks
