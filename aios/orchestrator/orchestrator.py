@@ -50,7 +50,7 @@ class AIOSOrchestrator:
         )
 
 
-    def execute_task(
+    async def execute_task(
         self,
         task_id
     ):
@@ -72,7 +72,7 @@ class AIOSOrchestrator:
             )
 
 
-        result = self.system.workflow_engine.execute(
+        result = await self.system.workflow_engine.execute(
             task
         )
 
