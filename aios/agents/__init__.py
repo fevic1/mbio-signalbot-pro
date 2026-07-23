@@ -1,5 +1,7 @@
-"""
-Deprecated agent namespace.
+from .factory import DynamicAgentFactory
+from .models import Agent
 
-Runtime execution uses capability workers.
-"""
+__all__ = [
+    "Agent",
+    "DynamicAgentFactory",
+]
