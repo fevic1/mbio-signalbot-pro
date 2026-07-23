@@ -166,6 +166,9 @@ dca:
   size_multiplier: 1.5
   # Manual DCA open path (Telegram /open_dca + dashboard modal).
   # Values match the previously-hardcoded live behavior — no behavior change.
+  # Assets the DCA engine + dashboard asset bar are allowed to trade
+  # (single source of truth; replaces the hardcoded BTC/ETH list).
+  tradeable_assets: [BTC, ETH]
   manual:
     risk_pct: 0.01              # 1% of balance = max loss per DCA
     min_sl_distance_pct: 0.055  # liquidation buffer at 20x leverage
