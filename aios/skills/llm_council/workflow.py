@@ -14,6 +14,8 @@ class LLMCouncilSkill(Skill):
         "verification",
     ]
 
+    CHAIRMAN = "reasoning"
+
     def __init__(self):
         self.executor = CapabilityExecutor()
 
@@ -22,18 +24,48 @@ class LLMCouncilSkill(Skill):
         context.set_metadata("council", result)
         return result
 
+    def _call(self, capability, context):
+        return self.executor.execute(
+            CapabilityRequest(
+                capability=capability,
+                context=context,
+            )
+        )
+
     def run(self, context):
+
         opinions = {}
 
         for advisor in self.ADVISORS:
-            opinions[advisor] = self.executor.execute(
-                CapabilityRequest(
-                    capability=advisor,
-                    context=context.metadata,
-                )
+            opinions[advisor] = self._call(
+                advisor,
+                context.metadata,
             )
+
+        reviews = {}
+
+        for reviewer in self.ADVISORS:
+
+            reviews[reviewer] = self._call(
+                reviewer,
+                {
+                    "role": "peer_review",
+                    "opinions": opinions,
+                },
+            )
+
+        chairman = self._call(
+            self.CHAIRMAN,
+            {
+                "role": "chairman",
+                "opinions": opinions,
+                "reviews": reviews,
+            },
+        )
 
         return {
             "skill": self.id,
             "opinions": opinions,
+            "reviews": reviews,
+            "decision": chairman,
         }
