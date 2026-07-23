@@ -23,7 +23,7 @@ class CapabilityExecutor:
             system,
         )
 
-    def execute(
+    async def execute(
         self,
         request: CapabilityRequest,
     ):
