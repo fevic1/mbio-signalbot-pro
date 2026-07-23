@@ -51,10 +51,6 @@ class SystemBootstrap:
             registry=registry,
         ).load_capabilities()
 
-        skill_registry = SkillLoader().load()
-
-        skill_registry = SkillLoader().load()
-
         decision = DecisionEngine(
             approval_manager=approval,
             audit=audit,
@@ -71,6 +67,10 @@ class SystemBootstrap:
             memory_manager=self.memory,
             execution_planner=execution_planner,
         )
+
+        system.skill_registry = SkillLoader(
+            system=system,
+        ).load()
 
         system.capability_health = capability_health
         system.capability_registry = registry

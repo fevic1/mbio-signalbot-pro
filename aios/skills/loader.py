@@ -6,7 +6,11 @@ from .registry import SkillRegistry
 
 class SkillLoader:
 
-    def __init__(self):
+    def __init__(
+        self,
+        system=None,
+    ):
+        self.system = system
         self.registry = SkillRegistry()
         self.manager = SkillManager("aios/skills")
 
@@ -18,7 +22,9 @@ class SkillLoader:
                 f'aios.skills.{manifest["id"].replace("-", "_")}.workflow'
             )
 
-            skill = getattr(module, "LLMCouncilSkill")()
+            skill = getattr(module, "LLMCouncilSkill")(
+                self.system
+            )
 
             self.registry.register(skill)
 
