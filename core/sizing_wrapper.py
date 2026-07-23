@@ -16,6 +16,7 @@ def calculate_safe_position_size(
     entry_price: float,
     stop_loss_price: float,
     strategy_name: str = "Unknown",
+    feature_enabled: bool = True,
     strategy_confidence: float = 0.75,
     current_volatility: float = 0.02,
     current_drawdown: float = 0.0,
@@ -25,7 +26,7 @@ def calculate_safe_position_size(
     """
     Calculate position size. Returns None if feature is disabled or an error occurs.
     """
-    if not ENABLE_DYNAMIC_SIZING:
+    if not feature_enabled or not ENABLE_DYNAMIC_SIZING:
         return None
         
     try:
@@ -44,6 +45,9 @@ def calculate_safe_position_size(
             strategy_confidence=strategy_confidence,
         )
         
+        if not result or result.get("size_usd", 0) <= 0:
+            return None
+
         # Only log if we actually got a valid size
         if result and result.get('size_usd', 0) > 0:
             logger.info(
