@@ -2,25 +2,23 @@ id: llm-council
 name: LLM Council
 version: 1.0.0
 
-type: skill
-
 entrypoint: workflow.py
 
-description: Multi-agent council with peer review and chairman synthesis.
+chairman: reasoning
 
-triggers:
-  - council this
-  - run the council
-  - war room this
-  - pressure-test this
-  - stress-test this
-  - debate this
+advisors:
+  - research
+  - reasoning
+  - verification
 
-enabled: true
+stages:
+  - opinions
+  - peer_review
+  - synthesis
 
 permissions:
   - reasoning
   - research
   - verification
 
-priority: normal
+enabled: true

@@ -1,3 +1,7 @@
+from pathlib import Path
+
+import yaml
+
 from aios.capabilities.executor import CapabilityExecutor
 from aios.capabilities.request import CapabilityRequest
 from aios.skills.base import Skill
@@ -8,27 +12,27 @@ class LLMCouncilSkill(Skill):
     id = "llm-council"
     name = "LLM Council"
 
-    ADVISORS = [
-        "research",
-        "reasoning",
-        "verification",
-    ]
-
-    CHAIRMAN = "reasoning"
-
     def __init__(self):
         self.executor = CapabilityExecutor()
+
+        manifest = (
+            Path(__file__).parent / "manifest.yaml"
+        )
+
+        self.config = yaml.safe_load(
+            manifest.read_text()
+        )
 
     def execute(self, context):
         result = self.run(context)
         context.set_metadata("council", result)
         return result
 
-    def _call(self, capability, context):
+    def call(self, capability, payload):
         return self.executor.execute(
             CapabilityRequest(
                 capability=capability,
-                context=context,
+                context=payload,
             )
         )
 
@@ -36,36 +40,35 @@ class LLMCouncilSkill(Skill):
 
         opinions = {}
 
-        for advisor in self.ADVISORS:
-            opinions[advisor] = self._call(
+        for advisor in self.config["advisors"]:
+            opinions[advisor] = self.call(
                 advisor,
                 context.metadata,
             )
 
         reviews = {}
 
-        for reviewer in self.ADVISORS:
-
-            reviews[reviewer] = self._call(
+        for reviewer in self.config["advisors"]:
+            reviews[reviewer] = self.call(
                 reviewer,
                 {
-                    "role": "peer_review",
+                    "stage": "peer_review",
                     "opinions": opinions,
                 },
             )
 
-        chairman = self._call(
-            self.CHAIRMAN,
+        decision = self.call(
+            self.config["chairman"],
             {
-                "role": "chairman",
+                "stage": "synthesis",
                 "opinions": opinions,
                 "reviews": reviews,
             },
         )
 
         return {
-            "skill": self.id,
+            "manifest": self.config["id"],
             "opinions": opinions,
             "reviews": reviews,
-            "decision": chairman,
+            "decision": decision,
         }
