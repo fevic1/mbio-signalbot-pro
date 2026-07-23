@@ -83,6 +83,16 @@ class ExecutionExecutor:
                     output,
                 )
 
+                context.set_metadata(
+                    f"capability:{capability}",
+                    {
+                        "provider": output.get("provider"),
+                        "model": output.get("model"),
+                        "latency": output.get("latency"),
+                        "cost": output.get("cost"),
+                    },
+                )
+
                 self.monitor.record_success(
                     capability
                 )
