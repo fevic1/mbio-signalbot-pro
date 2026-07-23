@@ -20,7 +20,7 @@ class Worker:
     ):
         self.context = context
 
-    def execute(
+    async def execute(
         self,
         task,
     ):
@@ -46,7 +46,7 @@ class Worker:
 
         try:
 
-            result = task.worker.run(
+            result = await task.worker.run(
                 context=context,
                 blackboard=self.blackboard,
             )
