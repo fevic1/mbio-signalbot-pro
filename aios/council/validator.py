@@ -14,7 +14,21 @@ class PlanValidator:
     def validate(self, plan):
         issues = []
 
-        phase_ids = {task.id for task in plan.tasks}
+        tasks = getattr(
+            plan,
+            "tasks",
+            [
+                task
+                for milestone in getattr(
+                    plan,
+                    "milestones",
+                    [],
+                )
+                for task in milestone.tasks
+            ],
+        )
+
+        phase_ids = {task.id for task in tasks}
 
         missing = self.REQUIRED_PHASES - phase_ids
 
@@ -26,7 +40,7 @@ class PlanValidator:
             ))
 
         seen = set()
-        for task in plan.tasks:
+        for task in tasks:
             if task.id in seen:
                 issues.append(CouncilIssue(
                     code="duplicate_task",
