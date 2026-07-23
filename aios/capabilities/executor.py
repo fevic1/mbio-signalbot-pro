@@ -12,14 +12,12 @@ class CapabilityExecutionError(Exception):
 
 class CapabilityExecutor:
 
-
     def execute(
         self,
         request: CapabilityRequest,
     ):
 
         last_error = None
-
 
         for attempt in range(
             request.retry_limit + 1
@@ -32,21 +30,18 @@ class CapabilityExecutor:
                     attempt,
                 )
 
-
             except Exception as error:
 
                 last_error = error
 
-
         raise CapabilityExecutionError(
-            str(last_error)
-        )
-
+            f"{request.capability}: {last_error}"
+        ) from last_error
 
     def _execute_once(
         self,
-        request,
-        attempt,
+        request: CapabilityRequest,
+        attempt: int,
     ):
 
         provider_request = ProviderRequest(
@@ -71,22 +66,19 @@ class CapabilityExecutor:
             ]
         )
 
-
         start = perf_counter()
 
-        response = chat(
-            provider_request
-        )
+        response = chat(provider_request)
 
         latency = perf_counter() - start
 
-
         return {
+            "success": True,
             "capability": request.capability,
             "provider": response.provider,
             "model": response.model,
             "content": response.content,
             "latency": latency,
-            "cost": 0,
+            "cost": 0.0,
             "attempt": attempt,
         }
