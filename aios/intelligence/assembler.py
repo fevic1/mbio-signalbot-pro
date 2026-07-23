@@ -6,39 +6,71 @@ class ContextAssembler:
         request,
     ):
 
-        context = getattr(
+        execution = getattr(
             request,
             "context",
-            {},
-        ) or {}
+            None,
+        )
 
         metadata = {}
-
-        if hasattr(context, "metadata"):
-            metadata = dict(
-                context.metadata
-            )
-
         results = {}
-
-        if hasattr(context, "results"):
-            results = dict(
-                context.results
-            )
-
         events = []
 
-        if hasattr(context, "events"):
-            events = list(
-                context.events
+        if execution is not None:
+
+            metadata = dict(
+                getattr(
+                    execution,
+                    "metadata",
+                    {},
+                )
             )
+
+            results = dict(
+                getattr(
+                    execution,
+                    "results",
+                    {},
+                )
+            )
+
+            events = list(
+                getattr(
+                    execution,
+                    "events",
+                    [],
+                )
+            )
+
+        blackboard = metadata.get(
+            "blackboard",
+            {},
+        )
+
+        memory = metadata.get(
+            "memory",
+            {},
+        )
+
+        architecture = metadata.get(
+            "architecture",
+            {},
+        )
+
+        project = metadata.get(
+            "project",
+            {},
+        )
 
         return {
             "capability": capability,
             "permission": request.permission,
-            "attempt": request.retry_limit,
-            "metadata": metadata,
-            "results": results,
+            "retry_limit": request.retry_limit,
+            "project": project,
+            "architecture": architecture,
+            "memory": memory,
+            "blackboard": blackboard,
+            "previous_results": results,
             "events": events,
-            "context": context,
+            "metadata": metadata,
         }
