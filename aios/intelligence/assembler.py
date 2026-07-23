@@ -12,21 +12,30 @@ class ContextAssembler:
             None,
         )
 
-        metadata = dict(
-            getattr(
-                execution,
-                "metadata",
-                {},
+        if isinstance(execution, dict):
+            metadata = dict(execution)
+            results = dict(
+                execution.get(
+                    "results",
+                    {},
+                )
             )
-        ) if execution else {}
+        else:
+            metadata = dict(
+                getattr(
+                    execution,
+                    "metadata",
+                    {},
+                )
+            ) if execution else {}
 
-        results = dict(
-            getattr(
-                execution,
-                "results",
-                {},
-            )
-        ) if execution else {}
+            results = dict(
+                getattr(
+                    execution,
+                    "results",
+                    {},
+                )
+            ) if execution else {}
 
         return {
             "capability": capability,
