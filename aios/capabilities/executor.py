@@ -6,12 +6,47 @@ from aios.providers.types import ProviderRequest
 from .request import CapabilityRequest
 
 
+class CapabilityExecutionError(Exception):
+    pass
+
+
 class CapabilityExecutor:
 
 
     def execute(
         self,
         request: CapabilityRequest,
+    ):
+
+        last_error = None
+
+
+        for attempt in range(
+            request.retry_limit + 1
+        ):
+
+            try:
+
+                return self._execute_once(
+                    request,
+                    attempt,
+                )
+
+
+            except Exception as error:
+
+                last_error = error
+
+
+        raise CapabilityExecutionError(
+            str(last_error)
+        )
+
+
+    def _execute_once(
+        self,
+        request,
+        attempt,
     ):
 
         provider_request = ProviderRequest(
@@ -28,6 +63,7 @@ class CapabilityExecutor:
                     "content": (
                         f"Capability: {request.capability}\n"
                         f"Permission: {request.permission}\n"
+                        f"Attempt: {attempt}\n"
                         f"Context: {request.context}\n"
                         "Return structured output."
                     ),
@@ -52,5 +88,5 @@ class CapabilityExecutor:
             "content": response.content,
             "latency": latency,
             "cost": 0,
-            "retry_limit": request.retry_limit,
+            "attempt": attempt,
         }
