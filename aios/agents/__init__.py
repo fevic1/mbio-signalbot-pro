@@ -1,6 +1,6 @@
-from .factory import AgentFactory, CapabilityWorker
+"""
+Legacy agent package.
 
-__all__ = [
-    "AgentFactory",
-    "CapabilityWorker",
-]
+Static agents are deprecated.
+Runtime uses aios.capabilities.
+"""

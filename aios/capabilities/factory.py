@@ -38,7 +38,7 @@ class CapabilityWorker:
 
 
 
-class AgentFactory:
+class CapabilityFactory:
 
 
     def __init__(
