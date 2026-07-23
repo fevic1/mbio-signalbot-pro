@@ -10,21 +10,27 @@ import os
 import re
 from typing import Dict, Tuple
 
-from aios.providers.router import chat
-from aios.providers.types import ProviderRequest
+from groq import AsyncGroq
+from cerebras.cloud.sdk import AsyncCerebras
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
-init_ai_clients()
+_groq_client: AsyncGroq | None = None
+_cerebras_client: AsyncCerebras | None = None
+_openrouter_client: AsyncOpenAI | None = None
 
 def init_ai_clients() -> int:
-    from aios.providers.registry import registry
+    global _groq_client, _cerebras_client, _openrouter_client
+    groq_key = os.getenv("GROQ_API_KEY")
+    cerebras_key = os.getenv("CEREBRAS_API_KEY")
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
 
-    active = sum(
-        provider.available()
-        for provider in registry.all().values()
-    )
+    _groq_client = AsyncGroq(api_key=groq_key) if groq_key else None
+    _cerebras_client = AsyncCerebras(api_key=cerebras_key) if cerebras_key else None
+    _openrouter_client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=openrouter_key) if openrouter_key else None
 
+    active = sum(x is not None for x in [_groq_client, _cerebras_client, _openrouter_client])
     logger.info(f"🧠 AI Providers: {active} active")
     return active
 
@@ -117,25 +123,28 @@ async def analyze_batch(asset_batch: dict, cfg: dict) -> Tuple[Dict, str]:
     
     # ... (leave the rest of your function exactly as it is) ...
     
-    request = ProviderRequest(
-    messages=[
-        {"role": "system", "content": sys_prompt},
-        {"role": "user", "content": user_prompt},
-    ],
-    temperature=0.2,
-    max_tokens=500,
-)
+    # Get models from config
+    ai_cfg = cfg.get("ai", {})
+    models = ai_cfg.get("models", {})
+    
+    tasks = []
+    if _groq_client: 
+        tasks.append(_call_provider("groq", _groq_client, sys_prompt, user_prompt, True, models.get("groq", "llama-3.3-70b-versatile")))
+    if _cerebras_client: 
+        tasks.append(_call_provider("cerebras", _cerebras_client, sys_prompt, user_prompt, False, models.get("cerebras", "llama3.1-70b")))
+    if _openrouter_client: 
+        tasks.append(_call_provider("openrouter", _openrouter_client, sys_prompt, user_prompt, True, models.get("openrouter", "meta-llama/llama-3.1-405b-instruct")))
+    
+    if not tasks: return {}, "none"
 
-try:
-    response = await asyncio.to_thread(chat, request)
-    best = _parse_json_response(response.content)
-except Exception as e:
-    logger.error(f"AI provider failed: {e}")
-    return {}, "failed"
-
-if "results" not in best:
-    logger.error("❌ Invalid AI response")
-    return {}, "failed"
+    results = await asyncio.gather(*tasks)
+    valid = [r for r in results if r and "results" in r]
+    
+    if not valid:
+        logger.error("❌ CRITICAL: No valid AI responses received!")
+        logger.error(f"   Total tasks: {len(tasks)}")
+        logger.error(f"   Results: {results}")
+        return {}, "failed"
     
     # Pick best result (highest total confidence)
     best = max(valid, key=lambda r: sum(item.get('confidence', 0) for item in r.get('results', [])))
@@ -157,5 +166,6 @@ if "results" not in best:
         logger.error(f"   Valid responses: {len(valid)}")
         logger.error(f"   Total responses: {len(results)}")
     
-return flat_results, response.provider
+    return flat_results, "groq" if _groq_client else ("cerebras" if _cerebras_client else "openrouter")
+
 # ERROR_TRACKING: Add this to track failures
