@@ -19,3 +19,14 @@ class RecoveryManager:
         if self.should_retry(task_id):
             return "retry"
         return "escalate"
+
+
+    def handle(
+        self,
+        error,
+        context=None,
+    ):
+        return self.recover(
+            error,
+            context,
+        ) if hasattr(self,"recover") else None

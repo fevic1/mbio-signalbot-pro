@@ -52,6 +52,12 @@ class Worker:
             )
 
             task.result = result
+
+            context.add_result(
+                capability,
+                result,
+            )
+
             task.started = started.isoformat()
             task.completed = datetime.utcnow().isoformat()
             task.status = "completed"

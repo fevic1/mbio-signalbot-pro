@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 import uuid
 import json
 
@@ -13,7 +13,7 @@ class ExecutionContext:
 
         self.id = str(uuid.uuid4())
 
-        self.created = datetime.utcnow().isoformat()
+        self.created = datetime.now(UTC).isoformat()
 
         self.task = task
 
@@ -41,7 +41,7 @@ class ExecutionContext:
         event = {
             "event": event_type,
             "payload": payload or {},
-            "time": datetime.utcnow().isoformat(),
+            "time": datetime.now(UTC).isoformat(),
         }
 
         self.add_event(event)

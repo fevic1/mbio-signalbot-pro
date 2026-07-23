@@ -81,3 +81,14 @@ class ExecutionMonitor:
             "running": running,
             "metrics": self.metrics,
         }
+
+
+    def record_failure(
+        self,
+        error,
+        task_id="system",
+    ):
+        if task_id not in self.metrics:
+            self.start(task_id)
+
+        self.fail(task_id, error)

@@ -6,10 +6,11 @@ class CapabilityWorker:
 
     def __init__(
         self,
+        system,
         capability,
     ):
         self.capability = capability
-        self.executor = CapabilityExecutor()
+        self.executor = CapabilityExecutor(system)
 
     def run(
         self,
@@ -43,8 +44,10 @@ class CapabilityFactory:
 
     def __init__(
         self,
+        system,
         capability_registry,
     ):
+        self.system = system
         self.registry = capability_registry
 
     def create(
@@ -65,6 +68,7 @@ class CapabilityFactory:
 
             workers.append(
                 CapabilityWorker(
+                    self.system,
                     capability
                 )
             )

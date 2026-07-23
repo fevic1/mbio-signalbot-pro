@@ -31,6 +31,7 @@ class ExecutionExecutor:
             self.queue,
         )
         self.capability_factory = CapabilityFactory(
+            system,
             system.capability_registry
         )
         self.monitor = ExecutionMonitor()
