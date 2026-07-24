@@ -44,6 +44,11 @@ class CapabilityBootstrap:
                 permission="research",
             ),
 
+            Capability(
+                name="execution_approval",
+                permission="trading",
+            ),
+
         ]
 
 
