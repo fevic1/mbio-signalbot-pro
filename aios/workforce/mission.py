@@ -11,7 +11,7 @@ class MissionTeam:
 
     objective: str
 
-    agents: List[Dict] = field(
+    agents: List = field(
         default_factory=list
     )
 
@@ -33,9 +33,7 @@ class MissionTeam:
     ):
 
         self.agents.append(
-            agent.describe()
-            if hasattr(agent, "describe")
-            else agent
+            agent
         )
 
 
@@ -50,7 +48,12 @@ class MissionTeam:
             "id": self.id,
             "project_id": self.project_id,
             "objective": self.objective,
-            "agents": self.agents,
+            "agents": [
+                agent.describe()
+                if hasattr(agent, "describe")
+                else agent
+                for agent in self.agents
+            ],
             "status": self.status,
             "created_at": self.created_at,
         }
@@ -65,9 +68,7 @@ class MissionBuilder:
         workforce_manager,
     ):
 
-        self.workforce_manager = (
-            workforce_manager
-        )
+        self.workforce_manager = workforce_manager
 
 
     def assemble(
