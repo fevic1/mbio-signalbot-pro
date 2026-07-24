@@ -15,13 +15,23 @@ class AIOSBootstrap:
 
     def initialize(self):
 
-        event_bus = EventBus()
-
-
-        self.container.register(
-            "event_bus",
-            event_bus,
+        from .services.registry import (
+            AIOSServiceRegistry
         )
+
+
+        registry = AIOSServiceRegistry()
+
+
+        services = registry.build_core()
+
+
+        for name, service in services.items():
+
+            self.container.register(
+                name,
+                service
+            )
 
 
         return self.container
