@@ -1,31 +1,41 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
 class PermissionSet:
 
-    analyze: bool = True
+    can_search: bool = True
 
-    plan: bool = True
+    can_code: bool = True
 
-    execute_workflows: bool = True
+    can_review_code: bool = True
 
-    modify_systems: bool = False
+    can_reason: bool = True
 
-    deploy_changes: bool = False
+    can_plan: bool = True
 
-    spend_resources: bool = False
+    can_execute_shell: bool = False
 
-    access_restricted_actions: bool = False
+    can_write_files: bool = False
+
+    can_verify: bool = True
 
 
     def can(
         self,
-        action: str,
+        capability: str,
     ) -> bool:
 
         return getattr(
             self,
-            action,
+            capability,
             False,
         )
+
+
+    def allowed_actions(self):
+
+        return {
+            key: value
+            for key, value in self.__dict__.items()
+        }
