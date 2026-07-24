@@ -68,3 +68,10 @@ class PersistentMemoryRouter:
 
 
         return result
+
+
+    def all(
+        self,
+    ):
+
+        return self.repository.all()
