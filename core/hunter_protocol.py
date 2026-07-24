@@ -427,11 +427,52 @@ async def hunter_monitor_loop(system=None):
 
                                 if risk_level != "high":
 
-                                    await run_hunter_protocol_idle(
-                                        pending_signals,
-                                        None,
-                                        system=system,
+                                    verify_task = system.orchestrator.submit_task(
+                                        name="verification",
+                                        category="trading",
+                                        context={
+                                            "signals": pending_signals,
+                                            "risk": risk_content,
+                                        },
                                     )
+
+                                    system.orchestrator.assign_agent(
+                                        verify_task["id"],
+                                        "verification",
+                                    )
+
+                                    verification_execution = await system.orchestrator.execute_task(
+                                        verify_task["id"]
+                                    )
+
+                                    verification_result = verification_execution.results.get(
+                                        "verification",
+                                        {}
+                                    )
+
+                                    verification_content = verification_result.get(
+                                        "content",
+                                        {}
+                                    )
+
+                                    confidence = verification_content.get(
+                                        "confidence",
+                                        0,
+                                    )
+
+                                    if confidence <= 1:
+                                        confidence *= 100
+
+                                    if confidence >= 50:
+                                        await run_hunter_protocol_idle(
+                                            pending_signals,
+                                            None,
+                                            system=system,
+                                        )
+                                    else:
+                                        logger.warning(
+                                            "Hunter blocked by AIOS verification gate"
+                                        )
 
                                 else:
 
