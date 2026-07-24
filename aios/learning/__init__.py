@@ -17,3 +17,5 @@ from .trade_feedback import trade_to_feedback
 from .trade_consumer import TradeLearningConsumer
 
 from .ranker import LearningRanker
+
+from .strategy_selector import StrategySelector
