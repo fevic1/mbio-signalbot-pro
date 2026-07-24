@@ -17,6 +17,8 @@ Rules:
 - Reject if verification confidence is less than 0.5.
 - Consider historical performance as supporting evidence only.
 - Never approve solely because historical performance is positive.
+- If historical average_score is below 0.4, reduce confidence in approval.
+- If historical average_score is above 0.75 with sufficient samples, treat it as positive supporting evidence.
 - Approve if verification confidence is equal to or greater than 0.5 and risk is acceptable.
 - Return ONLY valid JSON.
 
