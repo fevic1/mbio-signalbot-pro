@@ -1,28 +1,30 @@
+from .models import AIOSDomainEvent
+
+
 class EventBus:
+
 
     def __init__(self):
 
-        self.subscribers = {}
+        self.handlers = {}
 
         self.history = []
+
 
 
     def subscribe(
         self,
         event_type,
-        callback,
+        handler,
     ):
 
-        if event_type not in self.subscribers:
-
-            self.subscribers[event_type] = []
-
-
-        self.subscribers[event_type].append(
-            callback
+        self.handlers.setdefault(
+            event_type,
+            []
+        ).append(
+            handler
         )
 
-        return True
 
 
     def publish(
@@ -30,37 +32,33 @@ class EventBus:
         event,
     ):
 
-        record = {
-            "event": event.to_dict()
-        }
-
-
         self.history.append(
-            record
+            event
         )
 
 
-        listeners = self.subscribers.get(
-            event.type,
-            []
-        )
+        for handler in (
+            self.handlers
+            .get(
+                event.event_type,
+                []
+            )
+        ):
+
+            handler(
+                event
+            )
 
 
-        for callback in listeners:
-
-            callback(event)
+        return event
 
 
-        return record
 
+    def get_history(
+        self,
+    ):
 
-    def get_history(self):
-
-        return self.history
-
-
-    def clear_history(self):
-
-        self.history.clear()
-
-        return True
+        return [
+            event.describe()
+            for event in self.history
+        ]

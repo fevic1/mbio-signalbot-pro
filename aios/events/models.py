@@ -1,33 +1,38 @@
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import uuid
 
 
-class Event:
+@dataclass
+class AIOSDomainEvent:
 
-    def __init__(
-        self,
-        event_type,
-        source="system",
-        payload=None,
-    ):
+    event_type: str
 
-        self.id = str(uuid.uuid4())
+    source: str
 
-        self.type = event_type
+    payload: dict = field(
+        default_factory=dict
+    )
 
-        self.source = source
+    id: str = field(
+        default_factory=lambda:
+        str(uuid.uuid4())
+    )
 
-        self.payload = payload or {}
+    timestamp: str = field(
+        default_factory=lambda:
+        datetime.now(
+            timezone.utc
+        ).isoformat()
+    )
 
-        self.time = datetime.now(timezone.utc).isoformat()
 
-
-    def to_dict(self):
+    def describe(self):
 
         return {
             "id": self.id,
-            "event": self.type,
+            "event_type": self.event_type,
             "source": self.source,
             "payload": self.payload,
-            "time": self.time,
+            "timestamp": self.timestamp,
         }
