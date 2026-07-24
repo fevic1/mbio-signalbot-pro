@@ -251,21 +251,15 @@ async def get_positions(current_user: dict = Depends(get_current_user)) -> dict:
 async def aios_capabilities(request: Request):
     system = request.app.state.aios
 
-    health = getattr(system, "capability_health", None)
-
-    if health and hasattr(health, "status"):
-        return health.status()
-
     return {
         "capabilities": [
             {
-                "name": name,
+                "name": getattr(cap, "name", str(cap)),
                 "status": "registered"
             }
-            for name in system.capability_registry.list()
+            for cap in system.capability_registry.list()
         ]
     }
-
 
 @api.get("/api/aios/workflows")
 async def aios_workflows(request: Request):
