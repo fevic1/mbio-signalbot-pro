@@ -172,6 +172,14 @@ async def root():
         return FileResponse(new_index)
     return FileResponse(os.path.join(base_dir, "frontend", "index.html"))
 
+@api.get("/aios/status")
+async def aios_status(request: Request):
+    system = request.app.state.aios
+    return {
+        "aios": "online",
+        "capabilities": len(system.capability_registry.list())
+    }
+
 @api.get("/health")
 async def health():
     return {"status": "ok", "ts": int(time.time())}
