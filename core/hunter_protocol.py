@@ -383,6 +383,14 @@ async def hunter_monitor_loop(system=None):
                                         "confidence": conf,
                                         "data": data
                                     })
+
+                            if pending_signals:
+
+                                from aios.learning import LearningRanker
+
+                                pending_signals = LearningRanker().rank(
+                                    pending_signals
+                                )
                             
                             # Execute hunt through AIOS risk gate
                             if pending_signals:
