@@ -180,6 +180,19 @@ async def aios_status(request: Request):
         "capabilities": len(system.capability_registry.list())
     }
 
+@api.get("/api/aios/telemetry")
+async def aios_telemetry(request: Request):
+    system = request.app.state.aios
+
+    return {
+        "runtime": "online",
+        "capabilities": len(system.capability_registry.list()),
+        "workflows": hasattr(system, "workflow_engine"),
+        "decision_engine": hasattr(system, "decision_engine"),
+        "execution_planner": hasattr(system, "execution_planner"),
+    }
+
+
 @api.get("/health")
 async def health():
     return {"status": "ok", "ts": int(time.time())}
