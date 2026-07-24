@@ -14,7 +14,8 @@ class TaskManager:
         self,
         name,
         category,
-        priority="normal"
+        priority="normal",
+        context=None,
     ):
 
         task_id = str(uuid.uuid4())
@@ -29,6 +30,8 @@ class TaskManager:
             "category": category,
 
             "priority": priority,
+
+            "context": context or {},
 
             "status": "pending",
 
