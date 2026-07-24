@@ -43,6 +43,22 @@ class AIOSRuntime:
             event_bus
         )
 
+        from aios.runtime.worker import (
+            RuntimeWorker,
+        )
+
+        runtime_daemon = container.get(
+            "runtime_daemon"
+        )
+
+        self.worker = (
+            RuntimeWorker(
+                runtime_daemon
+            )
+            if runtime_daemon
+            else None
+        )
+
 
 
     def start(self):
@@ -56,11 +72,19 @@ class AIOSRuntime:
             }
         )
 
+        if self.worker:
+
+            self.worker.start()
+
         return state
 
 
 
     def shutdown(self):
+
+        if self.worker:
+
+            self.worker.stop()
 
         self.runtime_events.stopped(
             {
