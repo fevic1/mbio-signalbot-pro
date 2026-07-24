@@ -1,4 +1,9 @@
 import threading
+import time
+
+from aios.runtime.state import (
+    RuntimeControlStore,
+)
 
 
 class RuntimeWorker:
@@ -21,6 +26,10 @@ class RuntimeWorker:
 
         self.running = False
 
+        self.control = RuntimeControlStore()
+
+        self.watcher = None
+
 
 
     def start(self):
@@ -41,6 +50,14 @@ class RuntimeWorker:
         self.thread.start()
 
 
+        self.watcher = threading.Thread(
+            target=self._watch_shutdown,
+            daemon=True,
+        )
+
+        self.watcher.start()
+
+
 
     def _run(self):
 
@@ -53,6 +70,23 @@ class RuntimeWorker:
         finally:
 
             self.running = False
+
+
+
+    def _watch_shutdown(self):
+
+        while self.running:
+
+            if self.control.shutdown_requested():
+
+                self.stop()
+
+                self.control.clear()
+
+                break
+
+
+            time.sleep(1)
 
 
 
