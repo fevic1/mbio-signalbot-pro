@@ -6,3 +6,5 @@ __all__ = [
     "StrategyVersion",
     "StrategyRegistry",
 ]
+
+from .evaluator import StrategyEvaluator
