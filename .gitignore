@@ -70,3 +70,4 @@ google-cloud-sdk/
 *.db
 *.sqlite
 SESSION_LOG.md
+dashboard-v3/tsconfig.tsbuildinfo
