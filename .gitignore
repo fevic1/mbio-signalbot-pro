@@ -79,3 +79,7 @@ dashboard-v3/tsconfig.tsbuildinfo
 aios.egg-info/
 __pycache__/
 *.pyc
+
+# Keep AIOS runtime state implementation tracked
+!aios/runtime/state/
+!aios/runtime/state/*.py
