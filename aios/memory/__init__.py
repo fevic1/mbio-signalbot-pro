@@ -6,6 +6,7 @@ from .events import MemoryEvent
 from .decision import create_decision_event
 from .manager import MemoryManager
 from .models import MemoryEntry
+from .evaluator import DecisionEvaluator
 from .store import MemoryStore
 
 
@@ -18,4 +19,5 @@ __all__ = [
     "EventStore",
     "MemoryEvent",
     "create_decision_event",
+    "DecisionEvaluator",
 ]
