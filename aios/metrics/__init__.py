@@ -8,3 +8,5 @@ __all__ = [
 ]
 
 from .event_consumer import TradeOutcomeConsumer
+from .reporter import MetricsReporter
+from .dashboard import MetricsDashboard
