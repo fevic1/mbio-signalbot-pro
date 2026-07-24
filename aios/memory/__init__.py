@@ -21,3 +21,5 @@ __all__ = [
     "create_decision_event",
     "DecisionEvaluator",
 ]
+
+from .trade_bridge import record_trade_outcome
