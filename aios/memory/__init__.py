@@ -25,3 +25,5 @@ __all__ = [
 ]
 
 from .trade_bridge import record_trade_outcome
+
+from .learning_search import LearningSearch

@@ -1,0 +1,66 @@
+from .event_store import EventStore
+
+
+class LearningSearch:
+
+    def __init__(self):
+
+        self.store = EventStore()
+
+
+    def optimizer_history(
+        self,
+        key=None,
+    ):
+
+        results = []
+
+        for event in self.store.all():
+
+            if event.get("event_type") != "optimizer_learning":
+                continue
+
+            metadata = event.get(
+                "metadata",
+                {}
+            )
+
+            if key and metadata.get("key") != key:
+                continue
+
+            results.append(
+                metadata
+            )
+
+        return results
+
+
+    def performance_summary(
+        self,
+        key,
+    ):
+
+        records = self.optimizer_history(
+            key
+        )
+
+        if not records:
+            return {
+                "key": key,
+                "samples": 0,
+                "average_score": 0,
+            }
+
+
+        scores = [
+            r.get("score", 0)
+            for r in records
+        ]
+
+        return {
+            "key": key,
+            "samples": len(scores),
+            "average_score": (
+                sum(scores) / len(scores)
+            ),
+        }
