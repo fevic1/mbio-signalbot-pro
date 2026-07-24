@@ -12,6 +12,11 @@ from .execution import (
     AgentExecutor,
 )
 
+from .mission import (
+    MissionTeam,
+    MissionBuilder,
+)
+
 
 __all__ = [
     "SpecialistAgent",
@@ -21,4 +26,6 @@ __all__ = [
     "AgentTask",
     "AgentResult",
     "AgentExecutor",
+    "MissionTeam",
+    "MissionBuilder",
 ]
