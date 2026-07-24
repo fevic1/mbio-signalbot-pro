@@ -28,6 +28,24 @@ def evaluation_to_feedback(
             if quality == "positive"
             else 0.0
         ),
+
+        asset=evaluation.get(
+            "asset",
+            "",
+        ),
+
+        signal=evaluation.get(
+            "signal",
+            "",
+        ),
+
+        pnl=pnl,
+
+        confidence=evaluation.get(
+            "confidence",
+            0,
+        ),
+
         observations=[
             f"asset={evaluation.get('asset')}",
             f"signal={evaluation.get('signal')}",
