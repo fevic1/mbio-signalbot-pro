@@ -6,6 +6,7 @@ from .tracker import ProjectTracker
 from .goal_link import GoalLinker
 from .decomposition import ProjectDecomposer
 from .planner_integration import ProjectPlanner
+from .operations import ProjectOperationsManager
 
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "GoalLinker",
     "ProjectDecomposer",
     "ProjectPlanner",
+    "ProjectOperationsManager",
 ]
