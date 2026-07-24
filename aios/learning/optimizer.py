@@ -1,9 +1,14 @@
+from collections import defaultdict
+
+
 class PlannerOptimizer:
 
     def __init__(self):
 
         self.history = []
-        self.capability_scores = {}
+
+        self.capability_scores = defaultdict(list)
+
         self.recommendations = []
 
 
@@ -15,6 +20,15 @@ class PlannerOptimizer:
         self.history.append(
             feedback
         )
+
+        execution_id = feedback.execution_id
+
+        self.capability_scores[
+            execution_id
+        ].append(
+            feedback.score
+        )
+
 
         for observation in feedback.observations:
 
@@ -28,12 +42,19 @@ class PlannerOptimizer:
                 )
 
 
-        self.capability_scores[
-            feedback.execution_id
-        ] = feedback.score
-
-
         return feedback
+
+
+    def capability_performance(
+        self,
+    ):
+
+        return {
+            key: (
+                sum(scores) / len(scores)
+            )
+            for key, scores in self.capability_scores.items()
+        }
 
 
     def get_recommendations(
