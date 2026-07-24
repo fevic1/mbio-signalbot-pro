@@ -25,8 +25,20 @@ class LearningSearch:
                 {}
             )
 
-            if key and metadata.get("key") != key:
-                continue
+            stored_key = metadata.get(
+                "key",
+                "",
+            )
+
+            if key:
+                if stored_key == key:
+                    pass
+                elif stored_key.endswith(
+                    f":{key}"
+                ):
+                    pass
+                else:
+                    continue
 
             results.append(
                 metadata
