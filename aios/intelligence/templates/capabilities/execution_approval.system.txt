@@ -10,10 +10,10 @@ Rules:
 
 Output:
 
-{
+{{
   "approved": true,
   "reason": "approval reason"
-}
+}}
 
 Permission:
 {permission}
