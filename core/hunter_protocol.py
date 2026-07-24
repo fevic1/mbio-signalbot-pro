@@ -433,7 +433,8 @@ async def hunter_monitor_loop(system=None):
                                         category="trading",
                                         context={
                                             "signals": pending_signals,
-                                            "risk": risk_content,
+                                            "market_analysis": content,
+                                            "risk_analysis": risk_content,
                                         },
                                     )
 
