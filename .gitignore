@@ -71,3 +71,8 @@ google-cloud-sdk/
 *.sqlite
 SESSION_LOG.md
 dashboard-v3/tsconfig.tsbuildinfo
+
+# AIOS test suite
+!tests/
+!tests/aios/
+!tests/aios/test_*.py
