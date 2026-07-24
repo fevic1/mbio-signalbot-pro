@@ -35,15 +35,39 @@ class AIOSRuntime:
             publisher,
         )
 
+        from aios.runtime.events import (
+            RuntimeEventPublisher,
+        )
+
+        self.runtime_events = RuntimeEventPublisher(
+            event_bus
+        )
+
 
 
     def start(self):
 
-        return self.lifecycle.start()
+        state = self.lifecycle.start()
+
+        self.runtime_events.started(
+            {
+                "state":
+                state.describe()
+            }
+        )
+
+        return state
 
 
 
     def shutdown(self):
+
+        self.runtime_events.stopped(
+            {
+                "service":
+                "aios_runtime"
+            }
+        )
 
         return self.lifecycle.shutdown()
 
