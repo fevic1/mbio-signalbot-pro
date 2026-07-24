@@ -36,3 +36,7 @@ class AIOSDomainEvent:
             "payload": self.payload,
             "timestamp": self.timestamp,
         }
+
+
+# Backward compatibility alias during event migration
+Event = AIOSDomainEvent

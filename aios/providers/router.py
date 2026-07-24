@@ -6,7 +6,7 @@ from .metrics import metrics
 from .pool import provider_pool
 from .retry import retry
 from .types import ProviderRequest
-from aios.events.models import Event
+from aios.events.models import AIOSDomainEvent
 
 
 async def chat(
@@ -52,7 +52,7 @@ async def chat(
 
             if event_bus:
                 event_bus.publish(
-                    Event(
+                    AIOSDomainEvent(
                         "provider_execution.completed",
                         source="provider_router",
                         payload={
@@ -74,7 +74,7 @@ async def chat(
 
             if event_bus:
                 event_bus.publish(
-                    Event(
+                    AIOSDomainEvent(
                         "provider_execution.failed",
                         source="provider_router",
                         payload={

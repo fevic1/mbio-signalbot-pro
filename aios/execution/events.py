@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from aios.events.models import Event
+from aios.events.models import AIOSDomainEvent
 
 
 class ExecutionEventPublisher:
@@ -78,7 +78,7 @@ class ExecutionEventPublisher:
         payload,
     ):
 
-        event = Event(
+        event = AIOSDomainEvent(
             event_type,
             source="aios_execution",
             payload={
