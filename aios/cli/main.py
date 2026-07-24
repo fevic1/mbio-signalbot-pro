@@ -3,6 +3,11 @@ import argparse
 from aios.system import AIOSBootstrap
 from aios.system.runtime import AIOSRuntime
 
+from aios.cli.commands.inspect import inspect
+from aios.cli.commands.health import health
+from aios.cli.commands.memory import memory
+from aios.cli.commands.events import events
+
 
 def start():
 
@@ -58,9 +63,46 @@ def main():
 
         start()
 
+
     elif args.command == "stop":
 
         stop()
+
+
+    elif args.command in [
+        "inspect",
+        "health",
+        "memory",
+        "events",
+    ]:
+
+        container = AIOSBootstrap().initialize()
+
+
+        if args.command == "inspect":
+
+            print(
+                inspect(container)
+            )
+
+        elif args.command == "health":
+
+            print(
+                health(container)
+            )
+
+        elif args.command == "memory":
+
+            print(
+                memory(container)
+            )
+
+        elif args.command == "events":
+
+            print(
+                events(container)
+            )
+
 
     else:
 
