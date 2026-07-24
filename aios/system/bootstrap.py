@@ -14,6 +14,7 @@ from aios.registry import CapabilityRegistry
 from aios.providers.manager import provider_manager
 from aios.runtime import TaskManager
 from aios.events import EventBus, ProviderExecutionMonitor
+from aios.strategy import StrategyEventHandler
 
 from aios.bootstrap import CapabilityBootstrap
 
@@ -47,6 +48,15 @@ class SystemBootstrap:
         approval = ApprovalManager()
         audit = AuditLogger()
         event_bus = EventBus()
+
+        strategy_event_handler = StrategyEventHandler(
+            event_bus=event_bus,
+        )
+
+        event_bus.subscribe(
+            "strategy.evaluation.requested",
+            strategy_event_handler.handle,
+        )
         planner_optimizer = PlannerOptimizer()
         execution_planner = ExecutionPlanner(
             optimizer=planner_optimizer,
@@ -78,6 +88,8 @@ class SystemBootstrap:
         system.provider_execution_monitor = ProviderExecutionMonitor(
             event_bus
         )
+
+        system.strategy_event_handler = strategy_event_handler
 
         system.skill_registry = SkillLoader(
             system=system,
