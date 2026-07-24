@@ -247,6 +247,67 @@ async def get_positions(current_user: dict = Depends(get_current_user)) -> dict:
         logger.error(f"❌ Positions endpoint failed: {e}", exc_info=True)
         return {"error": str(e)}
 
+@api.get("/api/aios/capabilities")
+async def aios_capabilities(request: Request):
+    system = request.app.state.aios
+
+    health = getattr(system, "capability_health", None)
+
+    if health and hasattr(health, "status"):
+        return health.status()
+
+    return {
+        "capabilities": [
+            {
+                "name": name,
+                "status": "registered"
+            }
+            for name in system.capability_registry.list()
+        ]
+    }
+
+
+@api.get("/api/aios/workflows")
+async def aios_workflows(request: Request):
+    system = request.app.state.aios
+
+    engine = getattr(system, "workflow_engine", None)
+
+    return {
+        "active": engine is not None,
+        "registered": [
+            "research",
+            "trading",
+            "engineering",
+            "security"
+        ],
+        "execution_planner": system.execution_planner is not None
+    }
+
+
+@api.get("/api/aios/decisions")
+async def aios_decisions(request: Request):
+    system = request.app.state.aios
+
+    audit = getattr(system, "audit_logger", None)
+
+    if audit and hasattr(audit, "events"):
+        return {"recent": audit.events[-20:]}
+
+    return {"recent": []}
+
+
+@api.get("/api/aios/providers")
+async def aios_providers(request: Request):
+    system = request.app.state.aios
+
+    router = getattr(system, "llm_router", None)
+
+    return {
+        "providers": getattr(router, "providers", []) if router else []
+    }
+
+
 @api.get("/{full_path:path}")
 async def serve_spa(full_path: str):
     """Catch-all route: serve index.html for all non-API frontend paths.
