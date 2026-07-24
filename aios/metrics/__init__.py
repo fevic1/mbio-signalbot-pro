@@ -6,3 +6,5 @@ __all__ = [
     "StrategyMetrics",
     "PerformanceTracker",
 ]
+
+from .event_consumer import TradeOutcomeConsumer
