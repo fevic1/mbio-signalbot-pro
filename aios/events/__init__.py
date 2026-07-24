@@ -9,3 +9,5 @@ __all__ = [
 ]
 
 from .persistence import EventPersistence
+
+from .replay import EventReplay
