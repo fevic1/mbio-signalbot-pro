@@ -291,6 +291,27 @@ async def aios_decisions(request: Request):
     return {"recent": []}
 
 
+
+@api.get("/api/aios/providers/events")
+async def aios_provider_events(request: Request):
+    system = request.app.state.aios
+
+    monitor = getattr(
+        system,
+        "provider_execution_monitor",
+        None,
+    )
+
+    if not monitor:
+        return {
+            "events": []
+        }
+
+    return {
+        "events": monitor.recent()
+    }
+
+
 @api.get("/api/aios/providers")
 async def aios_providers(request: Request):
     system = request.app.state.aios
@@ -634,7 +655,7 @@ async def run_cycle() -> None:
 async def autonomous_slot_hunter(chat_id: str) -> None:
     """Alias to wire the modern hunter protocol."""
     from core.hunter_protocol import hunter_monitor_loop
-    await hunter_monitor_loop()
+    await hunter_monitor_loop(system=aios_system)
 
 
 async def cmd_open_dca(update, context):
@@ -777,7 +798,11 @@ async def main() -> None:
     await application.start()
     await application.updater.start_polling()
 
-    hunter_task = asyncio.create_task(hunter_monitor_loop())
+    hunter_task = asyncio.create_task(
+        hunter_monitor_loop(
+            system=aios_system
+        )
+    )
     logger.info("🏹 Hunter Protocol: Continuous monitoring started (every 5 minutes)")
 
     # Run all background loops concurrently with health tracking

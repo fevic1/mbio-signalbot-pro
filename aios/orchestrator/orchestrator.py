@@ -46,13 +46,15 @@ class AIOSOrchestrator:
         self,
         name,
         category,
-        priority="normal"
+        priority="normal",
+        context=None,
     ):
 
         return self.system.task_manager.create_task(
             name=name,
             category=category,
             priority=priority,
+            context=context,
         )
 
 

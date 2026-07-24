@@ -6,9 +6,14 @@ from .metrics import metrics
 from .pool import provider_pool
 from .retry import retry
 from .types import ProviderRequest
+from aios.events.models import Event
 
 
-async def chat(request: ProviderRequest):
+async def chat(
+    request: ProviderRequest,
+    event_bus=None,
+    capability=None,
+):
 
     last_error = None
 
@@ -45,6 +50,20 @@ async def chat(request: ProviderRequest):
 
             circuit.success(name)
 
+            if event_bus:
+                event_bus.publish(
+                    Event(
+                        "provider_execution.completed",
+                        source="provider_router",
+                        payload={
+                            "provider": name,
+                            "capability": capability,
+                            "latency_ms": latency * 1000,
+                            "success": True,
+                        },
+                    )
+                )
+
             return response
 
         except Exception as exc:
@@ -52,6 +71,20 @@ async def chat(request: ProviderRequest):
             metrics.record_retry(name)
 
             circuit.failure(name)
+
+            if event_bus:
+                event_bus.publish(
+                    Event(
+                        "provider_execution.failed",
+                        source="provider_router",
+                        payload={
+                            "provider": name,
+                            "capability": capability,
+                            "error": str(exc),
+                            "success": False,
+                        },
+                    )
+                )
 
             last_error = exc
 
