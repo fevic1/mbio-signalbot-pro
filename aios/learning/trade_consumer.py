@@ -20,6 +20,12 @@ class TradeLearningConsumer:
             if event.get("event_type") != "trade_outcome":
                 continue
 
+            if event.get("metadata", {}).get(
+                "optimizer_processed",
+                False,
+            ):
+                continue
+
             feedback = trade_to_feedback(
                 event.get("metadata", {})
             )
@@ -27,6 +33,11 @@ class TradeLearningConsumer:
             self.optimizer.update(
                 feedback
             )
+
+            event.setdefault(
+                "metadata",
+                {}
+            )["optimizer_processed"] = True
 
             processed += 1
 
