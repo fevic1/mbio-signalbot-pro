@@ -17,6 +17,10 @@ from .stores import (
 
 from .router import MemoryRouter
 
+from .persistent_router import (
+    PersistentMemoryRouter,
+)
+
 
 __all__ = [
 
@@ -34,4 +38,5 @@ __all__ = [
     "FeedbackMemoryStore",
 
     "MemoryRouter",
+    "PersistentMemoryRouter",
 ]
