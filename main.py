@@ -95,18 +95,44 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting AIOS Enterprise runtime")
 
-    aios_system = BootstrapLoader().boot()
 
-    app.state.aios = aios_system
+    container = BootstrapLoader().boot()
 
 
-    logger.info("AIOS runtime ready")
+    from aios.system.runtime import (
+        AIOSRuntime,
+    )
+
+
+    runtime = AIOSRuntime(
+        container
+    )
+
+
+    runtime_state = runtime.start()
+
+
+    aios_system = container
+
+
+    app.state.aios = container
+
+    app.state.aios_runtime = runtime
+
+
+    logger.info(
+        "AIOS runtime ready: %s",
+        runtime_state.describe(),
+    )
 
 
     yield
 
 
     logger.info("Stopping AIOS Enterprise runtime")
+
+
+    runtime.shutdown()
 
 
 api = FastAPI(title="MBIO SignalBot Pro API", version="9.0", lifespan=lifespan)
