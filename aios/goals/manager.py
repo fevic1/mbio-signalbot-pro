@@ -1,25 +1,18 @@
-from .models import Goal
+from typing import Dict
 
 
 class GoalManager:
 
+
     def __init__(self):
 
-        self.goals = {}
+        self.goals: Dict = {}
 
 
-    def create(
+    def register(
         self,
-        objective,
-        constraints=None,
-        priority=1,
+        goal,
     ):
-
-        goal = Goal(
-            objective=objective,
-            constraints=constraints or [],
-            priority=priority,
-        )
 
         self.goals[
             goal.id
@@ -38,25 +31,22 @@ class GoalManager:
         )
 
 
-    def update_status(
+    def active(
         self,
-        goal_id,
-        status,
     ):
 
-        goal = self.get(
-            goal_id
-        )
-
-        if goal:
-
-            goal.status = status
-
-        return goal
+        return [
+            goal
+            for goal in self.goals.values()
+            if goal.status == "active"
+        ]
 
 
-    def list(self):
+    def summary(
+        self,
+    ):
 
-        return list(
-            self.goals.values()
-        )
+        return [
+            goal.describe()
+            for goal in self.goals.values()
+        ]
