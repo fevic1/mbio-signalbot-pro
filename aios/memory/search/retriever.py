@@ -31,18 +31,9 @@ class MemoryRetriever:
 
         else:
 
-            records = []
-
-
-            for store_type in (
-                self.router.stores
-            ):
-
-                records.extend(
-                    self.router.retrieve(
-                        store_type
-                    )
-                )
+            records = (
+                self.router.all()
+            )
 
 
         return self.search.rank(
