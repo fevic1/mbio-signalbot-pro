@@ -386,9 +386,16 @@ async def hunter_monitor_loop(system=None):
 
                             if pending_signals:
 
-                                from aios.learning import LearningRanker
+                                from aios.learning import (
+                                    LearningRanker,
+                                    StrategySelector,
+                                )
 
                                 pending_signals = LearningRanker().rank(
+                                    pending_signals
+                                )
+
+                                pending_signals = StrategySelector().select(
                                     pending_signals
                                 )
                             
