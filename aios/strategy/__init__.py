@@ -10,3 +10,5 @@ __all__ = [
 from .evaluator import StrategyEvaluator
 
 from .evaluation_store import StrategyEvaluationStore
+
+from .workflow import StrategyWorkflow
