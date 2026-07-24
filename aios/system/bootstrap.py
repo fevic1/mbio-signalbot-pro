@@ -11,6 +11,7 @@ from aios.skills.loader import SkillLoader
 from aios.capabilities.health import CapabilityHealthManager
 
 from aios.registry import CapabilityRegistry
+from aios.providers.manager import provider_manager
 from aios.runtime import TaskManager
 from aios.events import EventBus
 
@@ -32,8 +33,6 @@ from aios.workflows import (
     WorkflowEngine,
     MultiAgentWorkflow,
 )
-
-
 class SystemBootstrap:
 
     def __init__(self, memory=None):
@@ -63,7 +62,6 @@ class SystemBootstrap:
             audit=audit,
             event_bus=event_bus,
         )
-
         system = AIOSSystem(
             event_bus=event_bus,
             registry=registry,
@@ -75,6 +73,7 @@ class SystemBootstrap:
             execution_planner=execution_planner,
         )
 
+        system.provider_manager = provider_manager
         system.skill_registry = SkillLoader(
             system=system,
         ).load()

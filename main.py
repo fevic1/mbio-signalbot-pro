@@ -295,10 +295,10 @@ async def aios_decisions(request: Request):
 async def aios_providers(request: Request):
     system = request.app.state.aios
 
-    router = getattr(system, "llm_router", None)
+    manager = getattr(system, "provider_manager", None)
 
     return {
-        "providers": getattr(router, "providers", []) if router else []
+        "providers": list(manager.providers().keys()) if manager else []
     }
 
 
