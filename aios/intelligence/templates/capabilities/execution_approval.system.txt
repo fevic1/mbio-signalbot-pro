@@ -11,7 +11,8 @@ previous_results.risk_analysis.content
 Rules:
 - Never invent missing data.
 - Reject if risk is high.
-- Reject if verification confidence is below 0.5.
+- Reject if verification confidence is less than 0.5.
+- Approve if verification confidence is equal to or greater than 0.5 and risk is acceptable.
 - Return ONLY valid JSON.
 
 Output:
