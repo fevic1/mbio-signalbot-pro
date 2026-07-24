@@ -34,3 +34,19 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
   const text = await res.text()
   return (text ? JSON.parse(text) : null) as T
 }
+
+export async function aiosTelemetry<T = unknown>(): Promise<T> {
+  const res = await fetch("/api/aios/telemetry", {
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+
+  if (!res.ok) {
+    throw new ApiError(res.status, "AIOS telemetry request failed")
+  }
+
+  return await res.json() as T
+}
+

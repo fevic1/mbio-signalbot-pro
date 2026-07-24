@@ -19,6 +19,7 @@ import { MetaLearnerPanel } from "@/components/MetaLearnerPanel"
 import { CandleChart } from "@/components/CandleChart"
 import { BotsMiniList } from "@/components/BotsMiniList"
 import { AssetUniversePanel } from "@/components/AssetUniversePanel"
+import { AiosRuntimePanel } from "@/components/AiosRuntimePanel"
 
 type MonitorStatus = { id: string; label: string; status: "ok" | "warn"; detail?: string; }
 
@@ -570,6 +571,7 @@ function Dashboard() {
             )}
             {tab === "overview" && <div className="space-y-4">
               <OverviewPanel />
+              <AiosRuntimePanel />
               <MetaLearnerPanel />
             </div>}
             {tab === "assets" && <AssetUniversePanel onTradeAsset={(asset, side) => setTicketCtx({ type: "quick_trade", asset, side })} />}
