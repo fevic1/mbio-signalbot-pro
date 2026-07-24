@@ -5,3 +5,6 @@ __all__ = [
     "RecoveryProposal",
     "RecoveryPlanner",
 ]
+
+
+from .review import RecoveryReviewAdapter
