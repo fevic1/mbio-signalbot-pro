@@ -63,6 +63,26 @@ class AIOSRuntime:
 
     def start(self):
 
+        from aios.system.startup import (
+            StartupValidator,
+        )
+
+
+        validation = StartupValidator().validate(
+            self.container
+        )
+
+
+        if not validation["ready"]:
+
+            raise RuntimeError(
+                {
+                    "startup_failed":
+                    validation
+                }
+            )
+
+
         state = self.lifecycle.start()
 
         self.runtime_events.started(
