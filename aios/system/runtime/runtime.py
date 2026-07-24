@@ -83,6 +83,26 @@ class AIOSRuntime:
             )
 
 
+        from aios.system.startup import (
+            StartupHealthGate,
+        )
+
+
+        health = StartupHealthGate().check(
+            self.container
+        )
+
+
+        if not health["ready"]:
+
+            raise RuntimeError(
+                {
+                    "health_gate_failed":
+                    health
+                }
+            )
+
+
         state = self.lifecycle.start()
 
         self.runtime_events.started(
