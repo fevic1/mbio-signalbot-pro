@@ -364,7 +364,10 @@ async def hunter_monitor_loop(system=None):
 
 
                             else:
-                                results, provider = await analyze_batch(chunk, cfg)
+                                raise RuntimeError(
+                                    "AIOS orchestrator unavailable. "
+                                    "Hunter requires AIOS intelligence path."
+                                )
                             
                             # Build pending signals for hunting
                             pending_signals = []
