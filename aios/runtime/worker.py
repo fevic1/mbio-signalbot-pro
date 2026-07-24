@@ -7,9 +7,15 @@ class RuntimeWorker:
     def __init__(
         self,
         daemon,
+        projects=None,
     ):
 
         self.daemon = daemon
+
+        self.projects = (
+            projects
+            or []
+        )
 
         self.thread = None
 
@@ -40,7 +46,9 @@ class RuntimeWorker:
 
         try:
 
-            self.daemon.run()
+            self.daemon.start(
+                self.projects
+            )
 
         finally:
 
