@@ -67,6 +67,14 @@ class ExecutionPlanner:
                     ],
                 },
 
+                {
+                    "name": "execution_approval",
+                    "capability": "execution_approval",
+                    "depends_on": [
+                        "verification"
+                    ],
+                },
+
             ],
 
 
