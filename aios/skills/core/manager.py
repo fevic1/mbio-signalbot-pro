@@ -1,21 +1,71 @@
-from pathlib import Path
-import yaml
+from .registry import SkillRegistry
 
 
 class SkillManager:
 
-    def __init__(self, root):
-        self.root = Path(root)
 
-    def manifests(self):
-        for manifest in self.root.glob("*/manifest.yaml"):
-            data = yaml.safe_load(manifest.read_text())
-            data["path"] = manifest.parent
-            yield data
+    def __init__(
+        self,
+        registry=None,
+    ):
 
-    def enabled(self):
+        self.registry = (
+            registry
+            or SkillRegistry()
+        )
+
+
+    def install(
+        self,
+        skill,
+    ):
+
+        self.registry.register(
+            skill
+        )
+
+        skill.activate()
+
+        return skill
+
+
+    def remove(
+        self,
+        name,
+    ):
+
+        skill = self.registry.get(
+            name
+        )
+
+        if skill:
+
+            skill.deactivate()
+
+        return skill
+
+
+    def available(
+        self,
+    ):
+
         return [
-            m
-            for m in self.manifests()
-            if m.get("enabled", True)
+            skill
+            for skill in self.registry.skills.values()
+            if skill.status == "active"
         ]
+
+
+    def capabilities(
+        self,
+    ):
+
+        result = {}
+
+        for skill in self.available():
+
+            result[
+                skill.name
+            ] = skill.capabilities
+
+        return result
