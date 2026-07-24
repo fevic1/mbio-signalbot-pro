@@ -60,6 +60,13 @@ class AIOSRuntime:
         )
 
 
+        from aios.runtime.state import (
+            RuntimeStateStore,
+        )
+
+        self.state_store = RuntimeStateStore()
+
+
 
     def start(self):
 
@@ -105,6 +112,21 @@ class AIOSRuntime:
 
         state = self.lifecycle.start()
 
+
+        from aios.runtime.state import (
+            RuntimeState,
+        )
+
+        self.state_store.save(
+            RuntimeState(
+                status="ready",
+                pid=__import__(
+                    "os"
+                ).getpid(),
+            )
+        )
+
+
         self.runtime_events.started(
             {
                 "state":
@@ -132,6 +154,21 @@ class AIOSRuntime:
                 "aios_runtime"
             }
         )
+
+
+        from aios.runtime.state import (
+            RuntimeState,
+        )
+
+        self.state_store.save(
+            RuntimeState(
+                status="stopped",
+                pid=__import__(
+                    "os"
+                ).getpid(),
+            )
+        )
+
 
         return self.lifecycle.shutdown()
 
