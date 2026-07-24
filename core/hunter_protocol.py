@@ -467,6 +467,19 @@ async def hunter_monitor_loop(system=None):
 
                                     if confidence >= 50:
 
+                                        from aios.memory import LearningSearch
+
+                                        learning_search = LearningSearch()
+
+                                        learning_performance = []
+
+                                        for signal in pending_signals:
+                                            learning_performance.append(
+                                                learning_search.performance_summary(
+                                                    f"{signal.get('asset', 'UNKNOWN')}:{signal.get('signal', 'UNKNOWN')}"
+                                                )
+                                            )
+
                                         approval_task = system.orchestrator.submit_task(
                                             name="execution_approval",
                                             category="trading",
@@ -474,6 +487,7 @@ async def hunter_monitor_loop(system=None):
                                                 "signals": pending_signals,
                                                 "risk": risk_content,
                                                 "verification": verification_content,
+                                                "learning_performance": learning_performance,
                                             },
                                         )
 
