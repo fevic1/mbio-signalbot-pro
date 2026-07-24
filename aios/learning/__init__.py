@@ -11,3 +11,5 @@ __all__ = [
     "FeedbackStore",
     "OptimizerStore",
 ]
+
+from .trade_feedback import trade_to_feedback
