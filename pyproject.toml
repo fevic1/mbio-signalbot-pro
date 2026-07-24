@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "aios"
+version = "0.1.0"
+description = "AIOS autonomous operating system"
+requires-python = ">=3.12"
+
+
+[project.scripts]
+aios = "aios.cli.main:main"
+
+
+[tool.setuptools.packages.find]
+include = [
+    "aios*"
+]
