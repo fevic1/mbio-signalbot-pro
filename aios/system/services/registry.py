@@ -87,4 +87,92 @@ class AIOSServiceRegistry:
 
 
 
+
+        #
+        # Autonomous Operations
+        #
+
+        try:
+
+            from aios.projects.autonomous.manager import (
+                AutonomousProjectManager,
+            )
+
+            from aios.projects.autonomous import (
+                ProjectHealthMonitor,
+            )
+
+            from aios.projects.autonomous.decision import (
+                ProjectDecisionEngine,
+            )
+
+
+            project_manager = (
+                AutonomousProjectManager(
+                    ProjectHealthMonitor(),
+                    ProjectDecisionEngine(),
+                )
+            )
+
+
+            services[
+                "project_manager"
+            ] = project_manager
+
+
+        except ImportError:
+
+            pass
+
+
+
+        try:
+
+            from aios.supervisor import (
+                AutonomousSupervisor,
+            )
+
+
+            supervisor = (
+                AutonomousSupervisor(
+                    project_manager
+                )
+            )
+
+
+            services[
+                "supervisor"
+            ] = supervisor
+
+
+        except ImportError:
+
+            pass
+
+
+
+        try:
+
+            from aios.runtime import (
+                AIOSRuntimeDaemon,
+            )
+
+
+            runtime_daemon = (
+                AIOSRuntimeDaemon(
+                    supervisor
+                )
+            )
+
+
+            services[
+                "runtime_daemon"
+            ] = runtime_daemon
+
+
+        except ImportError:
+
+            pass
+
+
         return services
