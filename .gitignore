@@ -77,3 +77,5 @@ dashboard-v3/tsconfig.tsbuildinfo
 !tests/aios/
 !tests/aios/test_*.py
 aios.egg-info/
+__pycache__/
+*.pyc
