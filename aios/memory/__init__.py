@@ -7,6 +7,7 @@ from .decision import create_decision_event
 from .manager import MemoryManager
 from .models import MemoryEntry
 from .evaluator import DecisionEvaluator
+from .evaluation_runner import EvaluationRunner
 from .store import MemoryStore
 
 
@@ -20,6 +21,7 @@ __all__ = [
     "MemoryEvent",
     "create_decision_event",
     "DecisionEvaluator",
+    "EvaluationRunner",
 ]
 
 from .trade_bridge import record_trade_outcome
