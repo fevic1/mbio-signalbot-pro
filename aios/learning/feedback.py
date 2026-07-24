@@ -1,28 +1,53 @@
-from dataclasses import dataclass, field
-from datetime import datetime
+class FeedbackAnalyzer:
 
 
-@dataclass
-class ExecutionFeedback:
+    def analyze(
+        self,
+        result,
+    ):
 
-    execution_id: str
+        confidence = result.get(
+            "confidence",
+            0,
+        )
 
-    success: bool
 
-    score: float
+        issues = result.get(
+            "issues",
+            [],
+        )
 
-    observations: list[str] = field(default_factory=list)
 
-    asset: str = ""
+        recommendations = []
 
-    strategy: str = ""
 
-    signal: str = ""
+        quality = "acceptable"
 
-    pnl: float = 0.0
 
-    confidence: float = 0.0
+        if confidence < 0.5:
 
-    timestamp: str = field(
-        default_factory=lambda: datetime.utcnow().isoformat()
-    )
+            quality = "weak"
+
+            recommendations.append(
+                "Improve execution reliability"
+            )
+
+
+        if issues:
+
+            quality = "needs_review"
+
+            recommendations.append(
+                "Investigate execution issues"
+            )
+
+
+        return {
+            "agent": result.get(
+                "agent"
+            ),
+            "quality": quality,
+            "confidence": confidence,
+            "issues": issues,
+            "recommendations": recommendations,
+        }
