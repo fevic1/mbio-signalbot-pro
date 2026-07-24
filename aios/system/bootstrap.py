@@ -13,7 +13,7 @@ from aios.capabilities.health import CapabilityHealthManager
 from aios.registry import CapabilityRegistry
 from aios.providers.manager import provider_manager
 from aios.runtime import TaskManager
-from aios.events import EventBus
+from aios.events import EventBus, ProviderExecutionMonitor
 
 from aios.bootstrap import CapabilityBootstrap
 
@@ -74,6 +74,11 @@ class SystemBootstrap:
         )
 
         system.provider_manager = provider_manager
+
+        system.provider_execution_monitor = ProviderExecutionMonitor(
+            event_bus
+        )
+
         system.skill_registry = SkillLoader(
             system=system,
         ).load()
