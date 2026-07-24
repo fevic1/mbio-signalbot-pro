@@ -1,3 +1,5 @@
+import json
+import re
 from time import perf_counter
 
 from aios.intelligence.llm_adapter import LLMAdapter
@@ -18,6 +20,8 @@ class CapabilityExecutor:
         self,
         system,
     ):
+        self.system = system
+
         self.adapter = LLMAdapter(
             provider_pool,
             system,
@@ -74,17 +78,65 @@ class CapabilityExecutor:
         start = perf_counter()
 
         response = await chat(
-            provider_request
+            provider_request,
+            event_bus=self.system.event_bus,
+            capability=request.capability,
         )
 
         latency = perf_counter() - start
+
+        content = response.content
+
+        parsed = {}
+
+        if isinstance(content, str):
+            cleaned = re.sub(
+                r"```json\\s*|```",
+                "",
+                content,
+            )
+
+            start = cleaned.find("{")
+            end = cleaned.rfind("}")
+
+            if start != -1 and end > start:
+                try:
+                    parsed = json.loads(
+                        cleaned[start:end + 1]
+                    )
+                except Exception:
+                    parsed = {}
+
+        content = response.content
+
+        if isinstance(content, str):
+            try:
+                content = json.loads(content)
+            except Exception:
+                pass
+
+        final_content = parsed or content
+
+        if isinstance(final_content, dict):
+
+            confidence = final_content.get(
+                "confidence"
+            )
+
+            if confidence is not None:
+
+                if confidence == 0:
+                    final_content["confidence"] = 0.5
+
+                elif confidence > 1:
+                    final_content["confidence"] = confidence / 100
 
         return {
             "success": True,
             "capability": request.capability,
             "provider": response.provider,
             "model": response.model,
-            "content": response.content,
+            "content": final_content,
             "latency": latency,
             "cost": 0.0,
             "attempt": attempt,

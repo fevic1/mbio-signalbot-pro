@@ -57,7 +57,7 @@ def check_stagnant_positions() -> List[str]:
                 
     return stagnant_assets
 
-async def run_hunter_protocol_idle(pending_signals: List[Dict], chat_id: int):
+async def run_hunter_protocol_idle(pending_signals: List[Dict], chat_id: int, system=None):
     """Main Hunter Protocol: Swap stagnant positions OR fill empty slots with high-conviction assets."""
     logger.info("🏹 Hunter Protocol: Scanning for swap or fill opportunities...")
     
@@ -218,9 +218,22 @@ async def _execute_fill(candidate: Dict):
     except Exception as e:
         logger.error(f"❌ Hunter Protocol: Fill execution failed: {e}")
 
-async def hunter_monitor_loop():
+async def hunter_monitor_loop(system=None):
     """Continuous background monitor. Checks stagnant positions every 5 mins, analyzes assets in staggered 30-min phases."""
     logger.info("🏹 Hunter Monitor: Starting continuous background monitoring (Staggered 30-min phases)...")
+    if system and system.event_bus:
+        from aios.events import Event
+
+        system.event_bus.publish(
+            Event(
+                "hunter.scan.started",
+                source="hunter_protocol",
+                payload={
+                    "interval": 300,
+                },
+            )
+        )
+
     
     current_phase = 1  # Tracks which phase to run (1, 2, or 3)
     iteration = 0      # Tracks 5-minute intervals
@@ -251,7 +264,15 @@ async def hunter_monitor_loop():
                     
                     # Analyze all assets EXCEPT the ones we already have open
                     open_assets = set(state.OPEN_POSITIONS.keys())
-                    items = {asset: {} for asset in assets if asset not in open_assets}
+                    from core.data_fetcher import get_mtf_data
+
+                    items = {}
+
+                    for asset in assets:
+                        if asset in open_assets:
+                            continue
+
+                        items[asset] = get_mtf_data(asset)
                     
                     if not items:
                         logger.info("🏹 Hunter Monitor: No new assets to analyze.")
@@ -266,7 +287,84 @@ async def hunter_monitor_loop():
                         
                         if chunk:
                             logger.info(f"🧠 Analyzing asset Phase {current_phase} ({len(chunk)} assets)...")
-                            results, provider = await analyze_batch(chunk, cfg)
+                            results = {}
+                            provider = "aios"
+
+                            if system and system.orchestrator:
+
+                                logger.info("🧠 AIOS Hunter bridge activated")
+
+                                task = system.orchestrator.submit_task(
+                                    name="market_analysis",
+                                    category="trading",
+                                    context={
+                                        "market_data": chunk
+                                    },
+                                )
+
+                                system.orchestrator.assign_agent(
+                                    task["id"],
+                                    "market_analysis",
+                                )
+
+                                logger.info(
+                                    f"🧠 AIOS executing task {task['id']}"
+                                )
+
+                                execution = await system.orchestrator.execute_task(
+                                    task["id"]
+                                )
+
+                                logger.info(
+                                    f"🧠 AIOS execution complete: {execution.status}"
+                                )
+
+                                market_result = execution.results.get(
+                                    "market_analysis",
+                                    {}
+                                )
+
+                                content = market_result.get(
+                                    "content",
+                                    {}
+                                )
+
+                                if isinstance(content, dict):
+
+                                    confidence = content.get(
+                                        "confidence",
+                                        0,
+                                    )
+
+                                    if confidence <= 1:
+                                        confidence *= 100
+
+                                    results = {
+                                        asset: {
+                                            "signal": (
+                                                "BUY"
+                                                if content.get("trend") == "bullish"
+                                                else "SELL"
+                                                if content.get("trend") == "bearish"
+                                                else "HOLD"
+                                            ),
+                                            "confidence": int(confidence),
+                                            "reasoning": {
+                                                "trend": content.get("trend"),
+                                                "momentum": content.get("momentum"),
+                                                "volatility": content.get("volatility"),
+                                                "risk": content.get("risk"),
+                                            },
+                                        }
+                                        for asset in chunk
+                                    }
+
+                                else:
+                                    results = {}
+
+
+                            else:
+                                results, provider = await analyze_batch(chunk, cfg)
                             
                             # Build pending signals for hunting
                             pending_signals = []
