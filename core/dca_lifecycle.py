@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timezone
 import core.state as state
 from core.trade_ledger import record_trade
+from aios.memory import record_trade_outcome
 
 logger = logging.getLogger("DcaLifecycle")
 
@@ -91,7 +92,20 @@ async def _execute_reentry(asset: str, chat_id: str, params: dict = None) -> Non
             entry_price = get_current_price(f"{asset}-USD")
 
         logger.info(f"⚡ AUTO-DCA RE-ENTRY: {asset} {direction} @ ${entry_price:.2f} (base={base_size})")
-        record_trade("open", asset, "DCA", side, base_size, entry_price, metadata={"levels": max_levels, "spacing_pct": spacing_pct})
+        trade_record = record_trade(
+            "open",
+            asset,
+            "DCA",
+            side,
+            base_size,
+            entry_price,
+            metadata={
+                "levels": max_levels,
+                "spacing_pct": spacing_pct,
+            },
+        )
+
+        record_trade_outcome(trade_record)
 
         # Place limit safety orders for levels 1+
         levels_placed = 1

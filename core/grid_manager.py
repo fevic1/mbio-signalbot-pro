@@ -229,11 +229,24 @@ class GridManager:
             config["total_realized_pnl"] += cycle_pnl
 
             from core.trade_ledger import record_trade
-            record_trade("grid_cycle", asset, "GRID_REVERSAL", new_node["side"],
-                         filled_node["size"], fill_price, pnl=cycle_pnl,
-                         metadata={"level": filled_node["level_index"],
-                                   "cycle": filled_node["filled_count"],
-                                   "next_price": new_node["price"]})
+            from aios.memory import record_trade_outcome
+
+            trade_record = record_trade(
+                "grid_cycle",
+                asset,
+                "GRID_REVERSAL",
+                new_node["side"],
+                filled_node["size"],
+                fill_price,
+                pnl=cycle_pnl,
+                metadata={
+                    "level": filled_node["level_index"],
+                    "cycle": filled_node["filled_count"],
+                    "next_price": new_node["price"],
+                },
+            )
+
+            record_trade_outcome(trade_record)
 
         # Persist updated grid state after reversal flip
         import core.state as _state
