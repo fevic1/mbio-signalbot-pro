@@ -1,5 +1,7 @@
 from collections import defaultdict
 
+from .optimizer_store import OptimizerStore
+
 
 class PlannerOptimizer:
 
@@ -10,6 +12,7 @@ class PlannerOptimizer:
         self.capability_scores = defaultdict(list)
 
         self.recommendations = []
+        self.store = OptimizerStore()
 
 
     def update(
@@ -33,6 +36,11 @@ class PlannerOptimizer:
             key
         ].append(
             feedback.score
+        )
+
+        self.store.save_score(
+            key,
+            feedback.score,
         )
 
 
