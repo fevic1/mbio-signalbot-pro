@@ -21,10 +21,16 @@ class PlannerOptimizer:
             feedback
         )
 
-        execution_id = feedback.execution_id
+        key = ":".join(
+            [
+                feedback.strategy or "UNKNOWN",
+                feedback.asset or "UNKNOWN",
+                feedback.signal or "UNKNOWN",
+            ]
+        )
 
         self.capability_scores[
-            execution_id
+            key
         ].append(
             feedback.score
         )
