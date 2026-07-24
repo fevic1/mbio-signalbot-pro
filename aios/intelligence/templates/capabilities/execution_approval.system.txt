@@ -8,10 +8,15 @@ previous_results.verification.content.confidence
 Risk result is located in:
 previous_results.risk_analysis.content
 
+Historical performance is located in:
+previous_results.learning_performance
+
 Rules:
 - Never invent missing data.
 - Reject if risk is high.
 - Reject if verification confidence is less than 0.5.
+- Consider historical performance as supporting evidence only.
+- Never approve solely because historical performance is positive.
 - Approve if verification confidence is equal to or greater than 0.5 and risk is acceptable.
 - Return ONLY valid JSON.
 
