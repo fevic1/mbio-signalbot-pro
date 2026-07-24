@@ -1,10 +1,33 @@
-def memory(container):
+def memory(
+    container,
+):
 
     router = container.get(
         "memory_router"
     )
 
-    return {
-        "memory_available":
-            router is not None,
+    if router is None:
+
+        return {
+            "status":
+            "unavailable"
+        }
+
+
+    result = {
+        "status":
+        "available"
     }
+
+
+    if hasattr(
+        router,
+        "describe",
+    ):
+
+        result["details"] = (
+            router.describe()
+        )
+
+
+    return result
