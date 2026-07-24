@@ -464,11 +464,52 @@ async def hunter_monitor_loop(system=None):
                                         confidence *= 100
 
                                     if confidence >= 50:
-                                        await run_hunter_protocol_idle(
-                                            pending_signals,
-                                            None,
-                                            system=system,
+
+                                        approval_task = system.orchestrator.submit_task(
+                                            name="execution_approval",
+                                            category="trading",
+                                            context={
+                                                "signals": pending_signals,
+                                                "risk": risk_content,
+                                                "verification": verification_content,
+                                            },
                                         )
+
+                                        system.orchestrator.assign_agent(
+                                            approval_task["id"],
+                                            "execution_approval",
+                                        )
+
+                                        approval_execution = await system.orchestrator.execute_task(
+                                            approval_task["id"]
+                                        )
+
+                                        approval_result = approval_execution.results.get(
+                                            "execution_approval",
+                                            {}
+                                        )
+
+                                        approval_content = approval_result.get(
+                                            "content",
+                                            {}
+                                        )
+
+                                        approved = approval_content.get(
+                                            "approved",
+                                            False,
+                                        )
+
+                                        if approved:
+                                            await run_hunter_protocol_idle(
+                                                pending_signals,
+                                                None,
+                                                system=system,
+                                            )
+                                        else:
+                                            logger.warning(
+                                                "Hunter blocked by AIOS execution approval gate"
+                                            )
+
                                     else:
                                         logger.warning(
                                             "Hunter blocked by AIOS verification gate"
