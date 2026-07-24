@@ -1,18 +1,17 @@
-def stop(
-    runtime,
-):
+from aios.runtime.state import (
+    RuntimeControlStore,
+)
 
-    if runtime:
 
-        runtime.shutdown()
 
-        return {
-            "status":
-            "stopped"
-        }
+def stop():
+
+    control = RuntimeControlStore()
+
+    control.request_shutdown()
 
 
     return {
         "status":
-        "not_running"
+        "shutdown_requested"
     }

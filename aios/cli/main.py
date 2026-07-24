@@ -8,6 +8,7 @@ from aios.cli.commands.health import health
 from aios.cli.commands.memory import memory
 from aios.cli.commands.events import events
 from aios.cli.commands.status import status
+from aios.cli.commands.stop import stop as stop_command
 
 
 def start():
@@ -67,7 +68,9 @@ def main():
 
     elif args.command == "stop":
 
-        stop()
+        print(
+            stop_command()
+        )
 
 
     elif args.command == "status":
