@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "required": [
+    "approved",
+    "reason"
+  ],
+  "properties": {
+    "approved": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string"
+    }
+  }
+}

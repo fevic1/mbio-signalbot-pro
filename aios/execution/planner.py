@@ -43,6 +43,33 @@ class ExecutionPlanner:
             ],
 
 
+            "trading": [
+
+                {
+                    "name": "market_analysis",
+                    "capability": "market_analysis",
+                    "depends_on": [],
+                },
+
+                {
+                    "name": "risk_analysis",
+                    "capability": "risk_analysis",
+                    "depends_on": [
+                        "market_analysis"
+                    ],
+                },
+
+                {
+                    "name": "verification",
+                    "capability": "verification",
+                    "depends_on": [
+                        "risk_analysis"
+                    ],
+                },
+
+            ],
+
+
             "engineering": [
 
                 {
