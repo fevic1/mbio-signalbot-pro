@@ -3,6 +3,7 @@ from .indexer import MemoryIndexer
 from .obsidian import ObsidianWriter
 from .event_store import EventStore
 from .events import MemoryEvent
+from .decision import create_decision_event
 from .manager import MemoryManager
 from .models import MemoryEntry
 from .store import MemoryStore
@@ -14,4 +15,7 @@ __all__ = [
     "MemoryEntry",
     "MemoryStore",
     "MemoryIndexer",
+    "EventStore",
+    "MemoryEvent",
+    "create_decision_event",
 ]
