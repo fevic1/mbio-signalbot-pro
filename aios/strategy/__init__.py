@@ -12,3 +12,5 @@ from .evaluator import StrategyEvaluator
 from .evaluation_store import StrategyEvaluationStore
 
 from .workflow import StrategyWorkflow
+
+from .event_handler import StrategyEventHandler
