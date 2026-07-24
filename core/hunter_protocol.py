@@ -502,6 +502,32 @@ async def hunter_monitor_loop(system=None):
                                         )
 
                                         if approved:
+
+                                            from aios.memory import (
+                                                EventStore,
+                                                create_decision_event,
+                                            )
+
+                                            event_store = EventStore()
+
+                                            for signal in pending_signals:
+
+                                                event = create_decision_event(
+                                                    asset=signal.get("asset"),
+                                                    signal=signal.get("signal"),
+                                                    market_analysis=content,
+                                                    risk_analysis=risk_content,
+                                                    verification=verification_content,
+                                                    approval=approval_content,
+                                                    executed=True,
+                                                )
+
+                                                event_store.append(event)
+
+                                            logger.info(
+                                                "🧠 Hunter decision stored in AIOS memory"
+                                            )
+
                                             await run_hunter_protocol_idle(
                                                 pending_signals,
                                                 None,
