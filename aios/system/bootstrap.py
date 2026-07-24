@@ -1,118 +1,33 @@
-from config.loader import config
-from aios.orchestrator import AIOSOrchestrator
-from aios.system.system import AIOSSystem
+from .container import AIOSContainer
 
-from aios.project import ProjectManager
-from aios.council import CouncilManager
+from aios.events import EventBus
 
-from aios.execution import ExecutionPlanner
-from aios.learning import PlannerOptimizer
-from aios.skills.loader import SkillLoader
-from aios.capabilities.health import CapabilityHealthManager
 
-from aios.registry import CapabilityRegistry
-from aios.providers.manager import provider_manager
-from aios.runtime import TaskManager
-from aios.events import EventBus, ProviderExecutionMonitor
-from aios.strategy import StrategyEventHandler
 
-from aios.bootstrap import CapabilityBootstrap
+class AIOSBootstrap:
 
-from aios.governance import (
-    ApprovalManager,
-    AuditLogger,
-)
 
-from aios.decision import (
-    DecisionEngine,
-    DecisionPolicy,
-)
+    def __init__(self):
 
-from aios.workflows.decision_workflow import DecisionWorkflow
+        self.container = AIOSContainer()
 
-from aios.workflows import (
-    WorkflowEngine,
-    MultiAgentWorkflow,
-)
-class SystemBootstrap:
 
-    def __init__(self, memory=None):
-        self.memory = memory
 
-    def boot(self):
+    def initialize(self):
 
-        config.reload()
-
-        registry = CapabilityRegistry()
-        task_manager = TaskManager()
-        approval = ApprovalManager()
-        audit = AuditLogger()
         event_bus = EventBus()
 
-        strategy_event_handler = StrategyEventHandler(
-            event_bus=event_bus,
+
+        self.container.register(
+            "event_bus",
+            event_bus,
         )
 
-        event_bus.subscribe(
-            "strategy.evaluation.requested",
-            strategy_event_handler.handle,
-        )
-        planner_optimizer = PlannerOptimizer()
-        execution_planner = ExecutionPlanner(
-            optimizer=planner_optimizer,
-        )
-        capability_health = CapabilityHealthManager()
 
-        CapabilityBootstrap(
-            registry=registry,
-        ).load_capabilities()
+        return self.container
 
-        decision = DecisionEngine(
-            approval_manager=approval,
-            audit=audit,
-            event_bus=event_bus,
-        )
-        system = AIOSSystem(
-            event_bus=event_bus,
-            registry=registry,
-            task_manager=task_manager,
-            approval_manager=approval,
-            audit_logger=audit,
-            decision_engine=decision,
-            memory_manager=self.memory,
-            execution_planner=execution_planner,
-        )
 
-        system.provider_manager = provider_manager
 
-        system.provider_execution_monitor = ProviderExecutionMonitor(
-            event_bus
-        )
+    def describe(self):
 
-        system.strategy_event_handler = strategy_event_handler
-
-        system.skill_registry = SkillLoader(
-            system=system,
-        ).load()
-
-        system.capability_health = capability_health
-        system.capability_registry = registry
-
-        system.council = CouncilManager(
-            event_bus=event_bus,
-        )
-        system.project_manager = ProjectManager()
-        system.decision_policy = DecisionPolicy()
-
-        system.orchestrator = AIOSOrchestrator(system)
-
-        system.workflow_engine = WorkflowEngine(system)
-
-        system.multi_agent_workflow = MultiAgentWorkflow(system)
-
-        system.decision_workflow = DecisionWorkflow(system)
-
-        # inject council into workflow
-        system.decision_workflow.council = system.council
-
-        return system
+        return self.container.describe()
