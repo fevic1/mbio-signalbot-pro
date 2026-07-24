@@ -15,6 +15,8 @@ from .stores import (
     FeedbackMemoryStore,
 )
 
+from .router import MemoryRouter
+
 
 __all__ = [
 
@@ -30,4 +32,6 @@ __all__ = [
     "KnowledgeMemoryStore",
     "OperationalMemoryStore",
     "FeedbackMemoryStore",
+
+    "MemoryRouter",
 ]
