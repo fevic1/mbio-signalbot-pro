@@ -384,9 +384,61 @@ async def hunter_monitor_loop(system=None):
                                         "data": data
                                     })
                             
-                            # Execute hunt (swap or fill)
+                            # Execute hunt through AIOS risk gate
                             if pending_signals:
-                                await run_hunter_protocol_idle(pending_signals, None)
+
+                                if not system or not system.orchestrator:
+                                    raise RuntimeError(
+                                        "AIOS unavailable. Execution blocked."
+                                    )
+
+                                risk_task = system.orchestrator.submit_task(
+                                    name="risk_analysis",
+                                    category="trading",
+                                    context={
+                                        "signals": pending_signals,
+                                    },
+                                )
+
+                                system.orchestrator.assign_agent(
+                                    risk_task["id"],
+                                    "risk_analysis",
+                                )
+
+                                risk_execution = await system.orchestrator.execute_task(
+                                    risk_task["id"]
+                                )
+
+                                risk_result = risk_execution.results.get(
+                                    "risk_analysis",
+                                    {}
+                                )
+
+                                risk_content = risk_result.get(
+                                    "content",
+                                    {}
+                                )
+
+                                risk_level = (
+                                    risk_content
+                                    .get("risk", {})
+                                    .get("analysis", "high")
+                                )
+
+                                if risk_level != "high":
+
+                                    await run_hunter_protocol_idle(
+                                        pending_signals,
+                                        None,
+                                        system=system,
+                                    )
+
+                                else:
+
+                                    logger.warning(
+                                        "🏹 Hunter blocked by AIOS risk gate"
+                                    )
+
                             else:
                                 logger.info("🏹 Hunter Monitor: No hunted candidates in this phase. All healthy.")
                         else:
