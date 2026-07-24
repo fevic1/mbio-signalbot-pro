@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 
 class PromptBuilder:
@@ -33,7 +34,8 @@ class PromptBuilder:
             ).read_text()
 
         system = system_template.format(
-            permission=context["permission"],
+            capability=capability,
+            permission=context.get("permission", ""),
         )
 
         user = self.user_template.format(
@@ -42,6 +44,19 @@ class PromptBuilder:
             results=context.get("results"),
             memory=context.get("memory"),
         )
+
+        if capability == "market_analysis":
+
+            market_data = (
+                context.get("market_data")
+                or context.get("metadata", {})
+                .get("market_data", {})
+            )
+
+            user += (
+                "\n\nMARKET DATA:\n"
+                + str(market_data)
+            )
 
         schema_file = (
             self.root.parent
@@ -55,9 +70,19 @@ class PromptBuilder:
             else "{}"
         )
 
+        try:
+            schema_fields = json.loads(schema).get(
+                "required",
+                []
+            )
+        except Exception:
+            schema_fields = []
+
         system += (
-            "\n\nReturn JSON matching:\n"
-            + schema
+            "\n\nOutput requirements:\n"
+            "Return ONLY valid JSON.\n"
+            "Required fields: "
+            + ", ".join(schema_fields)
         )
 
         return {
