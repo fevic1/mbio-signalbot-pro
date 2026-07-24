@@ -83,10 +83,13 @@ class ExecutionExecutor:
 
             while True:
 
+                self.scheduler.update()
+
                 if not await self.dispatcher.dispatch(
                     self.worker
                 ):
-                    break
+                    if not self.scheduler.has_work():
+                        break
 
             context.complete()
 
