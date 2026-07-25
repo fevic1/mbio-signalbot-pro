@@ -11,6 +11,7 @@ from core.exchange_limits import get_exchange_limits
 
 
 logger = logging.getLogger(__name__)
+from execution.execution_context import ExecutionContext
 
 
 def _emit_execution_event(event_type, payload):
@@ -251,7 +252,8 @@ class HLExecutor:
         size: float,
         limit_price: Optional[float] = None,
         order_type: str = "Limit",
-        reduce_only: bool = False
+        reduce_only: bool = False,
+        execution_context=None
     ) -> Dict:
         """Place a synchronous order (call from async context with asyncio.to_thread)."""
         try:
@@ -302,9 +304,9 @@ class HLExecutor:
                     "price": px,
                     "reduce_only": reduce_only,
                     "order_type": order_type,
-                    "execution_label": getattr(self, "_execution_label", None),
-                    "strategy": getattr(self, "_strategy", None),
-                    "regime": getattr(self, "_regime", None),
+                    "execution_label": getattr(execution_context, "execution_label", None),
+                    "strategy": getattr(execution_context, "strategy", None),
+                    "regime": getattr(execution_context, "regime", None),
                 }
             )
 
@@ -335,9 +337,9 @@ class HLExecutor:
                             "order_id": f.get("oid"),
                             "avg_price": f.get("avgPx"),
                             "order_type": order_type,
-                            "execution_label": getattr(self, "_execution_label", None),
-                            "strategy": getattr(self, "_strategy", None),
-                            "regime": getattr(self, "_regime", None),
+                            "execution_label": getattr(execution_context, "execution_label", None),
+                            "strategy": getattr(execution_context, "strategy", None),
+                            "regime": getattr(execution_context, "regime", None),
                         }
                     )
 
@@ -452,9 +454,12 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
                 }
         
         # Delegate to the class method which handles all execution logic
-        executor._execution_label = _execution_label
-        executor._strategy = _strategy
-        executor._regime = _regime
+        execution_context = ExecutionContext(
+            execution_label=_execution_label,
+            strategy=_strategy,
+            regime=_regime,
+            order_type=_order_type
+        )
 
         result = executor.place_order(
             coin=coin,
@@ -462,7 +467,8 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
             size=size,
             limit_price=limit_px,
             order_type=_order_type,
-            reduce_only=kwargs.get("reduce_only", False)
+            reduce_only=kwargs.get("reduce_only", False),
+            execution_context=execution_context
         )
         # Attach strategy metadata to result for downstream consumers
         if result and isinstance(result, dict):
