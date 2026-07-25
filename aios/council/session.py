@@ -1,30 +1,84 @@
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import uuid
 
 
-@dataclass
 class CouncilSession:
 
-    question: str
 
-    id: str = field(
-        default_factory=lambda:
-        str(uuid.uuid4())
-    )
+    def __init__(
+        self,
+        question,
+    ):
 
-    responses: list = field(
-        default_factory=list
-    )
+        self.id = str(
+            uuid.uuid4()
+        )
 
-    decision: dict | None = None
+        self.question = question
 
-    created_at: str = field(
-        default_factory=lambda:
-        datetime.now(
-            timezone.utc
-        ).isoformat()
-    )
+        self.status = "created"
+
+        self.participants = []
+
+        self.assignments = []
+
+        self.messages = []
+
+        self.artifacts = []
+
+        self.responses = []
+
+        self.decision = None
+
+        self.context = {}
+
+        self.created_at = (
+            datetime.now(
+                timezone.utc
+            ).isoformat()
+        )
+
+
+    def add_participant(
+        self,
+        agent,
+    ):
+
+        if agent not in self.participants:
+
+            self.participants.append(
+                agent
+            )
+
+
+    def add_assignment(
+        self,
+        assignment,
+    ):
+
+        self.assignments.append(
+            assignment
+        )
+
+
+    def add_message(
+        self,
+        message,
+    ):
+
+        self.messages.append(
+            message
+        )
+
+
+    def add_artifact(
+        self,
+        artifact,
+    ):
+
+        self.artifacts.append(
+            artifact
+        )
 
 
     def add_response(
@@ -37,12 +91,12 @@ class CouncilSession:
         )
 
 
-    def finalize(
+    def set_context(
         self,
-        decision,
+        context,
     ):
 
-        self.decision = decision
+        self.context = context
 
 
 
@@ -53,24 +107,61 @@ class CouncilSession:
 
         self.decision = decision
 
+        self.status = "completed"
 
 
-    def status(self):
 
-        return {
-            "id": self.id,
-            "question": self.question,
-            "response_count": len(self.responses),
-            "decision": self.decision,
-        }
-
-
-    def describe(self):
+    def describe(
+        self,
+    ):
 
         return {
-            "id": self.id,
-            "question": self.question,
-            "responses": self.responses,
-            "decision": self.decision,
-            "created_at": self.created_at,
+
+            "id":
+                self.id,
+
+            "question":
+                self.question,
+
+            "status":
+                self.status,
+
+            "participants":
+                self.participants,
+
+            "assignments":
+                [
+                    a.describe()
+                    if hasattr(a, "describe")
+                    else a
+                    for a in self.assignments
+                ],
+
+            "messages":
+                [
+                    m.describe()
+                    if hasattr(m, "describe")
+                    else m
+                    for m in self.messages
+                ],
+
+            "artifacts":
+                [
+                    a.describe()
+                    if hasattr(a, "describe")
+                    else a
+                    for a in self.artifacts
+                ],
+
+            "responses":
+                self.responses,
+
+            "context":
+                self.context,
+
+            "decision":
+                self.decision,
+
+            "created_at":
+                self.created_at,
         }

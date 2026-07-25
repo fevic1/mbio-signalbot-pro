@@ -1,13 +1,11 @@
 from .session import CouncilSession
-
-from .validator import PlanValidator
-from .critic import Critic
-from .auditor import Auditor
-from .policy import PolicyEngine
-from .consensus import Consensus
-from .memory import CouncilMemory
-
-from aios.events import Event
+from .delegation import DelegationManager
+from .messages import CouncilCommunication
+from .artifacts import ArtifactStore
+from .governance import CouncilGovernance
+from aios.audit.logger import AuditLogger
+from aios.audit.decision_records import DecisionRecordStore
+from aios.governance.runtime.decision_builder import DecisionRecordBuilder
 
 
 class CouncilManager:
@@ -15,28 +13,63 @@ class CouncilManager:
 
     def __init__(
         self,
-        event_bus=None,
         agent_manager=None,
+        event_bus=None,
         communication=None,
+        delegation=None,
+        artifacts=None,
+        audit=None,
     ):
-
-        self.event_bus = event_bus
 
         self.agent_manager = agent_manager
 
-        self.communication = communication
+        self.event_bus = event_bus
 
-        self.validator = PlanValidator()
+        self.delegation = (
+            delegation
+            if delegation
+            else DelegationManager()
+        )
 
-        self.critic = Critic()
+        self.communication = (
+            communication
+            if communication
+            else CouncilCommunication()
+        )
 
-        self.auditor = Auditor()
+        self.artifacts = (
+            artifacts
+            if artifacts
+            else ArtifactStore()
+        )
 
-        self.policy = PolicyEngine()
+        from .report import CouncilReportBuilder
+        from .consensus_adapter import ConsensusAdapter
 
-        self.consensus = Consensus()
+        self.report_builder = CouncilReportBuilder()
+
+        self.consensus_adapter = ConsensusAdapter()
+
+        self.governance = CouncilGovernance()
+
+        self.audit = (
+            audit
+            if audit
+            else AuditLogger()
+        )
+
+        self.decision_builder = DecisionRecordBuilder()
+
+        self.decision_records = DecisionRecordStore()
+
+        from .memory import CouncilMemory
+        from .memory_bridge import CouncilMemoryBridge
 
         self.memory = CouncilMemory()
+
+        self.memory_bridge = CouncilMemoryBridge(
+            self.memory
+        )
 
         self.sessions = []
 
@@ -59,7 +92,7 @@ class CouncilManager:
 
 
 
-    def assign(
+    def assign_agents(
         self,
         session,
         agents,
@@ -67,18 +100,57 @@ class CouncilManager:
 
         assignments = []
 
+
         for agent in agents:
 
+            session.add_participant(
+                agent
+            )
+
+
+            assignment = (
+                self.delegation.assign(
+                    agent,
+                    session.question,
+                )
+            )
+
+
+            session.add_assignment(
+                assignment
+            )
+
+
             assignments.append(
-                {
-                    "agent": agent,
-                    "question": session.question,
-                    "status": "assigned",
-                }
+                assignment
             )
 
 
         return assignments
+
+
+
+    def send_message(
+        self,
+        session,
+        sender,
+        receiver,
+        content,
+    ):
+
+        message = (
+            self.communication.send(
+                sender,
+                receiver,
+                content,
+            )
+        )
+
+        session.add_message(
+            message
+        )
+
+        return message
 
 
 
@@ -89,177 +161,88 @@ class CouncilManager:
         response,
     ):
 
+        item = {
+            "agent": agent,
+            "response": response,
+        }
+
+
         session.add_response(
-            {
-                "agent": agent,
-                "response": response,
-            }
+            item
         )
 
 
+        return item
 
-    def review(
+
+
+    def add_artifact(
         self,
-        plan,
+        session,
+        artifact,
     ):
 
-        if self.event_bus:
-
-            self.event_bus.publish(
-                Event(
-                    "council_review_started",
-                    source="council",
-                    payload={
-                        "plan": plan,
-                    },
-                )
-            )
-
-
-        validation_issues = (
-            self.validator.validate(
-                plan
-            )
+        self.artifacts.add(
+            artifact
         )
 
-
-        validator = {
-            "valid":
-                len(validation_issues) == 0,
-
-            "issues":
-                validation_issues,
-        }
-
-
-        critic = self.critic.review(
-            plan
+        session.add_artifact(
+            artifact
         )
 
-
-        policy = self.policy.review(
-            plan
-        )
-
-
-        report = {
-
-            "validator":
-                validator,
-
-            "critic":
-                critic,
-
-            "policy":
-                policy,
-        }
-
-
-        report["consensus"] = (
-            self.consensus.vote(
-                report
-            )
-        )
-
-
-        self.memory.store(
-            report
-        )
-
-
-        if self.event_bus:
-
-            self.event_bus.publish(
-                Event(
-                    "council_review_completed",
-                    source="council",
-                    payload=report,
-                )
-            )
-
-
-        return report
+        return artifact
 
 
 
-    def audit(
+    def get_previous_context(
         self,
-        execution,
+        question,
     ):
 
-        report = self.auditor.audit(
-            execution
+        return self.memory_bridge.get_context(
+            question
         )
-
-
-        self.memory.store(
-            report
-        )
-
-
-        return report
-
-
 
 
     def finalize(
         self,
         session,
+        consensus,
     ):
 
-        plan = {
-            "question":
-                session.question,
-
-            "responses":
-                session.responses,
-        }
-
-
-        validation_issues = (
-            self.validator.validate(
-                plan
-            )
+        report = self.report_builder.build(
+            session
         )
 
-
-        validator = {
-            "valid":
-                len(validation_issues) == 0,
-
-            "issues":
-                validation_issues,
-        }
-
-
-        critic = self.critic.review(
-            plan
-        )
-
-
-        policy = self.policy.review(
-            plan
-        )
-
-
-        report = {
-
-            "validator":
-                validator,
-
-            "critic":
-                critic,
-
-            "policy":
-                policy,
-
-            "responses":
-                session.responses,
-        }
-
-
-        decision = self.consensus.vote(
+        normalized = self.consensus_adapter.build(
             report
+        )
+
+        decision = consensus.vote(
+            normalized
+        )
+
+        governance = self.governance.validate(
+            normalized
+        )
+
+        decision["governance"] = governance
+
+        if not governance["passed"]:
+
+            decision["approved"] = False
+
+
+        decision_record = self.decision_builder.build(
+            decision,
+            session,
+            governance,
+        )
+
+        decision["record_id"] = decision_record["id"]
+
+        self.decision_records.append(
+            decision_record
         )
 
 
@@ -267,39 +250,28 @@ class CouncilManager:
             decision
         )
 
-
-        self.memory.store(
-            {
-                "type":
-                    "council_decision",
-
-                "session":
-                    session.describe(),
-            }
+        self.audit.record(
+            session,
+            decision,
         )
 
+        self.memory.store(
+            session
+        )
 
         if self.event_bus:
 
             self.event_bus.publish(
-                Event(
-                    "council_decision_created",
-                    source="council",
-                    payload={
-                        "session":
-                            session.describe()
-                    },
-                )
+                {
+                    "event":
+                        "council_decision_created",
+
+                    "decision":
+                        decision,
+
+                    "session":
+                        session.id,
+                }
             )
 
-
         return decision
-
-
-    def history(self):
-
-        return [
-            session.describe()
-            for session
-            in self.sessions
-        ]

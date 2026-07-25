@@ -12,6 +12,10 @@ from aios.memory.layers import (
     MemoryLayerRegistry,
 )
 
+from aios.audit.logger import (
+    AuditLogger,
+)
+
 
 class AIOSServiceRegistry:
 
@@ -19,6 +23,19 @@ class AIOSServiceRegistry:
     def build_core(self):
 
         services = {}
+
+
+        #
+        # Audit System
+        #
+
+        audit_logger = AuditLogger()
+
+
+        services[
+            "audit_logger"
+        ] = audit_logger
+
 
 
         #
@@ -85,6 +102,81 @@ class AIOSServiceRegistry:
             "memory_intelligence"
         ] = memory_intelligence
 
+
+
+
+        #
+        # Capability Registry
+        #
+
+        from aios.registry.capability_registry import (
+            CapabilityRegistry,
+        )
+
+
+        capability_registry = CapabilityRegistry()
+
+
+        services[
+            "capability_registry"
+        ] = capability_registry
+
+
+
+        #
+        # AIOS Capability Bootstrap
+        #
+
+        from aios.capabilities.models import (
+            Capability,
+        )
+
+
+        def bootstrap_capabilities(
+            registry,
+        ):
+
+            capabilities = [
+
+                ("architecture_review", "system"),
+                ("system_design", "system"),
+                ("failure_analysis", "system"),
+
+                ("market_analysis", "research"),
+                ("strategy_review", "research"),
+                ("backtesting", "research"),
+
+                ("risk_review", "risk"),
+                ("exposure_analysis", "risk"),
+                ("capital_protection", "risk"),
+
+                ("assumption_testing", "review"),
+                ("failure_detection", "review"),
+
+                ("validation", "verification"),
+                ("quality_control", "verification"),
+
+                ("research", "research"),
+                ("information_analysis", "research"),
+
+            ]
+
+
+            for name, permission in capabilities:
+
+                registry.register(
+                    Capability(
+                        name=name,
+                        permission=permission,
+                        description=
+                            f"AIOS capability: {name}",
+                    )
+                )
+
+
+        bootstrap_capabilities(
+            capability_registry
+        )
 
 
 
@@ -237,6 +329,7 @@ class AIOSServiceRegistry:
             event_bus=event_bus,
             agent_manager=agent_manager,
             communication=communication_manager,
+            audit=audit_logger,
         )
 
 

@@ -1,13 +1,44 @@
 class CouncilMemory:
 
+
     def __init__(self):
 
-        self.history = []
+        self.records = []
 
-    def store(self, report):
 
-        self.history.append(report)
 
-    def recent(self, limit=20):
+    def store(
+        self,
+        session,
+    ):
 
-        return self.history[-limit:]
+        record = session.describe()
+
+        self.records.append(
+            record
+        )
+
+        return record
+
+
+
+    def history(
+        self,
+    ):
+
+        return self.records
+
+
+
+    def find(
+        self,
+        keyword,
+    ):
+
+        keyword = keyword.lower()
+
+        return [
+            item
+            for item in self.records
+            if keyword in item["question"].lower()
+        ]
