@@ -10,6 +10,38 @@ interface QuickTicketProps {
   onClose?: () => void
 }
 
+
+function IntentRow({
+  label,
+  value
+}: {
+  label:string;
+  value:string;
+}) {
+
+  return (
+
+    <div className="
+      flex
+      justify-between
+      text-sm
+    ">
+
+      <span className="text-white/40">
+        {label}
+      </span>
+
+      <span className="font-semibold">
+        {value}
+      </span>
+
+    </div>
+
+  );
+
+}
+
+
 export function QuickTicket({ initialAsset, onClose }: QuickTicketProps) {
   const [side, setSide] = useState<"BUY" | "SELL">("BUY")
   const [orderType, setOrderType] = useState<"market" | "limit">("market")
@@ -73,7 +105,7 @@ export function QuickTicket({ initialAsset, onClose }: QuickTicketProps) {
     <Card className="w-80 h-full flex flex-col border-none shadow-none">
       <CardHeader className="!pb-2 shrink-0">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold">Quick Ticket</span>
+          <span className="text-sm font-semibold">Execution Intent Builder</span>
           {onClose && (
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
               X
@@ -208,13 +240,57 @@ export function QuickTicket({ initialAsset, onClose }: QuickTicketProps) {
           />
         </div>
 
+        {/* Execution Preview */}
+
+        <div className="
+          rounded-xl
+          border
+          border-white/10
+          bg-white/5
+          p-4
+          space-y-3
+        ">
+
+          <p className="
+            text-xs
+            uppercase
+            text-white/40
+          ">
+            Generated Intent
+          </p>
+
+
+          <IntentRow
+            label="Execution Label"
+            value="QT_ENTRY"
+          />
+
+          <IntentRow
+            label="Strategy"
+            value="HUNTER_FILL"
+          />
+
+          <IntentRow
+            label="Urgency"
+            value="IMMEDIATE"
+          />
+
+          <IntentRow
+            label="Risk Check"
+            value="READY ✓"
+          />
+
+        </div>
+
+
         {/* Submit Button */}
+
         <Button
           className="w-full mt-2"
           onClick={submit}
           disabled={submitting}
         >
-          {submitting ? "Submitting…" : "Place market order"}
+          {submitting ? "Submitting…" : "Confirm Execution"}
         </Button>
 
         {/* Create Bot Button */}
