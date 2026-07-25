@@ -12,6 +12,27 @@ from core.exchange_limits import get_exchange_limits
 
 logger = logging.getLogger(__name__)
 
+
+def _emit_execution_event(event_type, payload):
+    """
+    Non-blocking execution telemetry bridge.
+    Never breaks trading execution if AIOS event system is unavailable.
+    """
+    try:
+        from core.app_context import app_context
+
+        system = getattr(app_context, "_system", None)
+
+        if system and getattr(system, "event_bus", None):
+            system.event_bus.publish(
+                event_type,
+                payload
+            )
+
+    except Exception:
+        pass
+
+
 # =============================================================================
 # DYNAMIC SDK IMPORTS — Try multiple patterns until one works
 # =============================================================================
@@ -272,6 +293,17 @@ class HLExecutor:
                     "error": f"Order value ${notional:.2f} below Hyperliquid ${get_exchange_limits()['min_notional_usd']} minimum"
                 }
 
+            _emit_execution_event(
+                "ORDER_SUBMITTED",
+                {
+                    "coin": coin,
+                    "side": side,
+                    "size": sz,
+                    "price": px,
+                    "reduce_only": reduce_only,
+                }
+            )
+
             result = self.exchange.order(coin, is_buy, sz, px, {"limit": {"tif": "Gtc"}}, reduce_only)
             
             # Defensive response parsing
@@ -292,6 +324,15 @@ class HLExecutor:
                 status = statuses[0]
                 if "filled" in status:
                     f = status["filled"]
+                    _emit_execution_event(
+                        "ORDER_FILLED",
+                        {
+                            "coin": coin,
+                            "order_id": f.get("oid"),
+                            "avg_price": f.get("avgPx"),
+                        }
+                    )
+
                     return {"success": True, "order_id": f.get("oid"), "avg_price": f.get("avgPx")}
                 if "resting" in status:
                     return {"success": True, "order_id": status["resting"].get("oid"), "status": "resting"}
