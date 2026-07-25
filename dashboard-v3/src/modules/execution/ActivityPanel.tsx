@@ -56,42 +56,84 @@ export function ActivityPanel() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {error && (
         <div className="rounded-md border border-warn/40 bg-warn/10 p-2 text-xs text-warn">
           Last refresh failed: {error} — showing last known values.
         </div>
       )}
+      <div className="
+        rounded-xl
+        border
+        border-white/10
+        overflow-hidden
+      ">
+
       <table className="w-full text-sm">
-        <thead>
+        <thead className="bg-white/5">
           <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-            <th className="pb-2 font-normal">Time</th>
-            <th className="pb-2 font-normal">Asset</th>
-            <th className="pb-2 font-normal">Event</th>
-            <th className="pb-2 font-normal">Strategy</th>
-            <th className="pb-2 font-normal">Side</th>
-            <th className="pb-2 font-normal">Size</th>
-            <th className="pb-2 font-normal">Price</th>
-            <th className="pb-2 font-normal">PnL</th>
+
+            <th className="p-3 font-normal">Time</th>
+            <th className="p-3 font-normal">Asset</th>
+            <th className="p-3 font-normal">Lifecycle</th>
+            <th className="p-3 font-normal">Strategy</th>
+            <th className="p-3 font-normal">Execution</th>
+            <th className="p-3 font-normal">PnL</th>
+
           </tr>
         </thead>
         <tbody className="font-mono">
           {events.map((e, i) => (
             <tr key={`${e.order_id ?? i}-${e.timestamp}`} className="border-t border-border">
-              <td className="py-2 text-muted-foreground">{new Date(e.timestamp).toLocaleString()}</td>
-              <td className="py-2 font-sans font-semibold">{e.asset}</td>
-              <td className="py-2">{EVENT_LABEL[e.event_type] ?? e.event_type}</td>
-              <td className="py-2 text-muted-foreground">{e.strategy}</td>
-              <td className="py-2"><Badge variant={e.side === "BUY" ? "long" : "short"}>{e.side}</Badge></td>
-              <td className="py-2">{e.size}</td>
-              <td className="py-2">${e.price.toLocaleString()}</td>
-              <td className={cn("py-2", e.pnl > 0 ? "text-long" : e.pnl < 0 ? "text-short" : "text-muted-foreground")}>
-                {e.pnl !== 0 ? `${e.pnl >= 0 ? "+" : ""}$${e.pnl.toFixed(4)}` : "—"}
+              <td className="p-3 text-muted-foreground">
+                {new Date(e.timestamp).toLocaleString()}
+              </td>
+
+              <td className="p-3 font-sans font-semibold">
+                {e.asset}
+              </td>
+
+              <td className="p-3">
+                <span className="
+                  rounded-full
+                  px-2
+                  py-1
+                  text-xs
+                  bg-blue-500/10
+                  text-blue-400
+                ">
+                  {EVENT_LABEL[e.event_type] ?? e.event_type}
+                </span>
+              </td>
+
+              <td className="p-3 text-muted-foreground">
+                {e.strategy}
+              </td>
+
+              <td className="p-3">
+                <Badge variant={e.side === "BUY" ? "long" : "short"}>
+                  {e.side}
+                </Badge>
+              </td>
+
+              <td className={cn(
+                "p-3",
+                e.pnl > 0
+                  ? "text-long"
+                  : e.pnl < 0
+                    ? "text-short"
+                    : "text-muted-foreground"
+              )}>
+                {e.pnl !== 0
+                  ? `${e.pnl >= 0 ? "+" : ""}$${e.pnl.toFixed(4)}`
+                  : "—"}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      </div>
     </div>
   )
 }
