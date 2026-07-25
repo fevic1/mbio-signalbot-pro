@@ -1,4 +1,4 @@
-import { safeToFixed } from '../utils/format';
+import { safeToFixed } from '../../utils/format';
 import { useEffect, useState, useCallback } from "react"
 import { apiFetch, ApiError } from "@/lib/api"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
