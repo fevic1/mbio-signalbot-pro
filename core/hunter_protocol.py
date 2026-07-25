@@ -221,10 +221,18 @@ async def _execute_fill(candidate: Dict):
 async def hunter_monitor_loop(system=None):
     """Continuous background monitor. Checks stagnant positions every 5 mins, analyzes assets in staggered 30-min phases."""
     logger.info("🏹 Hunter Monitor: Starting continuous background monitoring (Staggered 30-min phases)...")
-    if system and system.event_bus:
+    event_bus = None
+
+    if system:
+        if hasattr(system, "get"):
+            event_bus = system.get("event_bus")
+        elif hasattr(system, "event_bus"):
+            event_bus = system.event_bus
+
+    if event_bus:
         from aios.events import Event
 
-        system.event_bus.publish(
+        event_bus.publish(
             Event(
                 "hunter.scan.started",
                 source="hunter_protocol",
