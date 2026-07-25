@@ -1089,7 +1089,10 @@ async def order_stop_limit(request: Request, user: dict = Depends(require_role("
     try:
         # _get_executor replaced by app_context
         executor = app_context.executor
-        result = executor.stop_limit_order(asset, side, size, stop_price, limit_price)
+        result = {
+            "success": False,
+            "error": "STOP_LIMIT execution is not supported by execution gateway"
+        }
         log_audit(user["id"], "ORDER_STOP_LIMIT", resource=asset, details=json.dumps({"side": side, "size": size, "stop": stop_price, "limit": limit_price}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Stop-limit {side} {size} {asset} placed", "result": result}
     except Exception as e:
@@ -1108,7 +1111,10 @@ async def order_trailing_stop(request: Request, user: dict = Depends(require_rol
     try:
         # _get_executor replaced by app_context
         executor = app_context.executor
-        result = executor.trailing_stop_order(asset, side, size, trail_pct)
+        result = {
+            "success": False,
+            "error": "TRAILING_STOP execution is not supported by execution gateway"
+        }
         log_audit(user["id"], "ORDER_TRAILING_STOP", resource=asset, details=json.dumps({"side": side, "size": size, "trail_pct": trail_pct}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Trailing stop {side} {size} {asset} ({trail_pct}%) placed", "result": result}
     except Exception as e:
