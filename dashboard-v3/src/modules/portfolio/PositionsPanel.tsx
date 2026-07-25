@@ -69,40 +69,116 @@ export function PositionsPanel({ onClose, refreshKey }: { onClose: (pos: Positio
           Last refresh failed: {error} — showing last known values.
         </div>
       )}
+      <div className="
+        rounded-xl
+        border
+        border-white/10
+        overflow-hidden
+      ">
+
       <table className="w-full text-sm">
-        <thead>
+
+        <thead className="bg-white/5">
+
           <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-            <th className="pb-2 font-normal">Exchange</th>
-            <th className="pb-2 font-normal">Asset</th>
-            <th className="pb-2 font-normal">Side</th>
-            <th className="pb-2 font-normal">Size</th>
-            <th className="pb-2 font-normal">Entry</th>
-            <th className="pb-2 font-normal">Current</th>
-            <th className="pb-2 font-normal">uPnL</th>
-            <th className="pb-2 font-normal">Liq. Px</th>
-            <th className="pb-2 font-normal"></th>
+
+            <th className="p-3 font-normal">Asset</th>
+            <th className="p-3 font-normal">Strategy</th>
+            <th className="p-3 font-normal">Direction</th>
+            <th className="p-3 font-normal">Exposure</th>
+            <th className="p-3 font-normal">Entry</th>
+            <th className="p-3 font-normal">Market</th>
+            <th className="p-3 font-normal">PnL</th>
+            <th className="p-3 font-normal">Risk</th>
+            <th className="p-3"></th>
+
           </tr>
+
         </thead>
         <tbody className="font-mono">
           {positions.map((p) => (
             <tr key={`${p.exchange}-${p.asset}`} className="border-t border-border">
-              <td className="py-2 text-xs font-sans text-muted-foreground">{p.exchange || "Hyperliquid"}</td>
-              <td className="py-2 font-sans font-semibold">{p.asset}</td>
-              <td className="py-2"><Badge variant={p.side === "BUY" ? "long" : "short"}>{p.side === "BUY" ? "Long" : "Short"}</Badge></td>
-              <td className="py-2">{p.size}</td>
-              <td className="py-2">${p.entry.toLocaleString()}</td>
-              <td className="py-2">${p.current.toLocaleString()}</td>
-              <td className={cn("py-2", p.upnl >= 0 ? "text-long" : "text-short")}>
-                ${safeToFixed(p?.upnl)} ({p.pnl_pct >= 0 ? "+" : ""}{safeToFixed(p?.pnl_pct)}%)
+              <td className="p-3 font-sans font-semibold">
+                {p.asset}
               </td>
-              <td className="py-2 text-muted-foreground">{p.liquidation_px > 0 ? `$${p.liquidation_px.toLocaleString()}` : "—"}</td>
-              <td className="py-2 text-right font-sans">
-                <Button size="sm" variant="destructive" onClick={() => onClose(p)}>Close</Button>
+
+
+              <td className="p-3 text-muted-foreground">
+                {p.strategy || "MANUAL"}
+              </td>
+
+
+              <td className="p-3">
+                <Badge variant={p.side === "BUY" ? "long" : "short"}>
+                  {p.side === "BUY" ? "LONG" : "SHORT"}
+                </Badge>
+              </td>
+
+
+              <td className="p-3">
+                ${safeToFixed(p.value)}
+              </td>
+
+
+              <td className="p-3">
+                ${p.entry.toLocaleString()}
+              </td>
+
+
+              <td className="p-3">
+                ${p.current.toLocaleString()}
+              </td>
+
+
+              <td className={cn(
+                "p-3",
+                p.upnl >= 0
+                  ? "text-long"
+                  : "text-short"
+              )}>
+                ${safeToFixed(p.upnl)}
+                <br/>
+                <span className="text-xs">
+                  {p.pnl_pct >= 0 ? "+" : ""}
+                  {safeToFixed(p.pnl_pct)}%
+                </span>
+              </td>
+
+
+              <td className="p-3">
+
+                <span className="
+                  rounded-full
+                  px-2
+                  py-1
+                  text-xs
+                  bg-green-500/10
+                  text-green-400
+                ">
+                  {p.liquidation_px > 0 ? "MONITORED" : "N/A"}
+                </span>
+
+              </td>
+
+
+              <td className="p-3 text-right">
+
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => onClose(p)}
+                >
+                  Close
+                </Button>
+
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      </div>
+
     </div>
   )
 }
