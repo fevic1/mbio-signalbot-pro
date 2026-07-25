@@ -132,6 +132,98 @@ class AIOSServiceRegistry:
 
 
 
+
+        #
+        # AIOS Expert Agent Bootstrap
+        #
+
+        from aios.agents.runtime import (
+            AgentManager,
+        )
+
+
+        def bootstrap_agents(
+            manager,
+        ):
+
+            agents = [
+
+                (
+                    "architect",
+                    "system architect",
+                    [
+                        "architecture_review",
+                        "system_design",
+                        "failure_analysis",
+                    ],
+                ),
+
+                (
+                    "quant",
+                    "quantitative analyst",
+                    [
+                        "market_analysis",
+                        "strategy_review",
+                        "backtesting",
+                    ],
+                ),
+
+                (
+                    "risk",
+                    "risk analyst",
+                    [
+                        "risk_review",
+                        "exposure_analysis",
+                        "capital_protection",
+                    ],
+                ),
+
+                (
+                    "skeptic",
+                    "critical reviewer",
+                    [
+                        "assumption_testing",
+                        "failure_detection",
+                    ],
+                ),
+
+                (
+                    "verification",
+                    "verification agent",
+                    [
+                        "validation",
+                        "quality_control",
+                    ],
+                ),
+
+                (
+                    "research",
+                    "research analyst",
+                    [
+                        "research",
+                        "information_analysis",
+                    ],
+                ),
+
+            ]
+
+
+            for name, role, capabilities in agents:
+
+                manager.create_agent(
+                    name,
+                    role,
+                    capabilities,
+                )
+
+
+
+        bootstrap_agents(
+            agent_manager
+        )
+
+
+
         #
         # Council Governance System
         #
