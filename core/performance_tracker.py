@@ -19,7 +19,8 @@ class PerformanceTracker:
             logger.info(f"📊 Loaded {len(self.trades)} trades from state")
     
     def record_open_trade(self, asset: str, side: str, entry: float, size: float, 
-                         strategy: str = "LLM", regime: str = "RANGING"):
+                         strategy: str = "LLM", regime: str = "RANGING",
+                         execution_label: str = "UNCLASSIFIED"):
         trade = {
             "asset": asset, "side": side, "entry": entry, "size": size,
             "strategy": strategy,
