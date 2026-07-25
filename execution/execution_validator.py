@@ -1,4 +1,5 @@
 from execution.execution_labels import ExecutionLabel
+from execution.order_types import OrderType
 
 
 class ExecutionValidationError(Exception):
@@ -36,7 +37,7 @@ class ExecutionValidator:
             ExecutionLabel.QT_EMERGENCY_CLOSE,
         ):
 
-            if intent.order_type != "MARKET":
+            if intent.order_type != OrderType.MARKET:
 
                 raise ExecutionValidationError(
                     "Quick Ticket requires MARKET execution"
@@ -49,7 +50,7 @@ class ExecutionValidator:
             ExecutionLabel.DCA_EXIT,
         ):
 
-            if intent.order_type != "LIMIT":
+            if intent.order_type != OrderType.LIMIT:
 
                 raise ExecutionValidationError(
                     "DCA requires LIMIT execution"

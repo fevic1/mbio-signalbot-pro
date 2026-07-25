@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Any
 
 from execution.execution_labels import ExecutionLabel
+from execution.order_types import OrderType
+from execution.order_types import OrderType
 
 
 @dataclass
@@ -21,7 +23,7 @@ class OrderIntent:
     strategy: str
 
 
-    order_type: str
+    order_type: OrderType
 
 
     urgency: str = "NORMAL"
