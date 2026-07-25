@@ -301,6 +301,10 @@ class HLExecutor:
                     "size": sz,
                     "price": px,
                     "reduce_only": reduce_only,
+                    "order_type": order_type,
+                    "execution_label": getattr(self, "_execution_label", None),
+                    "strategy": getattr(self, "_strategy", None),
+                    "regime": getattr(self, "_regime", None),
                 }
             )
 
@@ -330,6 +334,10 @@ class HLExecutor:
                             "coin": coin,
                             "order_id": f.get("oid"),
                             "avg_price": f.get("avgPx"),
+                            "order_type": order_type,
+                            "execution_label": getattr(self, "_execution_label", None),
+                            "strategy": getattr(self, "_strategy", None),
+                            "regime": getattr(self, "_regime", None),
                         }
                     )
 
@@ -444,6 +452,10 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
                 }
         
         # Delegate to the class method which handles all execution logic
+        executor._execution_label = _execution_label
+        executor._strategy = _strategy
+        executor._regime = _regime
+
         result = executor.place_order(
             coin=coin,
             side=side,
