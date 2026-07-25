@@ -89,6 +89,73 @@ class AIOSServiceRegistry:
 
 
         #
+        # Agent Runtime System
+        #
+
+        from aios.agents.runtime import (
+            AgentManager,
+        )
+
+        from aios.agents.workspace import (
+            WorkspaceManager,
+        )
+
+        from aios.agents.communication import (
+            AgentCommunicationManager,
+        )
+
+
+        agent_manager = AgentManager()
+
+        workspace_manager = WorkspaceManager()
+
+        communication_manager = (
+            AgentCommunicationManager(
+                event_bus
+            )
+        )
+
+
+        services[
+            "agent_manager"
+        ] = agent_manager
+
+
+        services[
+            "workspace_manager"
+        ] = workspace_manager
+
+
+        services[
+            "communication_manager"
+        ] = communication_manager
+
+
+
+        #
+        # Council Governance System
+        #
+
+        from aios.council import (
+            CouncilManager,
+        )
+
+
+        council_manager = CouncilManager(
+            event_bus=event_bus,
+            agent_manager=agent_manager,
+            communication=communication_manager,
+        )
+
+
+        services[
+            "council_manager"
+        ] = council_manager
+
+
+
+
+        #
         # Autonomous Operations
         #
 
