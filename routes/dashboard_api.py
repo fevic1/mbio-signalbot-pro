@@ -1032,9 +1032,16 @@ async def order_market(request: Request, user: dict = Depends(require_role("ADMI
     if size * float(body.get("price", 0)) < limits["min_notional"]:
         raise HTTPException(status_code=400, detail=f"Notional below minimum ${limits['min_notional']}")
     try:
-        # _get_executor replaced by app_context
-        executor = app_context.executor
-        result = executor.market_order(asset, side, size)
+        from execution.hl_executor import execute_hl_order
+
+        result = execute_hl_order(
+            coin=asset,
+            side=side,
+            size=size,
+            execution_label="QT_ENTRY",
+            strategy="DASHBOARD_QT",
+            regime="AUTO"
+        )
         log_audit(user["id"], "ORDER_MARKET", resource=asset, details=json.dumps({"side": side, "size": size}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Market {side} {size} {asset} executed", "result": result}
     except Exception as e:
@@ -1243,7 +1250,21 @@ async def emergency_stop(request: Request, user: dict = Depends(require_role("AD
                     pos = state.OPEN_POSITIONS[asset]; side = pos.get("side", "BUY"); size = float(pos.get("size", 0))
                     if size > 0:
                         close_side = "SELL" if side == "BUY" else "BUY"
-                        executor.market_order(asset, close_side, size); results["closed_positions"] += 1
+
+                        from execution.hl_executor import execute_hl_order
+
+                        close_result = execute_hl_order(
+                            coin=asset,
+                            side=close_side,
+                            size=size,
+                            reduce_only=True,
+                            execution_label="QT_EMERGENCY_CLOSE",
+                            strategy="EMERGENCY_STOP",
+                            regime="AUTO"
+                        )
+
+                        if close_result.get("success"):
+                            results["closed_positions"] += 1
                 except Exception as e: results["errors"].append(f"Close {asset}: {str(e)[:100]}")
         except Exception as e: results["errors"].append(f"Positions: {str(e)[:100]}")
     except Exception as e: results["errors"].append(f"Executor: {str(e)[:100]}")
@@ -1375,7 +1396,10 @@ async def open_order(request: Request, user: dict = Depends(require_role("ADMIN"
             size=size_coin,
             limit_px=limit_px,
             sl=sl,
-            tp=tp
+            tp=tp,
+            execution_label="QT_ENTRY",
+            strategy="DASHBOARD_QT",
+            regime="AUTO"
         )
 
         # 5.1 UPDATE IN-MEMORY POSITION STATE — without this, the position exists on the
