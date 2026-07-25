@@ -85,26 +85,82 @@ export function OverviewPanel() {
           Last refresh failed: {error} — showing last known values.
         </div>
       )}
-      <Card>
+      <Card className="
+        rounded-2xl
+        border-white/10
+        bg-white/5
+      ">
+
         <CardHeader className="!justify-between">
-          <span className="text-sm font-semibold">Account</span>
+
+          <span className="text-lg font-bold">
+            Portfolio State
+          </span>
+
           {lastUpdated && (
             <span className="text-[10px] text-muted-foreground">
               Updated {lastUpdated.toLocaleTimeString()}
             </span>
           )}
+
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Stat label="HL Balance" value={`$${safeToFixed(data?.hl_balance)}`} />
-          <Stat label="Bybit Balance" value={`$${safeToFixed(data?.bybit_balance)}`} />
-          <Stat label="Total Balance" value={`$${safeToFixed(data?.total_balance)}`} />
-          <Stat label="Total Equity" value={`$${safeToFixed(data?.equity)}`} />
-          <Stat label="Deployed" value={`${safeToFixed(data?.deployed_pct, 1)}%`} />
-          <Stat label="Notional" value={`$${safeToFixed(data?.notional)}`} />
-          <Stat label="Daily PnL" value={`${data.daily_pnl_pct >= 0 ? "+" : ""}${safeToFixed(data?.daily_pnl_pct, 2)}%`} tone={pnlTone(data.daily_pnl_pct)} />
-          <Stat label="Realized" value={`$${safeToFixed(data?.realized_pnl_usd)}`} tone={pnlTone(data.realized_pnl_usd)} />
-          <Stat label="Unrealized" value={`$${safeToFixed(data?.unrealized_pnl_usd)}`} tone={pnlTone(data.unrealized_pnl_usd)} />
-          <Stat label="Win Rate" value={data.win_rate} />
+
+
+        <CardContent className="
+          grid
+          grid-cols-2
+          gap-6
+          md:grid-cols-4
+        ">
+          <Stat
+            label="Total Capital"
+            value={`$${safeToFixed(data?.total_balance)}`}
+          />
+
+
+          <Stat
+            label="Equity"
+            value={`$${safeToFixed(data?.equity)}`}
+          />
+
+
+          <Stat
+            label="Exposure"
+            value={`${safeToFixed(data?.deployed_pct,1)}%`}
+          />
+
+
+          <Stat
+            label="Notional"
+            value={`$${safeToFixed(data?.notional)}`}
+          />
+
+
+          <Stat
+            label="Daily Performance"
+            value={`${data.daily_pnl_pct >= 0 ? "+" : ""}${safeToFixed(data?.daily_pnl_pct,2)}%`}
+            tone={pnlTone(data.daily_pnl_pct)}
+          />
+
+
+          <Stat
+            label="Realized PnL"
+            value={`$${safeToFixed(data?.realized_pnl_usd)}`}
+            tone={pnlTone(data.realized_pnl_usd)}
+          />
+
+
+          <Stat
+            label="Unrealized PnL"
+            value={`$${safeToFixed(data?.unrealized_pnl_usd)}`}
+            tone={pnlTone(data.unrealized_pnl_usd)}
+          />
+
+
+          <Stat
+            label="Win Rate"
+            value={data.win_rate}
+          />
         </CardContent>
       </Card>
       <div className="flex gap-3 text-xs text-muted-foreground">
