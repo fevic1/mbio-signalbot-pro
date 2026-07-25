@@ -1,3 +1,5 @@
+from .session import CouncilSession
+from .manager import CouncilManager
 from .models import (
     CouncilDecision,
     CouncilIssue,
@@ -13,4 +15,6 @@ __all__ = [
     "CouncilDecision",
     "CouncilIssue",
     "AgentOpinion",
+    "CouncilSession",
+    "CouncilManager",
 ]
