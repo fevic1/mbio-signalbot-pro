@@ -357,6 +357,12 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
             "UNCLASSIFIED"
         )
 
+        if _execution_label != "UNCLASSIFIED":
+            from execution.execution_labels import normalize_execution_label
+            _execution_label = normalize_execution_label(
+                _execution_label
+            ).value
+
         if _execution_label.startswith("QT_"):
             _order_type = "Market"
 

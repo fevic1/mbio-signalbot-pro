@@ -14,3 +14,15 @@ class ExecutionLabel(str, Enum):
     DCA_ENTRY = "DCA_ENTRY"
     DCA_ADD = "DCA_ADD"
     DCA_EXIT = "DCA_EXIT"
+
+
+def normalize_execution_label(value):
+    if isinstance(value, ExecutionLabel):
+        return value
+
+    try:
+        return ExecutionLabel(value)
+    except ValueError:
+        raise ValueError(
+            f"Invalid execution label: {value}"
+        )
