@@ -1060,9 +1060,17 @@ async def order_limit(request: Request, user: dict = Depends(require_role("ADMIN
     if size * price < _get_risk_limits()["min_notional"]:
         raise HTTPException(status_code=400, detail=f"Notional below minimum")
     try:
-        # _get_executor replaced by app_context
-        executor = app_context.executor
-        result = executor.limit_order(asset, side, size, price)
+        from execution.hl_executor import execute_hl_order
+
+        result = execute_hl_order(
+            coin=asset,
+            side=side,
+            size=size,
+            limit_px=price,
+            execution_label="QT_ENTRY",
+            strategy="DASHBOARD_LIMIT",
+            regime="AUTO"
+        )
         log_audit(user["id"], "ORDER_LIMIT", resource=asset, details=json.dumps({"side": side, "size": size, "price": price}), ip_address=ip, otp_verified=True)
         return {"status": "ok", "message": f"Limit {side} {size} {asset} @ ${price} placed", "result": result}
     except Exception as e:
