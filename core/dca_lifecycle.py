@@ -1,3 +1,11 @@
+def emit_trade_outcome(record):
+    try:
+        from aios.integration import emit_trade_event
+        emit_trade_event(record)
+    except ImportError:
+        pass
+
+
 """
 Automated DCA Lifecycle Engine for Hyperliquid.
 Manages execution, tracking, sizing, and safety circuit breakers.
@@ -9,7 +17,6 @@ import time
 from datetime import datetime, timezone
 import core.state as state
 from core.trade_ledger import record_trade
-from aios.memory import record_trade_outcome
 
 logger = logging.getLogger("DcaLifecycle")
 
@@ -105,7 +112,7 @@ async def _execute_reentry(asset: str, chat_id: str, params: dict = None) -> Non
             },
         )
 
-        record_trade_outcome(trade_record)
+        emit_trade_outcome(trade_record)
 
         # Place limit safety orders for levels 1+
         levels_placed = 1

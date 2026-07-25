@@ -18,6 +18,6 @@ class BootstrapLoader:
     def boot(self):
         self.load()
 
-        from aios.system.bootstrap import SystemBootstrap
+        from aios.system.bootstrap import AIOSBootstrap
 
-        return SystemBootstrap().boot()
+        return AIOSBootstrap().initialize()

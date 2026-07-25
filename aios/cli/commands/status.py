@@ -1,27 +1,22 @@
-def status(
-    runtime=None,
-):
+from aios.runtime.state import (
+    RuntimeStateStore,
+)
 
-    if not runtime:
+
+
+def status():
+
+    store = RuntimeStateStore()
+
+    state = store.load()
+
+
+    if state is None:
 
         return {
-            "status": "unavailable"
+            "status":
+            "not_running"
         }
 
 
-    result = {
-        "status": "running",
-    }
-
-
-    if hasattr(
-        runtime,
-        "worker",
-    ) and runtime.worker:
-
-        result["worker"] = (
-            runtime.worker.status()
-        )
-
-
-    return result
+    return state
