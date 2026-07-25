@@ -368,6 +368,33 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
                 "order_type",
                 "Limit"
             )
+
+        if _execution_label != "UNCLASSIFIED":
+            from execution.order_intent import OrderIntent
+            from execution.execution_labels import ExecutionLabel
+            from execution.execution_validator import ExecutionValidator
+
+            try:
+                intent = OrderIntent(
+                    coin=coin,
+                    side=side,
+                    size=size,
+                    label=ExecutionLabel(_execution_label),
+                    strategy=_strategy,
+                    order_type=_order_type.upper()
+                )
+
+                ExecutionValidator().validate(intent)
+
+            except Exception as e:
+                logger.error(
+                    f"❌ Execution validation failed: {e}"
+                )
+
+                return {
+                    "success": False,
+                    "error": str(e)
+                }
         
         # Delegate to the class method which handles all execution logic
         result = executor.place_order(
