@@ -1,0 +1,17 @@
+[
+  {
+    "id": "7acf09b2-17f2-4102-94c0-d3adbe527313",
+    "version": 1,
+    "policy": {
+      "proposal": {
+        "area": "evidence",
+        "change": "Improve artifact validation"
+      },
+      "decision": {
+        "approved": true,
+        "confidence": 1.0
+      }
+    },
+    "created_at": "2026-07-25T12:25:25.030951+00:00"
+  }
+]
