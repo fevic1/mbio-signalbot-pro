@@ -53,6 +53,11 @@ class AuditReplay:
                         "decision_id"
                     ),
 
+                "proposal_id":
+                    record.get(
+                        "proposal_id"
+                    ),
+
                 "council_session":
                     record.get(
                         "council_session"

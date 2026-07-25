@@ -39,6 +39,11 @@ class ControlAudit:
                     False,
                 ),
 
+            "proposal_id":
+                change.get(
+                    "proposal_id"
+                ),
+
             "governance":
                 decision.get(
                     "governance",
