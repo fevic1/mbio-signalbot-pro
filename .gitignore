@@ -83,3 +83,7 @@ __pycache__/
 # Keep AIOS runtime state implementation tracked
 !aios/runtime/state/
 !aios/runtime/state/*.py
+
+.aios/runtime_state.json
+.aios/audit/
+.aios/workspaces/
