@@ -14,12 +14,6 @@ interface OrderRow {
 
 const POLL_INTERVAL_MS = 15_000
 
-const SOURCE_LABEL: Record<string, string> = {
-  exchange: "Exchange",
-  grid: "Grid",
-  dca: "DCA",
-}
-
 export function OrdersPanel() {
   const [orders, setOrders] = useState<OrderRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -51,36 +45,75 @@ export function OrdersPanel() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {error && (
         <div className="rounded-md border border-warn/40 bg-warn/10 p-2 text-xs text-warn">
           Last refresh failed: {error} — showing last known values.
         </div>
       )}
+      <div className="
+        rounded-xl
+        border
+        border-white/10
+        overflow-hidden
+      ">
+
       <table className="w-full text-sm">
-        <thead>
+        <thead className="bg-white/5">
           <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-            <th className="pb-2 font-normal">Source</th>
-            <th className="pb-2 font-normal">Asset</th>
-            <th className="pb-2 font-normal">Type</th>
-            <th className="pb-2 font-normal">Side</th>
-            <th className="pb-2 font-normal">Price</th>
-            <th className="pb-2 font-normal">Size</th>
+
+            <th className="p-3 font-normal">Asset</th>
+            <th className="p-3 font-normal">Intent</th>
+            <th className="p-3 font-normal">Side</th>
+            <th className="p-3 font-normal">Execution</th>
+            <th className="p-3 font-normal">Price</th>
+            <th className="p-3 font-normal">Size</th>
+
           </tr>
         </thead>
         <tbody className="font-mono">
           {orders.map((o, i) => (
             <tr key={`${o.order_id ?? i}-${o.source}`} className="border-t border-border">
-              <td className="py-2 font-sans text-muted-foreground">{SOURCE_LABEL[o.source] ?? o.source}</td>
-              <td className="py-2 font-sans font-semibold">{o.asset}</td>
-              <td className="py-2 font-sans text-muted-foreground">{o.label}</td>
-              <td className="py-2"><Badge variant={o.side === "BUY" ? "long" : "short"}>{o.side || "—"}</Badge></td>
-              <td className="py-2">{o.price ? `$${o.price.toLocaleString()}` : "—"}</td>
-              <td className="py-2">{o.size !== null ? o.size : "—"}</td>
+              <td className="p-3 font-sans font-semibold">
+                {o.asset}
+              </td>
+
+              <td className="p-3 font-sans text-muted-foreground">
+                {o.label}
+              </td>
+
+              <td className="p-3">
+                <Badge variant={o.side === "BUY" ? "long" : "short"}>
+                  {o.side || "—"}
+                </Badge>
+              </td>
+
+              <td className="p-3">
+                <span className="
+                  rounded-full
+                  px-2
+                  py-1
+                  text-xs
+                  bg-green-500/10
+                  text-green-400
+                ">
+                  ACTIVE
+                </span>
+              </td>
+
+              <td className="p-3">
+                {o.price ? `$${o.price.toLocaleString()}` : "—"}
+              </td>
+
+              <td className="p-3">
+                {o.size !== null ? o.size : "—"}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      </div>
     </div>
   )
 }
