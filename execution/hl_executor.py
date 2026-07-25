@@ -25,9 +25,14 @@ def _emit_execution_event(event_type, payload):
         system = getattr(app_context, "_system", None)
 
         if system and getattr(system, "event_bus", None):
+            from aios.events import Event
+
             system.event_bus.publish(
-                event_type,
-                payload
+                Event(
+                    event_type=event_type,
+                    source="mbio.execution",
+                    payload=payload,
+                )
             )
 
     except Exception:
