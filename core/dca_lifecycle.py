@@ -88,7 +88,7 @@ async def _execute_reentry(asset: str, chat_id: str, params: dict = None) -> Non
         from core.data_fetcher import get_current_price
 
         # Level 0: Market base order
-        result = execute_hl_order(coin=asset, side=side, size=base_size, strategy="AUTO_DCA", regime="AUTO")
+        result = execute_hl_order(coin=asset, side=side, size=base_size, strategy="AUTO_DCA", regime="AUTO", execution_label="DCA_ENTRY")
         
         if not result.get("success"):
             logger.error(f"❌ Auto-DCA base order failed for {asset}: {result.get('error')}")
@@ -127,7 +127,7 @@ async def _execute_reentry(asset: str, chat_id: str, params: dict = None) -> Non
                 lvl_result = execute_hl_order(
                     coin=asset, side=side, size=lvl_size,
                     limit_px=lvl_price, order_type="Limit",
-                    strategy="AUTO_DCA", regime="AUTO"
+                    strategy="AUTO_DCA", regime="AUTO", execution_label="DCA_ADD"
                 )
                 if lvl_result.get("success"):
                     levels_placed += 1
@@ -423,7 +423,7 @@ async def open_dca_position(asset: str, side: str, dca_strategy, exchange: str =
         from execution.hl_executor import execute_hl_order
         result = execute_hl_order(
             coin=asset, side="BUY" if side == "LONG" else "SELL",
-            size=base_size, strategy="DCA", regime="AUTO"
+            size=base_size, strategy="DCA", regime="AUTO", execution_label="DCA_ENTRY"
         )
         if not result.get("success"):
             return {"success": False, "error": result.get("error", "Order failed")}

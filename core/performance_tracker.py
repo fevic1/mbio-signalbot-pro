@@ -22,7 +22,9 @@ class PerformanceTracker:
                          strategy: str = "LLM", regime: str = "RANGING"):
         trade = {
             "asset": asset, "side": side, "entry": entry, "size": size,
-            "strategy": strategy, "regime": regime,
+            "strategy": strategy,
+            "regime": regime,
+            "execution_label": execution_label,
             "opened_at": datetime.now(timezone.utc).isoformat(),
             "closed_at": None, "exit": None, "pnl_pct": None, "usd_pnl": None,
             "status": "OPEN"

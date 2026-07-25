@@ -94,7 +94,7 @@ class DCAManager:
                 result = execute_hl_order(
                     coin=asset, side=side, size=level["size"],
                     limit_price=level["price"], order_type="Limit",
-                    strategy="AUTO_DCA", regime="AUTO"
+                    strategy="AUTO_DCA", regime="AUTO", execution_label="DCA_ENTRY"
                 )
                 if result.get("success"):
                     level["order_id"] = result.get("order_id")
@@ -154,7 +154,7 @@ class DCAManager:
                 from execution.hl_executor import execute_hl_order
                 close_result = execute_hl_order(
                     coin=asset, side=close_side, size=size,
-                    reduce_only=True, strategy="AUTO_DCA", regime="AUTO"
+                    reduce_only=True, strategy="AUTO_DCA", regime="AUTO", execution_label="DCA_EXIT"
                 )
                 if close_result.get("success"):
                     results["base_closed"] = True
@@ -202,7 +202,7 @@ class DCAManager:
                 from execution.hl_executor import execute_hl_order
                 close_result = execute_hl_order(
                     coin=asset, side=close_side, size=close_size,
-                    reduce_only=True, strategy="AUTO_DCA", regime="AUTO"
+                    reduce_only=True, strategy="AUTO_DCA", regime="AUTO", execution_label="DCA_EXIT"
                 )
                 if close_result.get("success"):
                     results["dca_closed"] += 1
@@ -251,7 +251,7 @@ class DCAManager:
                 result = execute_hl_order(
                     coin=asset, side=side, size=level["size"],
                     limit_price=level["price"], order_type="Limit",
-                    strategy="AUTO_DCA", regime="AUTO"
+                    strategy="AUTO_DCA", regime="AUTO", execution_label="DCA_ADD"
                 )
                 if result.get("success"):
                     level["order_id"] = result.get("order_id")

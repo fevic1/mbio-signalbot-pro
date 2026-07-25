@@ -132,7 +132,8 @@ async def _execute_swap(stagnant_asset: str, candidate: Dict):
             size=close_size,
             reduce_only=True,
             strategy="HUNTER_SWAP",
-            regime="SIDEWAYS"
+            regime="SIDEWAYS",
+            execution_label="QT_EXIT"
         )
         
         if not close_result.get("success"):
@@ -167,7 +168,8 @@ async def _execute_swap(stagnant_asset: str, candidate: Dict):
             size=new_size,
             reduce_only=False,
             strategy="HUNTER_SWAP",
-            regime="SIDEWAYS"
+            regime="SIDEWAYS",
+            execution_label="QT_ENTRY"
         )
         
         if open_result.get("success"):
@@ -207,7 +209,8 @@ async def _execute_fill(candidate: Dict):
             size=new_size,
             reduce_only=False,
             strategy="HUNTER_FILL",
-            regime="SIDEWAYS"
+            regime="SIDEWAYS",
+            execution_label="QT_ENTRY"
         )
         
         if open_result.get("success"):

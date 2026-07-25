@@ -351,6 +351,23 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
         executor = app_context.executor
         _strategy = kwargs.get("strategy", "SIGNAL")
         _regime = kwargs.get("regime", "AUTO")
+
+        _execution_label = kwargs.get(
+            "execution_label",
+            "UNCLASSIFIED"
+        )
+
+        if _execution_label.startswith("QT_"):
+            _order_type = "Market"
+
+        elif _execution_label.startswith("DCA_"):
+            _order_type = "Limit"
+
+        else:
+            _order_type = kwargs.get(
+                "order_type",
+                "Limit"
+            )
         
         # Delegate to the class method which handles all execution logic
         result = executor.place_order(
@@ -358,7 +375,7 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
             side=side,
             size=size,
             limit_price=limit_px,
-            order_type=kwargs.get("order_type", "Limit"),
+            order_type=_order_type,
             reduce_only=kwargs.get("reduce_only", False)
         )
         # Attach strategy metadata to result for downstream consumers
@@ -395,7 +412,11 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
                     tracker.record_open_trade(
                         asset=coin, side=side, entry=price, size=size, 
                         strategy=kwargs.get("strategy", "AI ensemble"), 
-                        regime=kwargs.get("regime", "RANGING")
+                        regime=kwargs.get("regime", "RANGING"),
+                        execution_label=kwargs.get(
+                            "execution_label",
+                            "UNCLASSIFIED"
+                        )
                     )
             except Exception as e:
                 logger.warning(f"⚠️ Failed to record trade in tracker: {e}")
