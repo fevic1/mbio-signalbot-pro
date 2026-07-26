@@ -191,11 +191,45 @@ export function OpenDcaForm({ onResult, onSuccess, triggerRefresh }: OpenDcaForm
 
       {/* Computed ticket (live, read-only derived) */}
       <div className="space-y-2">
-        <label className="text-xs text-muted-foreground">Computed order ticket (live)</label>
+        <div className="
+  flex
+  justify-between
+  items-center
+">
+
+<label className="
+  text-sm
+  font-bold
+">
+DCA Execution Plan
+</label>
+
+
+<span className="
+  rounded-full
+  px-3
+  py-1
+  text-xs
+  bg-green-500/10
+  text-green-400
+">
+LIVE
+</span>
+
+
+</div>
         {loadingPlan && <div className="text-xs text-muted-foreground">Re-pricing…</div>}
         {planError && <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">{planError}</div>}
         {plan && !loadingPlan && !planError && (
-          <div className="space-y-2 rounded-md border border-border bg-background p-3 text-xs">
+          <div className="
+  space-y-4
+  rounded-2xl
+  border
+  border-white/10
+  bg-white/5
+  p-5
+  text-xs
+">
             {plan.errors.length > 0 && (
               <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2 text-destructive">
                 <div className="mb-1 font-semibold">Cannot open:</div>
@@ -208,15 +242,84 @@ export function OpenDcaForm({ onResult, onSuccess, triggerRefresh }: OpenDcaForm
                 <ul className="list-disc space-y-0.5 pl-4">{plan.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
               </div>
             )}
-            <div className={rowClass}><span className={labelClass}>Entry (live)</span><span className={valClass}>{usd(plan.price)}</span></div>
+            <div className={rowClass}>
+<span className={labelClass}>
+Entry Price
+</span>
+<span className={valClass}>
+{usd(plan.price)}
+</span>
+</div>
             <div className={rowClass}><span className={labelClass}>ATR (1h)</span><span className={valClass}>{usd(plan.atr)}</span></div>
             <div className={rowClass}><span className={labelClass}>Balance</span><span className={valClass}>{usd(plan.balance)}</span></div>
-            <div className={rowClass}><span className={labelClass}>Risk</span><span className={valClass}>{plan.risk_pct != null ? `${(plan.risk_pct * 100).toFixed(2)}% (${usd(plan.risk_amount)})` : "—"}</span></div>
+            <div className={rowClass}>
+<span className={labelClass}>
+Risk Allocation
+</span>
+<span className={valClass}>
+{plan.risk_pct != null
+? `${(plan.risk_pct * 100).toFixed(2)}% (${usd(plan.risk_amount)})`
+: "—"}
+</span>
+</div>
             <div className={rowClass}><span className={labelClass}>Base size</span><span className={valClass}>{num(plan.base_size)} ({usd(plan.base_notional)})</span></div>
             <div className={rowClass}><span className={labelClass}>Stop-loss</span><span className={valClass}>{usd(plan.sl)}</span></div>
             <div className={rowClass}><span className={labelClass}>TP1 / TP2 / TP3</span><span className={valClass}>{usd(plan.tp1)} / {usd(plan.tp2)} / {usd(plan.tp3)}</span></div>
             <div className={rowClass}><span className={labelClass}>Trailing stop</span><span className={valClass}>{usd(plan.trailing_stop)}</span></div>
-            <div className={rowClass}><span className={labelClass}>Ladder</span><span className={valClass}>{plan.max_levels ?? "—"} lv · {plan.spacing_pct ?? "—"}% · ×{plan.size_multiplier ?? "—"}</span></div>
+            <div className="
+mt-4
+border-t
+border-white/10
+pt-4
+">
+
+
+<div className="
+font-semibold
+mb-3
+">
+Accumulation Ladder
+</div>
+
+
+<div className="space-y-2">
+
+{plan.ladder.map((l) => (
+
+<div
+key={l.level}
+className="
+flex
+justify-between
+rounded-lg
+bg-black/20
+p-2
+"
+>
+
+<span>
+Level {l.level}
+</span>
+
+
+<span>
+{usd(l.price)}
+&nbsp;
+·
+&nbsp;
+{num(l.size)}
+</span>
+
+
+</div>
+
+))}
+
+
+</div>
+
+
+</div>
             {plan.ladder.length > 0 && (
               <div className="mt-1 space-y-1 border-t border-border pt-2">
                 {plan.ladder.map((l) => (
