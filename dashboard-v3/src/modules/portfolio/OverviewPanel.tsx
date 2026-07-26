@@ -1,6 +1,7 @@
 import { safeToFixed } from '../../utils/format';
-import { useEffect, useState, useCallback } from "react"
-import { apiFetch, ApiError } from "@/lib/api"
+import { useState } from "react"
+import { apiFetch } from "@/lib/api"
+import { usePollingResource } from "@/hooks/usePollingResource"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
@@ -45,26 +46,20 @@ function pnlTone(n: number): "long" | "short" | "default" {
 }
 
 export function OverviewPanel() {
-  const [data, setData] = useState<OverviewData | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  const fetchOverview = useCallback(async () => {
-    try {
+  const {
+    data,
+    loading,
+    error,
+  } = usePollingResource(
+    async () => {
       const res = await apiFetch<OverviewData>("/overview")
-      setData(res)
-      setError(null)
       setLastUpdated(new Date())
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to load overview")
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchOverview()
-    const id = setInterval(fetchOverview, POLL_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [fetchOverview])
+      return res
+    },
+    POLL_INTERVAL_MS
+  )
 
   if (error && !data) {
     return (
@@ -74,7 +69,7 @@ export function OverviewPanel() {
     )
   }
 
-  if (!data) {
+  if (loading || !data) {
     return <p className="text-sm text-muted-foreground">Loading overview…</p>
   }
 
