@@ -82,14 +82,28 @@ export function McpRegistryPanel() {
     }
   };
 
-  if (loading) return <Card className="w-full"><CardContent className="p-6 text-sm text-muted-foreground">Loading...</CardContent></Card>;
+  if (loading) return <Card className="
+  rounded-2xl
+  border-white/10
+  bg-white/5
+"><CardContent className="p-6 text-sm text-muted-foreground">Loading...</CardContent></Card>;
 
   return (
-    <Card className="w-full">
+    <Card className="
+  rounded-2xl
+  border-white/10
+  bg-white/5
+">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <div className="text-sm font-semibold flex items-center gap-2">
+        <div className="
+  text-sm
+  font-bold
+  flex
+  items-center
+  gap-2
+">
           <Server className="h-4 w-4 text-muted-foreground" />
-          MCP Server Registry
+          MCP Infrastructure Registry
         </div>
         <button 
           onClick={() => setShowForm(!showForm)}
@@ -122,20 +136,52 @@ export function McpRegistryPanel() {
         )}
 
         {/* Server List */}
-        <div className="space-y-3">
+        <div className="
+  space-y-4
+">
           {servers.length === 0 ? (
             <div className="text-sm text-muted-foreground text-center py-4">No MCP servers registered.</div>
           ) : (
             servers.map((server) => (
-              <div key={server.server_id} className="flex items-start justify-between p-3 bg-muted/30 rounded-md border border-border/50 group">
+              <div key={server.server_id} className="
+  flex
+  items-start
+  justify-between
+  rounded-xl
+  border
+  border-white/10
+  bg-black/20
+  p-4
+  group
+">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-mono text-sm font-semibold text-foreground">{server.server_id}</span>
+                    <span className="
+  font-mono
+  text-sm
+  font-bold
+  text-white
+">
+{server.server_id}
+</span>
                     {server.is_active ? <CheckCircle className="h-3.5 w-3.5 text-emerald-500" /> : <XCircle className="h-3.5 w-3.5 text-red-500" />}
                   </div>
-                  <div className="text-xs text-muted-foreground mb-2">{server.description}</div>
+                  <div className="
+  mt-2
+  text-xs
+  text-white/40
+">
+{server.description}
+</div>
                   <div className="flex items-center gap-4 text-[10px] uppercase tracking-wider text-muted-foreground">
-                    <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> Rate: {server.rate_limit_per_min}/min</span>
+                    <span className="
+  flex
+  items-center
+  gap-1
+">
+<Shield className="h-3 w-3" />
+Rate {server.rate_limit_per_min}/min
+</span>
                   </div>
                 </div>
                 <button 
