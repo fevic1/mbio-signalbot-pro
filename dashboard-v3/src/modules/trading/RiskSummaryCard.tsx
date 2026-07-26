@@ -1,5 +1,44 @@
+import { useEffect, useState } from "react"
+import { apiFetch } from "@/lib/api"
+
+interface RiskStatus {
+  status: string
+  risk_used_pct: number
+  capital_allocation_pct: number
+  total_exposure: number
+  max_exposure: number
+  active_positions: number
+  max_positions: number
+  controls: {
+    max_loss_guard: boolean
+    leverage_check: boolean
+    exposure_limit: boolean
+    liquidation_protection: boolean
+  }
+}
 
 export function RiskSummaryCard() {
+
+  const [risk, setRisk] = useState<RiskStatus | null>(null)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await apiFetch<RiskStatus>("/risk/status")
+        setRisk(data)
+      } catch {
+        setRisk(null)
+      }
+    }
+
+    load()
+
+    const timer = setInterval(load, 10000)
+
+    return () => clearInterval(timer)
+  }, [])
+
+  const status = risk?.status ?? "UNKNOWN"
 
   return (
 
@@ -27,7 +66,7 @@ export function RiskSummaryCard() {
           bg-green-500/10
           text-green-400
         ">
-          GREEN
+          {status}
         </span>
 
       </div>
@@ -49,7 +88,7 @@ export function RiskSummaryCard() {
           </span>
 
           <span>
-            18%
+            {risk ? `${risk.risk_used_pct}%` : "—"}
           </span>
 
         </div>
@@ -64,7 +103,7 @@ export function RiskSummaryCard() {
 
           <div className="
             h-full
-            w-[18%]
+            w-[0%]
             bg-green-400
           "/>
 
@@ -80,17 +119,17 @@ export function RiskSummaryCard() {
 
         <Metric
           label="Capital Allocation"
-          value="2.0%"
+          value={risk ? `${risk.capital_allocation_pct}%` : "—"}
         />
 
         <Metric
           label="Maximum Exposure"
-          value="$5,000"
+          value={risk ? `$${risk.max_exposure.toLocaleString()}` : "—"}
         />
 
         <Metric
           label="Liquidation Distance"
-          value="32%"
+          value={risk ? `${risk.active_positions}/${risk.max_positions}` : "—"}
         />
 
       </div>
@@ -116,13 +155,13 @@ export function RiskSummaryCard() {
 
         <div className="space-y-2 text-sm">
 
-          <Control text="Max Loss Guard" />
+          <Control text="Max Loss Guard" enabled={risk?.controls.max_loss_guard} />
 
-          <Control text="Leverage Check" />
+          <Control text="Leverage Check" enabled={risk?.controls.leverage_check} />
 
-          <Control text="Exposure Limit" />
+          <Control text="Exposure Limit" enabled={risk?.controls.exposure_limit} />
 
-          <Control text="Liquidation Protection" />
+          <Control text="Liquidation Protection" enabled={risk?.controls.liquidation_protection} />
 
         </div>
 
@@ -170,10 +209,14 @@ function Metric({
 
 
 function Control({
-  text
+  text,
+  enabled = false
 }:{
   text:string;
+  enabled?: boolean;
 }) {
+
+  void enabled;
 
   return (
 
