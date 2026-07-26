@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from "react"
-import { apiFetch, ApiError } from "@/lib/api"
+import { useEffect } from "react"
+import { apiFetch } from "@/lib/api"
+import { usePollingResource } from "@/hooks/usePollingResource"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Square } from "lucide-react"
@@ -32,34 +33,37 @@ export function BotsMiniList({
   onCloseDca: (asset: string) => void
   refreshKey?: number
 }) {
-  const [grids, setGrids] = useState<Grid[] | null>(null)
-  const [dcaPositions, setDcaPositions] = useState<DcaPosition[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchAll = useCallback(async () => {
-    try {
+  const {
+    data,
+    loading,
+    error,
+    refresh,
+  } = usePollingResource(
+    async () => {
       const [g, d] = await Promise.all([
         apiFetch<{ grids: Grid[] }>("/grids"),
         apiFetch<{ positions: DcaPosition[] }>("/dca_status"),
       ])
-      setGrids(g.grids)
-      setDcaPositions(d.positions)
-      setError(null)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to load bots")
-    }
-  }, [])
+
+      return {
+        grids: g.grids,
+        dcaPositions: d.positions,
+      }
+    },
+    POLL_INTERVAL_MS
+  )
+
+  const grids = data?.grids ?? null
+  const dcaPositions = data?.dcaPositions ?? null
 
   useEffect(() => {
-    fetchAll()
-    const id = setInterval(fetchAll, POLL_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [fetchAll, refreshKey])
+    refresh()
+  }, [refreshKey, refresh])
 
   if (error && !grids && !dcaPositions) {
     return <div className="rounded-md border border-short/40 bg-short/10 p-2 text-xs text-short">{error}</div>
   }
-  if (!grids || !dcaPositions) {
+  if (loading || !grids || !dcaPositions) {
     return <p className="text-xs text-muted-foreground">Loading bots…</p>
   }
   if (grids.length === 0 && dcaPositions.length === 0) {
