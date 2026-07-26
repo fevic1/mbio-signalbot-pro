@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react"
-import { apiFetch, ApiError } from "@/lib/api"
+import { apiFetch } from "@/lib/api"
+import { usePollingResource } from "@/hooks/usePollingResource"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,30 +24,23 @@ interface Grid {
 const POLL_INTERVAL_MS = 10_000
 
 export function GridBotsPanel({ onClose }: { onClose: (grid: Grid) => void }) {
-  const [grids, setGrids] = useState<Grid[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchGrids = useCallback(async () => {
-    try {
+  const {
+    data: grids,
+    loading,
+    error,
+  } = usePollingResource(
+    async () => {
       const res = await apiFetch<{ grids: Grid[]; count: number }>("/grids")
-      setGrids(res.grids)
-      setError(null)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to load grids")
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchGrids()
-    const id = setInterval(fetchGrids, POLL_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [fetchGrids])
+      return res.grids
+    },
+    POLL_INTERVAL_MS
+  )
 
   if (error && !grids) {
     return <div className="rounded-md border border-short/40 bg-short/10 p-3 text-xs text-short">{error}</div>
   }
 
-  if (!grids) {
+  if (loading || !grids) {
     return <p className="text-sm text-muted-foreground">Loading grid bots…</p>
   }
 
