@@ -1,13 +1,20 @@
 import TerminalLayout from "@/layouts/TerminalLayout";
 
 export default function AppShell({
-  children
+  children,
+  active,
+  onNavigate,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
+  active: string;
+  onNavigate: (page: string) => void;
 }) {
 
   return (
-    <TerminalLayout>
+    <TerminalLayout
+      active={active}
+      onNavigate={onNavigate}
+    >
       {children}
     </TerminalLayout>
   );

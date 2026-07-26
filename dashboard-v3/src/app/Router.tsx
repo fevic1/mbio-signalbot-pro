@@ -25,7 +25,7 @@ const workspaceMap = {
 
 export default function Router() {
 
-  const [active] = useState<Workspace>("trading");
+  const [active, setActive] = useState<Workspace>("trading");
 
 
   const WorkspaceComponent =
@@ -33,7 +33,12 @@ export default function Router() {
 
 
   return (
-    <AppShell>
+    <AppShell
+      active={active}
+      onNavigate={(page) =>
+        setActive(page as Workspace)
+      }
+    >
 
       <WorkspaceComponent />
 

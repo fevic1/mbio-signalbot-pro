@@ -21,8 +21,12 @@ const NAV = [
 
 export default function TerminalLayout({
   children,
+  active,
+  onNavigate,
 }: {
   children: React.ReactNode;
+  active: string;
+  onNavigate: (page: string) => void;
 }) {
 
   return (
@@ -47,7 +51,23 @@ export default function TerminalLayout({
 
             <button
               key={label as string}
-              className="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-white/60 hover:text-white hover:bg-white/10 transition"
+              onClick={() => onNavigate((label as string).toLowerCase())}
+              className={`
+                w-full
+                flex
+                items-center
+                gap-3
+                rounded-xl
+                px-4
+                py-3
+                text-sm
+                transition
+                ${
+                  active === (label as string).toLowerCase()
+                    ? "bg-white/10 text-white"
+                    : "text-white/60 hover:text-white hover:bg-white/10"
+                }
+              `}
             >
 
               <Icon size={18}/>
