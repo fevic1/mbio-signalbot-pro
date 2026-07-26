@@ -1,6 +1,7 @@
 import { safeToFixed } from '../../utils/format';
-import { useEffect, useState, useCallback } from "react"
-import { apiFetch, ApiError } from "@/lib/api"
+import { useEffect } from "react"
+import { apiFetch } from "@/lib/api"
+import { usePollingResource } from "@/hooks/usePollingResource"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -24,24 +25,18 @@ interface Position {
 const POLL_INTERVAL_MS = 10_000
 
 export function PositionsPanel({ onClose, refreshKey }: { onClose: (pos: Position) => void, refreshKey?: number }) {
-  const [positions, setPositions] = useState<Position[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchPositions = useCallback(async () => {
-    try {
-      const res = await apiFetch<{ positions: Position[]; count: number }>("/positions")
-      setPositions(res.positions)
-      setError(null)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to load positions")
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchPositions()
-    const id = setInterval(fetchPositions, POLL_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [fetchPositions])
+  const {
+  data: positions,
+  loading,
+  error,
+  refresh: fetchPositions,
+} = usePollingResource(
+  async () => {
+    const res = await apiFetch<{ positions: Position[]; count: number }>("/positions")
+    return res.positions
+  },
+  POLL_INTERVAL_MS
+)
 
   // Refresh when refreshKey changes (after close operation)
   useEffect(() => {
@@ -54,7 +49,7 @@ export function PositionsPanel({ onClose, refreshKey }: { onClose: (pos: Positio
     return <div className="rounded-md border border-short/40 bg-short/10 p-3 text-xs text-short">{error}</div>
   }
 
-  if (!positions) {
+  if (loading || !positions) {
     return <p className="text-sm text-muted-foreground">Loading positions…</p>
   }
 
