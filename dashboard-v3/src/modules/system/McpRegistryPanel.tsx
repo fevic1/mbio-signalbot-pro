@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Server, Shield, CheckCircle, XCircle, Plus, Trash2, Loader2 } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
 
 interface McpServer {
   server_id: string;
@@ -24,13 +25,9 @@ export function McpRegistryPanel() {
 
   const fetchServers = async () => {
     try {
-      const token = localStorage.getItem('mbio_token') || localStorage.getItem('token');
-      const response = await fetch('/api/dashboard/mcp/servers', {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      });
-      if (!response.ok) throw new Error("Failed to fetch");
-      const data = await response.json();
-      setServers(data.servers || []);
+      const data = await apiFetch<{ servers: McpServer[] }>('/mcp/servers');
+      setServers(data.servers ?? []);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -44,22 +41,19 @@ export function McpRegistryPanel() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const token = localStorage.getItem('mbio_token') || localStorage.getItem('token');
-      const response = await fetch('/api/dashboard/mcp/register', {
+      await apiFetch('/mcp/register', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(formData),
       });
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.detail || "Registration failed");
-      }
       setShowForm(false);
-      setFormData({ server_id: '', name: '', description: '', api_key: '', rate_limit_per_min: 60 });
-      await fetchServers(); // Refresh list
+      setFormData({
+        server_id: '',
+        name: '',
+        description: '',
+        api_key: '',
+        rate_limit_per_min: 60,
+      });
+      await fetchServers();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to register server");
     } finally {
@@ -70,15 +64,12 @@ export function McpRegistryPanel() {
   const handleUnregister = async (serverId: string) => {
     if (!confirm(`Are you sure you want to remove server '${serverId}'?`)) return;
     try {
-      const token = localStorage.getItem('mbio_token') || localStorage.getItem('token');
-      const response = await fetch(`/api/dashboard/mcp/unregister/${serverId}`, {
+      await apiFetch(`/mcp/unregister/${serverId}`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!response.ok) throw new Error("Failed to remove");
       await fetchServers();
     } catch (err) {
-      alert("Failed to remove server");
+      alert(err instanceof Error ? err.message : "Failed to remove server");
     }
   };
 
