@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react"
-import { apiFetch, ApiError } from "@/lib/api"
+import { apiFetch } from "@/lib/api"
+import { usePollingResource } from "@/hooks/usePollingResource"
 import { Badge } from "@/components/ui/badge"
 
 interface OrderRow {
@@ -15,29 +15,22 @@ interface OrderRow {
 const POLL_INTERVAL_MS = 15_000
 
 export function OrdersPanel() {
-  const [orders, setOrders] = useState<OrderRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchOrders = useCallback(async () => {
-    try {
+  const {
+    data: orders,
+    loading,
+    error,
+  } = usePollingResource(
+    async () => {
       const res = await apiFetch<{ orders: OrderRow[]; count: number }>("/orders")
-      setOrders(res.orders)
-      setError(null)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to load orders")
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchOrders()
-    const id = setInterval(fetchOrders, POLL_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [fetchOrders])
+      return res.orders
+    },
+    POLL_INTERVAL_MS
+  )
 
   if (error && !orders) {
     return <div className="rounded-md border border-short/40 bg-short/10 p-3 text-xs text-short">{error}</div>
   }
-  if (!orders) {
+  if (loading || !orders) {
     return <p className="text-sm text-muted-foreground">Loading orders…</p>
   }
   if (orders.length === 0) {
