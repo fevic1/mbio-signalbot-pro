@@ -14,7 +14,7 @@ export function MetaLearnerPanel() {
   const [selectedRegime, setSelectedRegime] = useState<string>("RANGING")
 
   useEffect(() => {
-    const fetch = async () => {
+    const loadMetaLearner = async () => {
       try {
         const res = await apiFetch<MetaLearnerData>("/meta_learner")
         setData(res)
@@ -25,8 +25,8 @@ export function MetaLearnerPanel() {
         console.error("Failed to load meta learner", e)
       }
     }
-    fetch()
-    const id = setInterval(fetch, 30000) // Refresh every 30s
+    loadMetaLearner()
+    const id = setInterval(loadMetaLearner, 30000) // Refresh every 30s
     return () => clearInterval(id)
   }, [selectedRegime])
 
