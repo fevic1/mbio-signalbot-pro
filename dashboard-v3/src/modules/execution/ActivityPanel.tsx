@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react"
-import { apiFetch, ApiError } from "@/lib/api"
+import { apiFetch } from "@/lib/api"
+import { usePollingResource } from "@/hooks/usePollingResource"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
@@ -26,29 +26,22 @@ const EVENT_LABEL: Record<string, string> = {
 }
 
 export function ActivityPanel() {
-  const [events, setEvents] = useState<ActivityEvent[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchActivity = useCallback(async () => {
-    try {
+  const {
+    data: events,
+    loading,
+    error,
+  } = usePollingResource(
+    async () => {
       const res = await apiFetch<{ activity: ActivityEvent[]; count: number }>("/activity")
-      setEvents(res.activity)
-      setError(null)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to load activity")
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchActivity()
-    const id = setInterval(fetchActivity, POLL_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [fetchActivity])
+      return res.activity
+    },
+    POLL_INTERVAL_MS
+  )
 
   if (error && !events) {
     return <div className="rounded-md border border-short/40 bg-short/10 p-3 text-xs text-short">{error}</div>
   }
-  if (!events) {
+  if (loading || !events) {
     return <p className="text-sm text-muted-foreground">Loading activity…</p>
   }
   if (events.length === 0) {
