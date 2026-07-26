@@ -1,12 +1,4 @@
-import { createRoot } from "react-dom/client";
-import "@/index.css";
+import { bootstrap } from "../shared/bootstrap";
+import { ExecutionWorkspace } from "@/modules/execution/ExecutionWorkspace";
 
-function App() {
-  return (
-    <div>
-      <h1>MBIO SignalPro execution</h1>
-    </div>
-  );
-}
-
-createRoot(document.getElementById("root")!).render(<App />);
+bootstrap(ExecutionWorkspace);
