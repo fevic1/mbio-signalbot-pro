@@ -34,6 +34,15 @@ export function MetaLearnerPanel() {
 
   const currentWeights = data.weights[selectedRegime] || {}
 
+  const rankedStrategies = Object.entries(currentWeights)
+    .sort((a, b) => b[1] - a[1])
+
+  const dominantStrategy = rankedStrategies[0]?.[0] || "N/A"
+  const ensembleStrength = rankedStrategies[0]?.[1] || 0
+  const activeStrategies = rankedStrategies.filter(
+    ([, weight]) => weight > 0.1
+  ).length
+
   return (
     <Card className="
   rounded-2xl
@@ -68,6 +77,27 @@ export function MetaLearnerPanel() {
         </div>
       </CardHeader>
       <CardContent>
+
+        <div className="
+          grid
+          grid-cols-3
+          gap-3
+          mb-6
+        ">
+          <ResearchMetric
+            label="Dominant Strategy"
+            value={dominantStrategy}
+          />
+          <ResearchMetric
+            label="Ensemble Confidence"
+            value={`${Math.round(ensembleStrength * 100)}%`}
+          />
+          <ResearchMetric
+            label="Active Strategies"
+            value={String(activeStrategies)}
+          />
+        </div>
+
         <div className="space-y-5">
           {data.strategies.map((strat) => {
             const weight = currentWeights[strat] || 0
@@ -105,5 +135,31 @@ export function MetaLearnerPanel() {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+
+function ResearchMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="
+      rounded-xl
+      border
+      border-white/10
+      bg-black/20
+      p-4
+    ">
+      <div className="text-xs uppercase text-white/40">
+        {label}
+      </div>
+      <div className="mt-2 font-semibold">
+        {value}
+      </div>
+    </div>
   )
 }
