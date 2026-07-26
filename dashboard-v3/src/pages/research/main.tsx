@@ -1,12 +1,4 @@
-import { createRoot } from "react-dom/client";
-import "@/index.css";
+import { bootstrap } from "../shared/bootstrap";
+import { ResearchWorkspace } from "@/modules/research/ResearchWorkspace";
 
-function App() {
-  return (
-    <div>
-      <h1>MBIO SignalPro research</h1>
-    </div>
-  );
-}
-
-createRoot(document.getElementById("root")!).render(<App />);
+bootstrap(ResearchWorkspace);

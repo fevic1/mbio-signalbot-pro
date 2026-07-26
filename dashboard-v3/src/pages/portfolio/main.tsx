@@ -1,12 +1,4 @@
-import { createRoot } from "react-dom/client";
-import "@/index.css";
+import { bootstrap } from "../shared/bootstrap";
+import { PortfolioWorkspace } from "@/modules/portfolio/PortfolioWorkspace";
 
-function App() {
-  return (
-    <div>
-      <h1>MBIO SignalPro portfolio</h1>
-    </div>
-  );
-}
-
-createRoot(document.getElementById("root")!).render(<App />);
+bootstrap(PortfolioWorkspace);
