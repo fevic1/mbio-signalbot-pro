@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { apiFetch } from '@/lib/api';
 import { Activity, TrendingUp, Minus, Zap, ChevronDown, AlertCircle } from 'lucide-react';
 
 interface RegimeData {
@@ -31,9 +32,7 @@ export function RegimePanel({
     const fetchAssets = async () => {
       try {
         setAssetsLoading(true);
-        const response = await fetch('/api/dashboard/assets');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const assets = await response.json();
+        const assets = await apiFetch<string[]>('/assets');
         if (!assets || assets.length === 0) {
           throw new Error("No assets available from exchange");
         }
@@ -55,9 +54,7 @@ export function RegimePanel({
     if (!asset) return;
     try {
       setLoading(true);
-      const response = await fetch(`/api/dashboard/regime?asset=${asset}`);
-      if (!response.ok) throw new Error("Failed to fetch regime data");
-      const json: RegimeData = await response.json();
+      const json = await apiFetch<RegimeData>(`/regime?asset=${asset}`);
       setData(json);
       setError(null);
     } catch (err) {
@@ -79,9 +76,8 @@ export function RegimePanel({
   useEffect(() => {
     const refreshState = async () => {
       try {
-        await fetch('/api/dashboard/refresh-state', {
+        await apiFetch('/refresh-state', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
         });
       } catch (err) {
         console.error("Failed to refresh state:", err);
