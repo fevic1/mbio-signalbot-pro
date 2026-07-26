@@ -1,74 +1,34 @@
 import AppShell from "./AppShell";
 
-import { QuickTicket } from "@/modules/trading/QuickTicket";
-import { OrdersPanel } from "@/modules/execution/OrdersPanel";
-import { PositionsPanel } from "@/modules/portfolio/PositionsPanel";
-import { OpenDcaForm } from "@/modules/dca/OpenDcaForm";
+import { TradingWorkspace } from "@/modules/trading/TradingWorkspace";
+import { ExecutionWorkspace } from "@/modules/execution/ExecutionWorkspace";
+import { PortfolioWorkspace } from "@/modules/portfolio/PortfolioWorkspace";
+import { DCAWorkspace } from "@/modules/dca/DCAWorkspace";
+import { MarketsWorkspace } from "@/modules/markets/MarketsWorkspace";
+import { ResearchWorkspace } from "@/modules/research/ResearchWorkspace";
+import { SystemWorkspace } from "@/modules/system/SystemWorkspace";
+
 
 export default function Router() {
-
-  const handleResult = (
-    msg: string,
-    isError: boolean
-  ) => {
-    console.log(
-      isError ? "ERROR:" : "SUCCESS:",
-      msg
-    );
-  };
-
-
-  const handleClose = (position: any) => {
-    console.log(
-      "close position requested",
-      position
-    );
-  };
-
 
   return (
     <AppShell>
 
       <div className="space-y-8">
 
-        <section>
-          <h2 className="text-xl font-bold">
-            Execution Terminal
-          </h2>
+        <TradingWorkspace />
 
-          <QuickTicket />
-        </section>
+        <ExecutionWorkspace />
 
+        <PortfolioWorkspace />
 
-        <section>
-          <h2 className="text-xl font-bold">
-            Execution Monitor
-          </h2>
+        <DCAWorkspace />
 
-          <OrdersPanel />
-        </section>
+        <MarketsWorkspace />
 
+        <ResearchWorkspace />
 
-        <section>
-          <h2 className="text-xl font-bold">
-            Portfolio Command Center
-          </h2>
-
-          <PositionsPanel
-            onClose={handleClose}
-          />
-        </section>
-
-
-        <section>
-          <h2 className="text-xl font-bold">
-            DCA Engine
-          </h2>
-
-          <OpenDcaForm
-            onResult={handleResult}
-          />
-        </section>
+        <SystemWorkspace />
 
       </div>
 
