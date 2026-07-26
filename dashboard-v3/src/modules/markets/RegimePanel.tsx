@@ -106,7 +106,11 @@ export function RegimePanel({ defaultAsset = "" }: { defaultAsset?: string }) {
   };
 
   if (assetsLoading) {
-    return <Card className="w-full"><CardContent className="p-6 text-sm text-muted-foreground">Loading asset universe from exchange...</CardContent></Card>;
+    return <Card className="
+  rounded-2xl
+  border-white/10
+  bg-white/5
+"><CardContent className="p-6 text-sm text-muted-foreground">Loading asset universe from exchange...</CardContent></Card>;
   }
 
   if (availableAssets.length === 0) {
@@ -123,13 +127,27 @@ export function RegimePanel({ defaultAsset = "" }: { defaultAsset?: string }) {
   }
 
   if (loading && !data) {
-    return <Card className="w-full"><CardContent className="p-6 text-sm text-muted-foreground">Loading regime analysis...</CardContent></Card>;
+    return <Card className="
+  rounded-2xl
+  border-white/10
+  bg-white/5
+"><CardContent className="p-6 text-sm text-muted-foreground">Loading regime analysis...</CardContent></Card>;
   }
 
   return (
-    <Card className="w-full">
+    <Card className="
+  rounded-2xl
+  border-white/10
+  bg-white/5
+">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <div className="text-sm font-semibold flex items-center gap-2">
+        <div className="
+  text-sm
+  font-bold
+  flex
+  items-center
+  gap-2
+">
           <Activity className="h-4 w-4 text-muted-foreground" />
           Market Regime
         </div>
@@ -151,15 +169,30 @@ export function RegimePanel({ defaultAsset = "" }: { defaultAsset?: string }) {
         {error ? (
           <div className="text-sm text-red-400">Error: {error}</div>
         ) : data && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="space-y-6">
+            <div className="
+  flex
+  items-center
+  justify-between
+">
               <div className={`flex items-center gap-2 text-2xl font-bold ${getRegimeColor(data.regime)}`}>
                 {getRegimeIcon(data.regime)}
                 {data.regime}
               </div>
               <div className="text-right">
-                <div className="text-xs text-muted-foreground">Confidence</div>
-                <div className="text-xl font-semibold">{(data.confidence * 100).toFixed(1)}%</div>
+                <div className="
+  text-xs
+  text-muted-foreground
+">
+Confidence
+</div>
+
+<div className="
+  text-3xl
+  font-bold
+">
+{(data.confidence * 100).toFixed(1)}%
+</div>
               </div>
             </div>
 
@@ -173,18 +206,62 @@ export function RegimePanel({ defaultAsset = "" }: { defaultAsset?: string }) {
               ></div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 pt-2 text-center">
-              <div className="p-2 bg-muted/50 rounded-md">
+            <div className="
+  grid
+  grid-cols-3
+  gap-4
+  pt-4
+">
+              <div className="
+  rounded-xl
+  border
+  border-white/10
+  bg-black/20
+  p-4
+">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Momentum</div>
-                <div className="font-mono text-sm font-medium">{data.momentum.toFixed(2)}</div>
+                <div className="
+  mt-2
+  font-mono
+  text-lg
+  font-bold
+">
+{data.momentum.toFixed(2)}
+</div>
               </div>
-              <div className="p-2 bg-muted/50 rounded-md">
+              <div className="
+  rounded-xl
+  border
+  border-white/10
+  bg-black/20
+  p-4
+">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Volatility</div>
-                <div className="font-mono text-sm font-medium">{data.volatility.toFixed(2)}</div>
+                <div className="
+  mt-2
+  font-mono
+  text-lg
+  font-bold
+">
+{data.volatility.toFixed(2)}
+</div>
               </div>
-              <div className="p-2 bg-muted/50 rounded-md">
+              <div className="
+  rounded-xl
+  border
+  border-white/10
+  bg-black/20
+  p-4
+">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Mean Rev.</div>
-                <div className="font-mono text-sm font-medium">{data.mean_reversion.toFixed(2)}</div>
+                <div className="
+  mt-2
+  font-mono
+  text-lg
+  font-bold
+">
+{data.mean_reversion.toFixed(2)}
+</div>
               </div>
             </div>
           </div>
