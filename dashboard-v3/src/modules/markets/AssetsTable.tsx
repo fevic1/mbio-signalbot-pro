@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '@/lib/api';
 
 interface Asset {
   symbol: string;
@@ -30,10 +31,7 @@ const AssetsTable: React.FC = () => {
     const fetchAssets = async () => {
       try {
         setLoading(true);
-        // Fetches the fixed backend endpoint
-        const response = await fetch('/api/dashboard/assets/universe');
-        if (!response.ok) throw new Error('Network response was not ok');
-        const data = await response.json();
+        const data = await apiFetch<{ success: boolean; assets: Asset[] }>('/assets/universe');
         if (data.success) {
           setAssets(data.assets);
         }
