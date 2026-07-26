@@ -12,7 +12,13 @@ interface RegimeData {
   is_cached: boolean;
 }
 
-export function RegimePanel({ defaultAsset = "" }: { defaultAsset?: string }) {
+export function RegimePanel({
+  defaultAsset = "",
+  onAssetChange,
+}: {
+  defaultAsset?: string;
+  onAssetChange?: (asset: string) => void;
+}) {
   const [selectedAsset, setSelectedAsset] = useState(defaultAsset);
   const [availableAssets, setAvailableAssets] = useState<string[]>([]);
   const [data, setData] = useState<RegimeData | null>(null);
@@ -155,7 +161,7 @@ export function RegimePanel({ defaultAsset = "" }: { defaultAsset?: string }) {
         <div className="relative">
           <select 
             value={selectedAsset} 
-            onChange={(e) => setSelectedAsset(e.target.value)}
+            onChange={(e) => { setSelectedAsset(e.target.value); onAssetChange?.(e.target.value); }}
             className="appearance-none bg-muted border border-border rounded px-2 py-1 text-xs font-mono pr-6 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500"
           >
             {availableAssets.map(asset => (

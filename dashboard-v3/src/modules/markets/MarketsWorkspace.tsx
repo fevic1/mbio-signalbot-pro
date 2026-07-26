@@ -1,10 +1,13 @@
 
+import { useState } from "react";
 import AssetsTable from "./AssetsTable";
 import { CandleChart } from "./CandleChart";
 import { RegimePanel } from "./RegimePanel";
 
 
 export function MarketsWorkspace() {
+
+  const [selectedAsset, setSelectedAsset] = useState("BTC");
 
   return (
 
@@ -34,7 +37,7 @@ export function MarketsWorkspace() {
 
 
 
-      <RegimePanel />
+      <RegimePanel defaultAsset={selectedAsset} onAssetChange={setSelectedAsset} />
 
 
 
@@ -92,7 +95,7 @@ export function MarketsWorkspace() {
           </h2>
 
 
-          <CandleChart />
+          <CandleChart asset={selectedAsset} onAssetChange={setSelectedAsset} />
 
 
         </div>

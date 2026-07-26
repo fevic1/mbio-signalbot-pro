@@ -37,8 +37,14 @@ interface AssetData {
 const INTERVALS = ["1m", "5m", "15m", "1h", "4h", "1d", "3d", "1w", "1M"] as const
 type Interval = typeof INTERVALS[number]
 
-export function CandleChart() {
-  const [asset, setAsset] = useState("BTC")
+export function CandleChart({
+  asset: externalAsset,
+  onAssetChange,
+}: {
+  asset?: string;
+  onAssetChange?: (asset: string) => void;
+}) {
+  const [asset, setAsset] = useState(externalAsset || "BTC")
   const [interval, setInterval_] = useState<Interval>("1h")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -222,7 +228,7 @@ export function CandleChart() {
         {/* Step 1: Asset Selector Dropdown */}
         <select
           value={asset}
-          onChange={(e) => setAsset(e.target.value)}
+          onChange={(e) => { setAsset(e.target.value); onAssetChange?.(e.target.value); }}
           className="
   h-9
   rounded-xl
