@@ -408,15 +408,16 @@ async def start_api_server():
                 logger.info(f"✅ API server socket VERIFIED on port {API_PORT}")
                 
                 # Also verify HTTP response
-                import urllib.request
+                import httpx
                 try:
-                    resp = urllib.request.urlopen(f'http://127.0.0.1:{API_PORT}/status', timeout=2)
-                    if resp.status == 200:
+                    async with httpx.AsyncClient(timeout=2.0) as client:
+                        resp = await client.get(f"http://127.0.0.1:{API_PORT}/health")
+                    if resp.status_code == 200:
                         logger.info("✅ API server HTTP endpoint VERIFIED")
                     else:
-                        logger.warning(f"⚠️ API server returned status {resp.status}")
+                        logger.warning(f"⚠️ API server returned status {resp.status_code}")
                 except Exception as http_err:
-                    logger.error(f" API server HTTP test failed: {http_err}")
+                    logger.error(f"API server HTTP test failed: {http_err}")
             else:
                 logger.error(f"❌ API server socket NOT bound on port {API_PORT} (connect_ex returned {result})")
                 serve_task.cancel()

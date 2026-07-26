@@ -76,7 +76,7 @@ export function RegimePanel({
   useEffect(() => {
     const refreshState = async () => {
       try {
-        await apiFetch('/refresh-state', {
+        await apiFetch('/sync-state', {
           method: 'POST',
         });
       } catch (err) {
