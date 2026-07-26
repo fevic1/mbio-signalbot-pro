@@ -62,8 +62,30 @@ export function PositionsPanel({ onClose, refreshKey }: { onClose: (pos: Positio
     return <p className="text-sm text-muted-foreground">No open positions.</p>
   }
 
+  const portfolioStats = {
+    exposure: positions.reduce((sum, p) => sum + p.value, 0),
+    pnl: positions.reduce((sum, p) => sum + p.upnl, 0),
+    longs: positions.filter((p) => p.side === "BUY").length,
+    shorts: positions.filter((p) => p.side !== "BUY").length,
+    monitored: positions.filter((p) => p.liquidation_px > 0).length,
+  }
+
   return (
     <div className="space-y-3">
+
+      <div className="
+        grid
+        grid-cols-2
+        md:grid-cols-5
+        gap-3
+      ">
+        <Metric label="Exposure" value={`$${safeToFixed(portfolioStats.exposure)}`} />
+        <Metric label="Unrealized PnL" value={`$${safeToFixed(portfolioStats.pnl)}`} />
+        <Metric label="Longs" value={String(portfolioStats.longs)} />
+        <Metric label="Shorts" value={String(portfolioStats.shorts)} />
+        <Metric label="Risk Monitored" value={`${portfolioStats.monitored}/${positions.length}`} />
+      </div>
+
       {error && (
         <div className="rounded-md border border-warn/40 bg-warn/10 p-2 text-xs text-warn">
           Last refresh failed: {error} — showing last known values.
@@ -179,6 +201,32 @@ export function PositionsPanel({ onClose, refreshKey }: { onClose: (pos: Positio
 
       </div>
 
+    </div>
+  )
+}
+
+
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="
+      rounded-xl
+      border
+      border-white/10
+      bg-white/5
+      p-4
+    ">
+      <div className="text-xs uppercase text-white/40">
+        {label}
+      </div>
+      <div className="mt-2 font-semibold">
+        {value}
+      </div>
     </div>
   )
 }
