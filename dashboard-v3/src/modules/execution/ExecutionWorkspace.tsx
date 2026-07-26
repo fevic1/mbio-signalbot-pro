@@ -1,6 +1,7 @@
 
 import { OrdersPanel } from "./OrdersPanel";
 import { ActivityPanel } from "./ActivityPanel";
+import { ExecutionTelemetryPanel } from "./ExecutionTelemetryPanel";
 
 
 export function ExecutionWorkspace() {
@@ -91,6 +92,9 @@ export function ExecutionWorkspace() {
         <ActivityPanel />
 
       </div>
+
+
+      <ExecutionTelemetryPanel />
 
 
     </div>
