@@ -35,11 +35,19 @@ export function MetaLearnerPanel() {
   const currentWeights = data.weights[selectedRegime] || {}
 
   return (
-    <Card>
+    <Card className="
+  rounded-2xl
+  border-white/10
+  bg-white/5
+">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-semibold">🧠 AI Ensemble & Meta-Learner</span>
+            <span className="
+  font-bold
+">
+🧠 AI Ensemble & Meta-Learner
+</span>
             <Badge variant="default" className="text-xs">6 Strategies</Badge>
           </div>
         </div>
@@ -60,7 +68,7 @@ export function MetaLearnerPanel() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
+        <div className="space-y-5">
           {data.strategies.map((strat) => {
             const weight = currentWeights[strat] || 0
             const percentage = Math.round(weight * 100)
@@ -70,9 +78,21 @@ export function MetaLearnerPanel() {
                   <span className="font-medium text-muted-foreground">{strat}</span>
                   <span className="font-mono font-semibold">{percentage}%</span>
                 </div>
-                <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                <div className="
+  h-3
+  w-full
+  rounded-full
+  overflow-hidden
+  bg-black/30
+">
                   <div 
-                    className="h-full bg-primary transition-all duration-500" 
+                    className="
+  h-full
+  rounded-full
+  bg-primary
+  transition-all
+  duration-700
+" 
                     style={{ width: `${percentage}%` }} 
                   />
                 </div>
