@@ -1,6 +1,6 @@
 
-import { useEffect, useState, useCallback } from "react"
-import { apiFetch, ApiError } from "@/lib/api"
+import { apiFetch } from "@/lib/api"
+import { usePollingResource } from "@/hooks/usePollingResource"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -35,51 +35,22 @@ export function DcaPanel({
 }) {
 
 
-  const [positions, setPositions] = useState<DcaPosition[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-
-  const fetchDca = useCallback(async () => {
-
-    try {
-
+  const {
+    data: positions,
+    loading,
+    error,
+  } = usePollingResource(
+    async () => {
       const res =
         await apiFetch<{
           positions: DcaPosition[]
           count: number
         }>("/dca_status")
 
-
-      setPositions(res.positions)
-      setError(null)
-
-    } catch (e) {
-
-      setError(
-        e instanceof ApiError
-          ? e.message
-          : "Failed to load DCA positions"
-      )
-
-    }
-
-  }, [])
-
-
-
-  useEffect(() => {
-
-    fetchDca()
-
-    const id =
-      setInterval(
-        fetchDca,
-        POLL_INTERVAL_MS
-      )
-
-    return () => clearInterval(id)
-
-  }, [fetchDca])
+      return res.positions
+    },
+    POLL_INTERVAL_MS
+  )
 
 
 
@@ -103,7 +74,7 @@ export function DcaPanel({
 
 
 
-  if (!positions) {
+  if (loading || !positions) {
 
     return (
       <p className="text-sm text-muted-foreground">
