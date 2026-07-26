@@ -201,14 +201,41 @@ export function CandleChart() {
   const priceSign = priceChange !== null && priceChange > 0 ? "+" : ""
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="
+  flex
+  h-full
+  flex-col
+  rounded-2xl
+  border
+  border-white/10
+  bg-white/5
+  p-4
+">
       {/* Header Controls */}
-      <div className="mb-2 flex items-center gap-3 flex-wrap">
+      <div className="
+  mb-4
+  flex
+  items-center
+  gap-3
+  flex-wrap
+">
         {/* Step 1: Asset Selector Dropdown */}
         <select
           value={asset}
           onChange={(e) => setAsset(e.target.value)}
-          className="h-8 rounded-md border border-input bg-background px-2 py-1 text-xs font-mono outline-none focus:ring-1 focus:ring-primary"
+          className="
+  h-9
+  rounded-xl
+  border
+  border-white/10
+  bg-black/30
+  px-3
+  text-xs
+  font-mono
+  outline-none
+  focus:ring-1
+  focus:ring-primary
+"
         >
           {assets.length === 0 && <option value={asset}>{asset}</option>}
           {assets.map((a) => (
@@ -219,14 +246,24 @@ export function CandleChart() {
         </select>
 
         {/* Step 2: Timeframe Buttons */}
-        <div className="flex gap-1">
+        <div className="
+  flex
+  gap-1
+  rounded-xl
+  border
+  border-white/10
+  bg-black/20
+  p-1
+">
           {INTERVALS.map((iv) => (
             <button
               key={iv}
               onClick={() => setInterval_(iv)}
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-mono transition-colors",
-                interval === iv ? "bg-primary/15 text-primary font-semibold" : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                interval === iv
+? "bg-primary/20 text-primary font-semibold"
+: "text-muted-foreground hover:bg-white/10"
               )}
             >
               {iv}
@@ -265,7 +302,29 @@ export function CandleChart() {
       </div>
 
       {/* Chart Container */}
-      <div ref={containerRef} className="min-h-0 flex-1 rounded-md border border-border bg-card/50" />
+      <div
+  className="
+    mb-3
+    text-xs
+    uppercase
+    tracking-wider
+    text-white/40
+  "
+>
+  Price Action Terminal
+</div>
+
+<div
+  ref={containerRef}
+  className="
+    min-h-0
+    flex-1
+    rounded-xl
+    border
+    border-white/10
+    bg-black/20
+  "
+/>
     </div>
   )
 }
