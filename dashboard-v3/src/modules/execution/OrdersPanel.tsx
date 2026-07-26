@@ -1,16 +1,6 @@
-import { apiFetch } from "@/lib/api"
+import { getOrders } from "@/services/execution"
 import { usePollingResource } from "@/hooks/usePollingResource"
 import { Badge } from "@/components/ui/badge"
-
-interface OrderRow {
-  source: "exchange" | "grid" | "dca"
-  asset: string
-  side: string
-  price: number
-  size: number | null
-  order_id: string | number | null
-  label: string
-}
 
 const POLL_INTERVAL_MS = 15_000
 
@@ -20,10 +10,7 @@ export function OrdersPanel() {
     loading,
     error,
   } = usePollingResource(
-    async () => {
-      const res = await apiFetch<{ orders: OrderRow[]; count: number }>("/orders")
-      return res.orders
-    },
+    (signal) => getOrders(signal),
     POLL_INTERVAL_MS
   )
 

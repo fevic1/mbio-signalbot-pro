@@ -1,16 +1,13 @@
 import { apiFetch } from "@/lib/api"
 
-export interface Order {
-  order_id: string
+export interface OrderRow {
+  source: "exchange" | "grid" | "dca"
   asset: string
   side: string
-  order_type: string
   price: number
-  quantity: number
-  filled: number
-  remaining: number
-  status: string
-  created_at: string
+  size: number | null
+  order_id: string | number | null
+  label: string
 }
 
 export interface ActivityEvent {
@@ -42,7 +39,7 @@ export interface Grid {
 }
 
 export async function getOrders(signal?: AbortSignal) {
-  const res = await apiFetch<{ orders: Order[] }>("/orders", { signal })
+  const res = await apiFetch<{ orders: OrderRow[]; count: number }>("/orders", { signal })
   return res.orders
 }
 
