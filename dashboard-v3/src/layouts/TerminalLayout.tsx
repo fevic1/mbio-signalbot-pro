@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
+
 import {
   Activity,
   BarChart3,
@@ -28,6 +31,27 @@ export default function TerminalLayout({
   active: string;
   onNavigate: (page: string) => void;
 }) {
+
+  const [overview, setOverview] = useState<any>(null);
+
+  useEffect(() => {
+
+    const load = async () => {
+      try {
+        const data = await apiFetch("/overview");
+        setOverview(data);
+      } catch {
+        setOverview(null);
+      }
+    };
+
+    load();
+
+    const timer = setInterval(load, 10000);
+
+    return () => clearInterval(timer);
+
+  }, []);
 
   return (
     <div className="min-h-screen bg-black text-white flex">
@@ -106,13 +130,37 @@ export default function TerminalLayout({
 
         <div className="grid grid-cols-4 gap-4 mb-8">
 
-          <Metric title="Capital" value="$25,430"/>
+          <Metric
+            title="Capital"
+            value={
+              overview
+                ? `$${Number(overview.total_balance).toFixed(2)}`
+                : "—"
+            }
+          />
 
-          <Metric title="Risk Used" value="18%"/>
+          <Metric
+            title="Risk Used"
+            value={
+              overview
+                ? `${Number(overview.deployed_pct).toFixed(1)}%`
+                : "—"
+            }
+          />
 
-          <Metric title="Market Regime" value="SIDEWAYS"/>
+          <Metric
+            title="Positions"
+            value={
+              overview
+                ? String(overview.open_positions)
+                : "—"
+            }
+          />
 
-          <Metric title="Execution" value="ONLINE"/>
+          <Metric
+            title="Execution"
+            value="ONLINE"
+          />
 
         </div>
 
