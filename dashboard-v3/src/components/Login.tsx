@@ -15,6 +15,7 @@ export function Login() {
     setSubmitting(true)
     try {
       await login(email, password)
+      window.location.replace("/pages/trading/")
     } catch {
       // error already set in the store; nothing further to do here
     } finally {

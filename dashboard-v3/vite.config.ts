@@ -8,6 +8,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
+        login: resolve(__dirname, 'pages/login/index.html'),
         trading: resolve(__dirname, 'pages/trading/index.html'),
         execution: resolve(__dirname, 'pages/execution/index.html'),
         portfolio: resolve(__dirname, 'pages/portfolio/index.html'),
