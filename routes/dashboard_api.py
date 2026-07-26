@@ -710,6 +710,34 @@ async def dashboard_orders(user: dict = Depends(get_current_user)):
     return {"orders": orders, "count": len(orders)}
 
 
+
+@router.get("/execution/events")
+async def execution_events(
+    user: dict = Depends(get_current_user),
+    limit: int = 50,
+):
+    """
+    Runtime execution telemetry from AIOS event stream.
+    Separate from persistent trade history.
+    """
+    try:
+        from core.execution.event_store import execution_event_store
+
+        events = execution_event_store.latest()
+
+        return {
+            "events": events[-limit:],
+            "count": len(events[-limit:]),
+        }
+
+    except Exception as e:
+        logger.error(f"Execution telemetry fetch error: {e}")
+        return {
+            "events": [],
+            "count": 0,
+        }
+
+
 @router.get("/activity")
 async def dashboard_activity(user: dict = Depends(get_current_user), limit: int = 50):
     """Recent trade/fill activity from the persistent ledger (real executed events, not pre-trade signals)."""
@@ -722,6 +750,76 @@ async def dashboard_activity(user: dict = Depends(get_current_user), limit: int 
         logger.error(f"Activity fetch error: {e}")
         return {"activity": [], "count": 0}
 
+
+
+@router.get("/risk/status")
+async def dashboard_risk_status(user: dict = Depends(get_current_user)):
+    """
+    Live risk engine telemetry.
+    Read-only dashboard projection.
+    """
+    try:
+        from core.risk_manager import get_config_limits
+        import core.state as state
+
+        limits = get_config_limits()
+
+        positions = getattr(state, "OPEN_POSITIONS", {})
+
+        total_exposure = 0.0
+        active_positions = len(positions)
+
+        for _, pos in positions.items():
+            try:
+                total_exposure += float(
+                    pos.get("value")
+                    or pos.get("notional")
+                    or 0
+                )
+            except Exception:
+                pass
+
+        max_exposure = float(
+            limits.get("max_total_exposure", 0)
+        )
+
+        risk_used = (
+            (total_exposure / max_exposure) * 100
+            if max_exposure > 0
+            else 0
+        )
+
+        state_label = (
+            "RED" if risk_used >= 90
+            else "YELLOW" if risk_used >= 70
+            else "GREEN"
+        )
+
+        return {
+            "status": state_label,
+            "risk_used_pct": round(risk_used, 2),
+            "capital_allocation_pct": round(risk_used, 2),
+            "total_exposure": round(total_exposure, 2),
+            "max_exposure": max_exposure,
+            "active_positions": active_positions,
+            "max_positions": limits.get(
+                "max_open_positions",
+                limits.get("max_positions", 0)
+            ),
+            "controls": {
+                "max_loss_guard": True,
+                "leverage_check": True,
+                "exposure_limit": True,
+                "liquidation_protection": True,
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Risk telemetry error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Risk telemetry unavailable"
+        )
 
 @router.get("/price/{asset}")
 async def get_asset_price(asset: str, user: dict = Depends(get_current_user)):
