@@ -83,20 +83,51 @@ const AssetsTable: React.FC = () => {
   }
 
   return (
-    <div className="w-full">
+    <div className="
+  w-full
+  rounded-2xl
+  border
+  border-white/10
+  bg-white/5
+  p-6
+">
       <div className="mb-4">
         <input
           type="text"
-          placeholder="Search assets..."
+          placeholder="Search trading universe..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full max-w-md px-4 py-2 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+          className="
+  w-full
+  max-w-md
+  rounded-xl
+  border
+  border-white/10
+  bg-black/30
+  px-4
+  py-3
+  text-white
+  placeholder-white/30
+  outline-none
+"
         />
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-800">
+      <div className="
+  overflow-x-auto
+  rounded-xl
+  border
+  border-white/10
+">
         <table className="w-full text-sm text-left">
-          <thead className="text-xs text-gray-400 uppercase bg-gray-900/80 border-b border-gray-800">
+          <thead className="
+  text-xs
+  uppercase
+  text-white/40
+  bg-black/40
+  border-b
+  border-white/10
+">
             <tr>
               <th className="p-4 w-12">#</th>
               <th className="p-4">Asset</th>
@@ -107,11 +138,19 @@ const AssetsTable: React.FC = () => {
               <th className="p-4">Max Lev</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-800/50 bg-gray-900/30">
+          <tbody className="
+  divide-y
+  divide-white/5
+">
             {filteredAssets.map((asset, index) => (
               <tr 
                 key={asset.symbol} 
-                className="hover:bg-gray-800/40 transition cursor-pointer group"
+                className="
+  hover:bg-white/5
+  transition
+  cursor-pointer
+  group
+"
                 onClick={() => {
                   // Dynamically populates the Quick Ticket sidebar
                   const input = document.getElementById('quick-ticket-asset-input') as HTMLInputElement;
@@ -132,7 +171,13 @@ const AssetsTable: React.FC = () => {
                       alt={asset.symbol}
                     />
                     <div>
-                      <span className="font-bold text-white group-hover:text-blue-400 transition">{asset.symbol}</span>
+                      <span className="
+  font-bold
+  text-white
+  group-hover:text-blue-400
+">
+{asset.symbol}
+</span>
                       <span className="text-[10px] ml-1.5 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10 font-semibold uppercase">
                         {asset.type}
                       </span>
@@ -143,9 +188,19 @@ const AssetsTable: React.FC = () => {
                 <td className="p-4 font-mono font-medium text-sm text-gray-200">{formatUSD(asset.volume_24h)}</td>
                 <td className="p-4 font-mono font-bold text-sm text-white">{formatUSD(asset.price)}</td>
                 <td className="p-4">
-                  <span className="inline-flex items-center rounded bg-gray-800 px-2 py-1 text-xs font-semibold text-gray-400">
-                    RANGING
-                  </span>
+                  <span className="
+  inline-flex
+  items-center
+  rounded-full
+  bg-blue-500/10
+  px-3
+  py-1
+  text-xs
+  font-semibold
+  text-blue-400
+">
+RANGING
+</span>
                 </td>
                 <td className="p-4 font-mono text-xs text-green-400 font-semibold">{asset.max_leverage}x</td>
               </tr>
