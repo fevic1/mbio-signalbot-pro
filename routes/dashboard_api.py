@@ -2020,15 +2020,20 @@ async def stream_prices():
 
 @router.get("/assets")
 async def get_available_assets(current_user: dict = Depends(get_current_user)):
-    """Return ALL available perpetual assets from HIP-4 exchange API (no hardcoded limits)."""
+    """Return all tradeable perpetual assets."""
     try:
         from core.asset_universe import get_universe
+
         universe = get_universe()
-        perp_assets = [asset if isinstance(asset, str) else asset.get('name', asset.get('coin', '')) for asset in universe]
-        logger.info(f"Assets fetched: {len(perp_assets)} perpetual assets")
-        return perp_assets
-    except Exception as e:
-        logger.error(f"Failed to fetch assets from HIP-4: {e}")
+        if not universe._initialized:
+            universe.force_refresh()
+
+        assets = universe.tradeable_coins()
+        logger.info("Assets fetched: %d perpetual assets", len(assets))
+        return assets
+
+    except Exception:
+        logger.exception("Failed to fetch assets from HIP-4")
         return []
 
 @router.post("/sync-state")

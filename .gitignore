@@ -86,4 +86,5 @@ __pycache__/
 
 .aios/runtime_state.json
 .aios/audit/
-.aios/workspaces/
+.aios/workspaces/cookies.txt
+cookies.txt
