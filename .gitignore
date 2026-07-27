@@ -88,3 +88,4 @@ __pycache__/
 .aios/audit/
 .aios/workspaces/cookies.txt
 cookies.txt
+.aios/workspaces/
