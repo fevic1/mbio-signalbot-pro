@@ -89,3 +89,6 @@ __pycache__/
 .aios/workspaces/cookies.txt
 cookies.txt
 .aios/workspaces/
+
+node_modules/
+frontend/node_modules/
