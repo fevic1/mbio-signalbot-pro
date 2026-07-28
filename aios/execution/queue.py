@@ -1,7 +1,9 @@
+from aios.core.queue import Queue
+
 from collections import deque
 
 
-class ExecutionQueue:
+class ExecutionQueue(Queue):
 
     def __init__(self):
         self._ready = deque()

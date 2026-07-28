@@ -1,7 +1,9 @@
+from aios.core.component import Component
+
 from datetime import datetime
 
 
-class ExecutionMonitor:
+class ExecutionMonitor(Component):
     """
     Collects execution metrics.
 

@@ -1,7 +1,9 @@
+from aios.core.identifiable import Identifiable
+
 from .event_store import EventStore
 
 
-class LearningSearch:
+class LearningSearch(Identifiable):
 
     def __init__(self):
 

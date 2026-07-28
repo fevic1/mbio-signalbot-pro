@@ -1,7 +1,9 @@
+from aios.core.identifiable import Identifiable
+
 from .mailbox import AgentMailbox
 
 
-class AgentCommunicationManager:
+class AgentCommunicationManager(Identifiable):
 
 
     def __init__(

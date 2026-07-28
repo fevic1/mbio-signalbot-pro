@@ -1,9 +1,11 @@
+from aios.core.identifiable import Identifiable
+
 from .priority import MemoryPriority
 from .budget import ContextBudget
 
 
 
-class MemoryContextAssembler:
+class MemoryContextAssembler(Identifiable):
 
 
     def __init__(

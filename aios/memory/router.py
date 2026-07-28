@@ -1,3 +1,5 @@
+from aios.core.identifiable import Identifiable
+
 from .models import (
     MemoryRecord,
     MemoryType,
@@ -13,7 +15,7 @@ from .stores import (
 )
 
 
-class MemoryRouter:
+class MemoryRouter(Identifiable):
 
 
     def __init__(self):

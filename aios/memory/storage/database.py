@@ -1,8 +1,10 @@
+from aios.core.identifiable import Identifiable
+
 import sqlite3
 from pathlib import Path
 
 
-class MemoryDatabase:
+class MemoryDatabase(Identifiable):
 
 
     def __init__(

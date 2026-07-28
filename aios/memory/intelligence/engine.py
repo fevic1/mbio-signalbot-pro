@@ -1,9 +1,11 @@
+from aios.core.identifiable import Identifiable
+
 from ..search import MemoryRetriever
 from ..activation import MemoryRanker
 from ..context import MemoryContextAssembler
 
 
-class MemoryIntelligenceEngine:
+class MemoryIntelligenceEngine(Identifiable):
 
 
     def __init__(

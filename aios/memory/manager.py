@@ -1,8 +1,10 @@
+from aios.core.identifiable import Identifiable
+
 from .obsidian import ObsidianWriter
 from .validator import MemoryValidator
 
 
-class MemoryManager:
+class MemoryManager(Identifiable):
 
     def __init__(self):
 

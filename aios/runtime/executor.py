@@ -1,7 +1,11 @@
+from aios.core.execution.runner import ExecutionRunner
+
+from aios.core.execution import ExecutionEngine
+
 from datetime import datetime
 
 
-class AgentExecutor:
+class AgentExecutor(ExecutionRunner):
 
     def __init__(
         self,

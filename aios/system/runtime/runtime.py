@@ -1,9 +1,11 @@
+from aios.core.component import Component
+
 from aios.system.lifecycle import (
     LifecycleManager,
 )
 
 
-class AIOSRuntime:
+class AIOSRuntime(Component):
 
 
     def __init__(

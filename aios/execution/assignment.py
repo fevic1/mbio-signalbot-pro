@@ -1,7 +1,9 @@
+from aios.core.execution.runner import ExecutionRunner
+
 from typing import List, Dict
 
 
-class TaskAssignmentEngine:
+class TaskAssignmentEngine(ExecutionRunner):
 
 
     def assign(

@@ -1,7 +1,10 @@
+from aios.core.identifiable import Identifiable
+
+from aios.core.events.publisher import EventPublisher
 from aios.events import AIOSDomainEvent
 
 
-class MemoryEventPublisher:
+class MemoryEventPublisher(Identifiable):
 
 
     def __init__(

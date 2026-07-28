@@ -1,3 +1,5 @@
+from aios.core.factory import Factory
+
 from aios.learning.recommendation_model import (
     ImprovementProposal
 )

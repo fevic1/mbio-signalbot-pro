@@ -1,8 +1,12 @@
+from aios.core.identifiable import Identifiable
+
+from aios.core.factory import Factory
+
 from .workspace import AgentWorkspace
 from .context import AgentContext
 
 
-class WorkspaceManager:
+class WorkspaceManager(Identifiable):
 
 
     def __init__(self):

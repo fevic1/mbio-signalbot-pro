@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { apiFetch } from '@/lib/api';
 
 interface Asset {
@@ -43,30 +43,20 @@ const AssetsTable: React.FC = () => {
     };
 
     fetchAssets();
-    // Auto-refresh asset table contexts every 15 seconds
     const interval = setInterval(fetchAssets, 15000);
     return () => clearInterval(interval);
   }, []);
 
-  /**
-   * 3-Tier Resilient Avatar Fallback (Institutional Standard)
-   * Tier 1: Hyperliquid Native CDN
-   * Tier 2: Coincap Asset CDN
-   * Tier 3: Deterministic SVG Letter Avatar
-   */
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>, symbol: string) => {
     const img = e.currentTarget;
     if (!img.dataset.fallbackAttempted) {
-      // Fallback Tier 1: Coincap asset CDN
       img.dataset.fallbackAttempted = 'coincap';
       img.src = `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`;
     } else if (img.dataset.fallbackAttempted === 'coincap') {
-      // Fallback Tier 2: SVG Letter Avatar
       img.dataset.fallbackAttempted = 'svg';
       img.style.display = 'none';
-      
       const fallbackDiv = document.createElement('div');
-      fallbackDiv.className = 'w-7 h-7 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center text-xs font-bold shrink-0 border border-blue-500/30';
+      fallbackDiv.className = 'w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold shrink-0 border border-primary/30';
       fallbackDiv.textContent = symbol.slice(0, 2).toUpperCase();
       img.parentNode?.insertBefore(fallbackDiv, img.nextSibling);
     }
@@ -77,130 +67,61 @@ const AssetsTable: React.FC = () => {
   );
 
   if (loading && assets.length === 0) {
-    return <div className="p-8 text-center text-gray-400">Loading live market data...</div>;
+    return <div className="p-8 text-center text-muted-foreground">Loading live market data...</div>;
   }
 
   return (
-    <div className="
-  w-full
-  rounded-2xl
-  border
-  border-white/10
-  bg-white/5
-  p-6
-">
+    <div className="w-full rounded-xl border border-border bg-card p-6">
       <div className="mb-4">
         <input
           type="text"
           placeholder="Search trading universe..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="
-  w-full
-  max-w-md
-  rounded-xl
-  border
-  border-white/10
-  bg-black/30
-  px-4
-  py-3
-  text-white
-  placeholder-white/30
-  outline-none
-"
+          className="w-full max-w-md rounded-lg border border-border bg-background px-4 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
         />
       </div>
 
-      <div className="
-  overflow-x-auto
-  rounded-xl
-  border
-  border-white/10
-">
+      <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-sm text-left">
-          <thead className="
-  text-xs
-  uppercase
-  text-white/40
-  bg-black/40
-  border-b
-  border-white/10
-">
+          <thead className="text-xs uppercase text-muted-foreground bg-muted/50 border-b border-border">
             <tr>
               <th className="p-4 w-12">#</th>
               <th className="p-4">Asset</th>
               <th className="p-4">Category</th>
               <th className="p-4">24h Volume</th>
               <th className="p-4">Price</th>
-              <th className="p-4">Regime</th>
+              <th className="p-4">24h Change</th>
               <th className="p-4">Max Lev</th>
             </tr>
           </thead>
-          <tbody className="
-  divide-y
-  divide-white/5
-">
+          <tbody className="divide-y divide-border">
             {filteredAssets.map((asset, index) => (
-              <tr 
-                key={asset.symbol} 
-                className="
-  hover:bg-white/5
-  transition
-  cursor-pointer
-  group
-"
-                onClick={() => {
-                  // Dynamically populates the Quick Ticket sidebar
-                  const input = document.getElementById('quick-ticket-asset-input') as HTMLInputElement;
-                  if (input) {
-                    input.value = asset.symbol;
-                    input.classList.add('ring-2', 'ring-blue-500');
-                    setTimeout(() => input.classList.remove('ring-2', 'ring-blue-500'), 600);
-                  }
-                }}
-              >
-                <td className="p-4 text-gray-500 font-mono text-xs w-12">{index + 1}</td>
+              <tr key={asset.symbol} className="hover:bg-muted/30 transition-colors cursor-pointer group">
+                <td className="p-4 text-muted-foreground font-mono text-xs w-12">{index + 1}</td>
                 <td className="p-4">
                   <div className="flex items-center gap-3">
                     <img 
                       src={asset.logo_url} 
                       onError={(e) => handleImageError(e, asset.symbol)}
-                      className="w-7 h-7 rounded-full object-cover bg-gray-900 border border-gray-800 shrink-0" 
+                      className="w-7 h-7 rounded-full object-cover bg-background border border-border shrink-0" 
                       alt={asset.symbol}
                     />
                     <div>
-                      <span className="
-  font-bold
-  text-white
-  group-hover:text-blue-400
-">
-{asset.symbol}
-</span>
-                      <span className="text-[10px] ml-1.5 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10 font-semibold uppercase">
+                      <span className="font-bold text-foreground group-hover:text-primary">{asset.symbol}</span>
+                      <span className="text-[10px] ml-1.5 px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold uppercase">
                         {asset.type}
                       </span>
                     </div>
                   </div>
                 </td>
-                <td className="p-4 text-gray-400 text-xs font-semibold uppercase">{asset.category}</td>
-                <td className="p-4 font-mono font-medium text-sm text-gray-200">{formatUSD(asset.volume_24h)}</td>
-                <td className="p-4 font-mono font-bold text-sm text-white">{formatUSD(asset.price)}</td>
-                <td className="p-4">
-                  <span className="
-  inline-flex
-  items-center
-  rounded-full
-  bg-blue-500/10
-  px-3
-  py-1
-  text-xs
-  font-semibold
-  text-blue-400
-">
-RANGING
-</span>
+                <td className="p-4 text-muted-foreground text-xs font-semibold uppercase">{asset.category}</td>
+                <td className="p-4 font-mono font-medium text-sm text-foreground">{formatUSD(asset.volume_24h)}</td>
+                <td className="p-4 font-mono font-bold text-sm text-foreground">{formatUSD(asset.price)}</td>
+                <td className={`p-4 font-mono text-sm font-semibold ${asset.change_24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  {asset.change_24h >= 0 ? '+' : ''}{asset.change_24h.toFixed(2)}%
                 </td>
-                <td className="p-4 font-mono text-xs text-green-400 font-semibold">{asset.max_leverage}x</td>
+                <td className="p-4 font-mono text-xs text-green-500 font-semibold">{asset.max_leverage}x</td>
               </tr>
             ))}
           </tbody>

@@ -1,3 +1,5 @@
+from aios.core.identifiable import Identifiable
+
 from typing import Dict, List
 
 from aios.projects import (
@@ -13,7 +15,7 @@ from aios.planning import (
 )
 
 
-class ProjectPlanner:
+class ProjectPlanner(Identifiable):
 
 
     def __init__(

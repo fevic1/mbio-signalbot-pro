@@ -1,7 +1,11 @@
+from aios.core.execution.runner import ExecutionRunner
+
+from aios.core.execution import ExecutionEngine
+
 from aios.execution import ExecutionExecutor
 
 
-class WorkflowEngine:
+class WorkflowEngine(ExecutionRunner):
 
     def __init__(
         self,

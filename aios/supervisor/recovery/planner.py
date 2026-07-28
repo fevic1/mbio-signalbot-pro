@@ -1,3 +1,5 @@
+from aios.core.factory import Factory
+
 from .models import RecoveryProposal
 
 

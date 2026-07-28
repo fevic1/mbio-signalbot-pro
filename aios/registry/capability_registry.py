@@ -1,44 +1,14 @@
-class CapabilityRegistry:
-
-    def __init__(self):
-
-        self._capabilities = {}
+from aios.core.registry import Registry
 
 
-    def register(
-        self,
-        capability,
-    ):
+class CapabilityRegistry(Registry):
 
+    def register(self, capability):
         capability.validate()
+        return super().register(capability.name, capability)
 
-        self._capabilities[
-            capability.name
-        ] = capability
+    def list(self):
+        return list(super().all())
 
-
-    def get(
-        self,
-        name,
-    ):
-
-        return self._capabilities.get(
-            name
-        )
-
-
-    def list(
-        self,
-    ):
-
-        return list(
-            self._capabilities.values()
-        )
-
-
-    def exists(
-        self,
-        name,
-    ):
-
-        return name in self._capabilities
+    def exists(self, name):
+        return name in self

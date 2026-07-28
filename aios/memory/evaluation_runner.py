@@ -1,8 +1,10 @@
+from aios.core.identifiable import Identifiable
+
 from .event_store import EventStore
 from .evaluator import DecisionEvaluator
 
 
-class EvaluationRunner:
+class EvaluationRunner(Identifiable):
 
     def __init__(self):
         self.store = EventStore()

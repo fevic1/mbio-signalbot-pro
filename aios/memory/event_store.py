@@ -1,10 +1,12 @@
+from aios.core.identifiable import Identifiable
+
 from pathlib import Path
 import json
 
 from .events import MemoryEvent
 
 
-class EventStore:
+class EventStore(Identifiable):
 
     def __init__(
         self,

@@ -1,3 +1,5 @@
+from aios.core.manager import Manager
+
 from dataclasses import dataclass, field
 from typing import List, Dict
 from datetime import datetime, timezone
@@ -5,7 +7,7 @@ import uuid
 
 
 @dataclass
-class Project:
+class Project(Manager):
 
     name: str
 

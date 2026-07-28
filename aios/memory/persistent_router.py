@@ -1,3 +1,5 @@
+from aios.core.identifiable import Identifiable
+
 from .models import MemoryType
 
 from .storage import (
@@ -6,7 +8,7 @@ from .storage import (
 )
 
 
-class PersistentMemoryRouter:
+class PersistentMemoryRouter(Identifiable):
 
 
     def __init__(

@@ -1,9 +1,11 @@
+from aios.core.identifiable import Identifiable
+
 from aios.agents import DynamicAgentFactory
 from .decomposer import GoalDecomposer
 from .graph.builder import TaskGraphBuilder
 
 
-class ProjectPlanner:
+class ProjectPlanner(Identifiable):
 
     def __init__(self):
 

@@ -1,0 +1,32 @@
+name: superpowers
+version: 1.0.0
+
+output:
+  skills: skills
+  workflows: workflows
+  commands: commands
+
+skills:
+  - architecture
+  - coding
+  - debugging
+  - documentation
+  - research
+  - security
+  - testing
+  - trading
+  - ui
+
+workflows:
+  - build-feature
+  - bug-fix
+  - code-review
+  - architecture-review
+  - deployment
+
+commands:
+  - architect
+  - review
+  - debug
+  - research
+  - trade

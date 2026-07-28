@@ -1,0 +1,27 @@
+{
+  "skills": [
+    "architecture",
+    "coding",
+    "debugging",
+    "documentation",
+    "research",
+    "security",
+    "testing",
+    "trading",
+    "ui"
+  ],
+  "workflows": [
+    "architecture-review",
+    "bug-fix",
+    "build-feature",
+    "code-review",
+    "deployment"
+  ],
+  "commands": [
+    "architect",
+    "debug",
+    "research",
+    "review",
+    "trade"
+  ]
+}

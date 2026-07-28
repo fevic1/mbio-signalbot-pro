@@ -1,56 +1,36 @@
-from .models import RuntimeHealth
+from datetime import datetime, timezone
 
 
 class RuntimeHealthMonitor:
 
+    def __init__(self, kernel):
+        self._kernel = kernel
+        self._checks = {}
 
-    def __init__(
-        self,
-        worker,
-        event_publisher=None,
-    ):
-
-        self.worker = worker
-
-        self.event_publisher = (
-            event_publisher
-        )
-
-
+    def register(self, name, check):
+        self._checks[name] = check
 
     def check(self):
+        results = {}
 
-        status = (
-            self.worker.status()
-            if self.worker
-            else {
-                "running": False,
-                "thread_alive": False,
-            }
+        for name, check in self._checks.items():
+            try:
+                results[name] = {
+                    "healthy": bool(check()),
+                    "timestamp": datetime.now(
+                        timezone.utc
+                    ).isoformat(),
+                }
+            except Exception as exc:
+                results[name] = {
+                    "healthy": False,
+                    "error": str(exc),
+                }
+
+        return results
+
+    def healthy(self):
+        return all(
+            result["healthy"]
+            for result in self.check().values()
         )
-
-
-        healthy = (
-            status["running"]
-            and status["thread_alive"]
-        )
-
-
-        health = RuntimeHealth(
-            status=(
-                "ok"
-                if healthy
-                else "warning"
-            ),
-            details=status,
-        )
-
-
-        if self.event_publisher:
-
-            self.event_publisher.checked(
-                health.describe()
-            )
-
-
-        return health

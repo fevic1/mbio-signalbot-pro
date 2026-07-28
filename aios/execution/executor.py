@@ -1,3 +1,7 @@
+from aios.core.execution.runner import ExecutionRunner
+
+from aios.core.execution import ExecutionEngine
+
 from .context import ExecutionContext
 from .blackboard import Blackboard
 from .queue import ExecutionQueue
@@ -16,7 +20,7 @@ from aios.learning import (
 )
 
 
-class ExecutionExecutor:
+class ExecutionExecutor(ExecutionRunner):
 
     def __init__(
         self,

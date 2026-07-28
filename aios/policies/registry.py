@@ -1,3 +1,5 @@
+from aios.core.factory import Factory
+
 from .models import PolicyVersion
 
 
@@ -6,7 +8,7 @@ class PolicyRegistry:
 
     def __init__(self):
 
-        self.policies = {}
+        self._items = {}
 
 
 
@@ -21,7 +23,7 @@ class PolicyRegistry:
             content=content,
         )
 
-        self.policies[name] = [
+        self._items[name] = [
             policy
         ]
 
@@ -35,7 +37,7 @@ class PolicyRegistry:
         content,
     ):
 
-        versions = self.policies.get(
+        versions = self._items.get(
             name,
             []
         )
@@ -50,7 +52,7 @@ class PolicyRegistry:
             version
         )
 
-        self.policies[name] = versions
+        self._items[name] = versions
 
         return version.describe()
 
@@ -65,7 +67,7 @@ class PolicyRegistry:
 
             item.describe()
 
-            for item in self.policies.get(
+            for item in self._items.get(
                 name,
                 []
             )

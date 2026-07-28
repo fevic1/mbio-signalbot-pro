@@ -1,3 +1,5 @@
+from aios.core.execution import ExecutionEngine
+
 from .gate_registry import GateRegistry
 
 from aios.governance.gates import (

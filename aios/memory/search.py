@@ -1,7 +1,9 @@
+from aios.core.identifiable import Identifiable
+
 from pathlib import Path
 
 
-class MemorySearch:
+class MemorySearch(Identifiable):
 
     def __init__(
         self,

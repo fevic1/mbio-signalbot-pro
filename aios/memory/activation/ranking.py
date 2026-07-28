@@ -1,7 +1,9 @@
+from aios.core.identifiable import Identifiable
+
 from .scoring import MemoryActivationScore
 
 
-class MemoryRanker:
+class MemoryRanker(Identifiable):
 
 
     def __init__(self):

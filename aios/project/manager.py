@@ -1,9 +1,13 @@
+from aios.core.identifiable import Identifiable
+
+from aios.core.factory import Factory
+
 from aios.goals.models import Goal
 from .models import Project
 from .planner import ProjectPlanner
 
 
-class ProjectManager:
+class ProjectManager(Identifiable):
 
     def __init__(self):
 

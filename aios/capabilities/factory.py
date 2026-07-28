@@ -1,3 +1,5 @@
+from aios.core.factory import Factory
+
 from aios.capabilities.executor import CapabilityExecutor
 from aios.capabilities.request import CapabilityRequest
 

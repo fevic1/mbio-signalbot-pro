@@ -1,8 +1,10 @@
+from aios.core.identifiable import Identifiable
+
 from .agent import AgentRuntime
 from .registry import AgentRegistry
 
 
-class AgentManager:
+class AgentManager(Identifiable):
 
 
     def __init__(self):

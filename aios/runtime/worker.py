@@ -1,3 +1,7 @@
+from aios.core.component import Component
+
+from aios.core.execution import ExecutionEngine
+
 import threading
 import time
 
@@ -6,7 +10,7 @@ from aios.runtime.state import (
 )
 
 
-class RuntimeWorker:
+class RuntimeWorker(Component):
 
 
     def __init__(

@@ -8,5 +8,35 @@
       "task": "Memory event system"
     },
     "timestamp": "2026-07-20T13:18:14.196980"
+  },
+  {
+    "id": 2,
+    "time": "2026-07-28T18:07:35",
+    "event": "kernel.started",
+    "payload": {
+      "version": "1.0.0"
+    }
+  },
+  {
+    "id": 3,
+    "time": "2026-07-28T18:07:35",
+    "event": "plugin.loaded",
+    "payload": {
+      "plugin": "superpowers"
+    }
+  },
+  {
+    "id": 4,
+    "time": "2026-07-28T18:11:03",
+    "event": "kernel.boot.start",
+    "payload": {}
+  },
+  {
+    "id": 5,
+    "time": "2026-07-28T18:11:03",
+    "event": "kernel.boot.complete",
+    "payload": {
+      "seconds": 0.001994110003579408
+    }
   }
 ]

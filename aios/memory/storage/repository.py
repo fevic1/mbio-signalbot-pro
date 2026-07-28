@@ -1,3 +1,5 @@
+from aios.core.identifiable import Identifiable
+
 import json
 
 from ..models import (
@@ -8,7 +10,7 @@ from ..models import (
 )
 
 
-class MemoryRepository:
+class MemoryRepository(Identifiable):
 
 
     def __init__(

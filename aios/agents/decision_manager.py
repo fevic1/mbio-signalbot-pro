@@ -1,7 +1,9 @@
+from aios.core.identifiable import Identifiable
+
 from datetime import datetime
 
 
-class DecisionManager:
+class DecisionManager(Identifiable):
 
     def __init__(
         self,

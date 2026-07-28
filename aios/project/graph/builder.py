@@ -1,24 +1,7 @@
-from ..models import TaskNode
+from aios.core.service import Service
+
+from aios.planning.task_graph import TaskGraphFactory
 
 
 class TaskGraphBuilder:
-
-    def build(self, project):
-
-        previous = None
-
-        for milestone in project.milestones:
-
-            task = TaskNode(
-                id=milestone.id,
-                name=milestone.name,
-            )
-
-            if previous:
-                task.depends_on.append(previous.id)
-
-            milestone.tasks.append(task)
-
-            previous = task
-
-        return project
+    build = staticmethod(TaskGraphFactory.from_project)

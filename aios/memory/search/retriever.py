@@ -1,7 +1,9 @@
+from aios.core.identifiable import Identifiable
+
 from .semantic import SemanticSearch
 
 
-class MemoryRetriever:
+class MemoryRetriever(Identifiable):
 
 
     def __init__(

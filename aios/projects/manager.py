@@ -1,7 +1,11 @@
+from aios.core.identifiable import Identifiable
+
+from aios.core.factory import Factory
+
 from typing import Dict
 
 
-class ProjectManager:
+class ProjectManager(Identifiable):
 
 
     def __init__(self):

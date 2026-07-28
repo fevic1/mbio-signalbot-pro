@@ -1,4 +1,6 @@
-class StartupValidator:
+from aios.core.validation import Validatable
+
+class StartupValidator(Validatable):
 
 
     REQUIRED_SERVICES = [

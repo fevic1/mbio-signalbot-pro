@@ -1,8 +1,10 @@
+from aios.core.execution.runner import ExecutionRunner
+
 from .agent_mapping import capabilities_for
 from aios.agents.runtime.workspace import AgentWorkspace
 
 
-class CouncilAgentExecutor:
+class CouncilAgentExecutor(ExecutionRunner):
 
 
     def __init__(

@@ -1,4 +1,6 @@
-class AgentMailbox:
+from aios.core.identifiable import Identifiable
+
+class AgentMailbox(Identifiable):
 
 
     def __init__(self):

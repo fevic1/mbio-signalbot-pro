@@ -1,10 +1,7 @@
-from .agent import AgentRuntime
-from .registry import AgentRegistry
-from .manager import AgentManager
-
+from .agent import Agent
+from .runtime import AgentRuntime
 
 __all__ = [
+    "Agent",
     "AgentRuntime",
-    "AgentRegistry",
-    "AgentManager",
 ]

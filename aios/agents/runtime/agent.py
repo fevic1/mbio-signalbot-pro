@@ -1,50 +1,17 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-import uuid
+from enum import Enum
 
 
-@dataclass
-class AgentRuntime:
-
-    name: str
-
-    role: str
-
-    capabilities: list[str] = field(
-        default_factory=list
-    )
-
-    state: str = "initialized"
-
-    memory_id: str | None = None
-
-    id: str = field(
-        default_factory=lambda:
-        str(uuid.uuid4())
-    )
-
-    created_at: str = field(
-        default_factory=lambda:
-        datetime.now(timezone.utc).isoformat()
-    )
+class AgentState(str, Enum):
+    IDLE = "idle"
+    READY = "ready"
+    RUNNING = "running"
+    STOPPED = "stopped"
+    FAILED = "failed"
 
 
-    def start(self):
-
-        self.state = "running"
-
-
-    def stop(self):
-
-        self.state = "stopped"
-
-
-    def describe(self):
-
-        return {
-            "id": self.id,
-            "name": self.name,
-            "role": self.role,
-            "state": self.state,
-            "capabilities": self.capabilities,
-        }
+@dataclass(slots=True)
+class Agent:
+    id: str
+    state: AgentState = AgentState.IDLE
+    metadata: dict = field(default_factory=dict)

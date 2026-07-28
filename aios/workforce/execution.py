@@ -1,10 +1,14 @@
+from aios.core.execution.runner import ExecutionRunner
+
+from aios.core.execution import ExecutionEngine
+
 from .contracts import (
     AgentTask,
     AgentResult,
 )
 
 
-class AgentExecutor:
+class AgentExecutor(ExecutionRunner):
 
 
     def execute(

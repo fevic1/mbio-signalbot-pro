@@ -1,73 +1,31 @@
+from aios.core.repository import Repository
+
 from dataclasses import dataclass, field
-from typing import List
-from uuid import uuid4
+from typing import Any
+
+from aios.core.models import Node
+from aios.core.collections.node_store import NodeStore
 
 
-@dataclass
-class TaskNode:
-
-    name: str
-
-    capability: str
-
-    depends_on: List[str] = field(
-        default_factory=list
-    )
-
-    id: str = field(
-        default_factory=lambda: str(uuid4())
-    )
-
+@dataclass(slots=True)
+class TaskNode(Node):
+    capability: str = ""
+    depends_on: list[str] = field(default_factory=list)
     status: str = "pending"
-
-    result: object = None
-
+    result: Any = None
 
 
-@dataclass
-class TaskGraph:
-
+@dataclass(slots=True)
+class TaskGraph(Repository):
     project_id: str
+    nodes: NodeStore[TaskNode] = field(default_factory=NodeStore)
 
-    nodes: dict[str, TaskNode] = field(
-        default_factory=dict
-    )
-
-
-    def add(
-        self,
-        node: TaskNode,
-    ):
-
+    def add(self, node: TaskNode):
         self.nodes[node.name] = node
 
-
-    def get(
-        self,
-        name,
-    ):
-
+    def get(self, name: str):
         return self.nodes.get(name)
 
-
     def runnable(self):
-
-        ready = []
-
-        for node in self.nodes.values():
-
-            if node.status != "pending":
-                continue
-
-
-            completed = all(
-                self.nodes[d].status == "completed"
-                for d in node.depends_on
-            )
-
-
-            if completed:
-                ready.append(node)
-
-
-        return ready
+        from aios.core.graph import runnable
+        return runnable(self.nodes)

@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "title": "Hyperliquid",
+    "content": "Institutional perpetual exchange",
+    "metadata": {
+      "source": "manual"
+    }
+  },
+  {
+    "id": 2,
+    "title": "AIOS",
+    "content": "AI Operating System",
+    "metadata": {
+      "source": "manual"
+    }
+  }
+]

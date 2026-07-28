@@ -1,4 +1,6 @@
-class MemoryRetriever:
+from aios.core.identifiable import Identifiable
+
+class MemoryRetriever(Identifiable):
 
 
     def __init__(

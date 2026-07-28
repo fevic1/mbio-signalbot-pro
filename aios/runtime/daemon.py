@@ -1,3 +1,5 @@
+from aios.core.component import Component
+
 import time
 import logging
 
@@ -9,7 +11,7 @@ logger = logging.getLogger(
 )
 
 
-class AIOSRuntimeDaemon:
+class AIOSRuntimeDaemon(Component):
 
 
     def __init__(

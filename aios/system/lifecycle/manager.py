@@ -1,7 +1,9 @@
+from aios.core.component import Component
+
 from .models import LifecycleState
 
 
-class LifecycleManager:
+class LifecycleManager(Component):
 
 
     def __init__(

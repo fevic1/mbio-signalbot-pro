@@ -1,5 +1,9 @@
+from aios.core.execution.runner import ExecutionRunner
 
-class CouncilExecutor:
+from aios.core.execution import ExecutionEngine
+
+
+class CouncilExecutor(ExecutionRunner):
 
 
     ROLE_PIPELINES = {

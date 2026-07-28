@@ -1,9 +1,11 @@
+from aios.core.component import Component
+
 from datetime import datetime, timezone
 import uuid
 import json
 
 
-class ExecutionContext:
+class ExecutionContext(Component):
 
     def __init__(
         self,

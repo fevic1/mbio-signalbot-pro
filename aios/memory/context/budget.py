@@ -1,4 +1,6 @@
-class ContextBudget:
+from aios.core.identifiable import Identifiable
+
+class ContextBudget(Identifiable):
 
 
     def __init__(

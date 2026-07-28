@@ -1,4 +1,6 @@
-class MemoryValidator:
+from aios.core.validation import Validatable
+
+class MemoryValidator(Validatable):
 
     ALLOWED_TYPES = [
         "session",

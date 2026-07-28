@@ -1,7 +1,9 @@
+from aios.core.identifiable import Identifiable
+
 from pathlib import Path
 
 
-class MemoryIndexer:
+class MemoryIndexer(Identifiable):
 
     def __init__(
         self,

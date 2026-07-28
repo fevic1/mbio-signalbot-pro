@@ -1,7 +1,9 @@
+from aios.core.identifiable import Identifiable
+
 from pathlib import Path
 
 
-class AgentWorkspace:
+class AgentWorkspace(Identifiable):
 
 
     def __init__(

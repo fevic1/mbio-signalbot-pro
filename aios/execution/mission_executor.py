@@ -1,3 +1,7 @@
+from aios.core.execution.runner import ExecutionRunner
+
+from aios.core.execution import ExecutionEngine
+
 from aios.workforce import (
     AgentTask,
     AgentExecutor,
@@ -7,7 +11,7 @@ from .events import ExecutionEventPublisher
 
 
 
-class MissionExecutor:
+class MissionExecutor(ExecutionRunner):
 
 
     def __init__(

@@ -1,3 +1,7 @@
+from aios.core.workflow import Workflow
+
+from aios.core.execution import ExecutionEngine
+
 from aios.decision import (
     ProposalBuilder,
     DeliberationEngine,
@@ -10,7 +14,7 @@ from aios.decision import (
 from aios.goals.models import Goal
 
 
-class DecisionWorkflow:
+class DecisionWorkflow(Workflow):
 
     def __init__(
         self,

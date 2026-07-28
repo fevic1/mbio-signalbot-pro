@@ -1,3 +1,5 @@
+from aios.core.identifiable import Identifiable
+
 from .models import (
     MemoryRecord,
     MemoryType,
@@ -5,7 +7,7 @@ from .models import (
 )
 
 
-class BaseMemoryStore:
+class BaseMemoryStore(Identifiable):
 
 
     def __init__(self):

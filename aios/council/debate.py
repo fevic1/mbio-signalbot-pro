@@ -1,7 +1,9 @@
+from aios.core.execution.runner import ExecutionRunner
+
 from .models import AgentOpinion
 
 
-class DebateEngine:
+class DebateEngine(ExecutionRunner):
     def collect(self, plan):
         return [
             AgentOpinion(

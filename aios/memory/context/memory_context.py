@@ -1,4 +1,6 @@
-class MemoryContext:
+from aios.core.identifiable import Identifiable
+
+class MemoryContext(Identifiable):
 
 
     def __init__(

@@ -1,8 +1,10 @@
+from aios.core.identifiable import Identifiable
+
 import uuid
 from datetime import datetime, timezone
 
 
-class MemoryIndex:
+class MemoryIndex(Identifiable):
 
 
     def __init__(self):

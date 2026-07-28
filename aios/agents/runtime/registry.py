@@ -1,29 +1,13 @@
-class AgentRegistry:
+from aios.core.registry import Registry
 
 
-    def __init__(self):
-
-        self.agents = {}
-
-
+class AgentRegistry(Registry):
 
     def register(self, agent):
-
-        self.agents[
-            agent.name
-        ] = agent
-
-
-
-    def get(self, name):
-
-        return self.agents.get(name)
-
-
+        return super().register(agent.name, agent)
 
     def list(self):
-
         return [
             agent.describe()
-            for agent in self.agents.values()
+            for agent in self.all()
         ]

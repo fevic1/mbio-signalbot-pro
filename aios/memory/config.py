@@ -1,7 +1,9 @@
+from aios.core.identifiable import Identifiable
+
 from pathlib import Path
 
 
-class MemoryConfig:
+class MemoryConfig(Identifiable):
 
     def __init__(self):
         self.root = Path(".aios")

@@ -1,3 +1,5 @@
+from aios.core.execution.runner import ExecutionRunner
+
 from dataclasses import dataclass
 
 
@@ -10,7 +12,7 @@ class VoteResult:
     votes: dict
 
 
-class VotingEngine:
+class VotingEngine(ExecutionRunner):
 
     def __init__(
         self,

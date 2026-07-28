@@ -1,7 +1,9 @@
+from aios.core.observable import Observable
+
 from .models import AIOSDomainEvent
 
 
-class EventBus:
+class EventBus(Observable):
 
 
     def __init__(self):

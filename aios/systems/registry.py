@@ -1,65 +1,26 @@
 from typing import Dict, List
 
+from aios.core.registry import Registry
 from .models import ManagedSystem
 
 
-class SystemRegistry:
+class SystemRegistry(Registry[ManagedSystem]):
 
-    def __init__(self):
+    def register(self, system: ManagedSystem):
+        return super().register(system.name, system)
 
-        self.systems: Dict[str, ManagedSystem] = {}
+    def remove(self, name: str):
+        return self.unregister(name)
 
-
-    def register(
-        self,
-        system: ManagedSystem,
-    ):
-
-        self.systems[
-            system.name
-        ] = system
-
-        return system
-
-
-    def get(
-        self,
-        name: str,
-    ):
-
-        return self.systems.get(
-            name
-        )
-
-
-    def remove(
-        self,
-        name: str,
-    ):
-
-        return self.systems.pop(
-            name,
-            None,
-        )
-
-
-    def list_systems(
-        self,
-    ) -> List[Dict]:
-
+    def list_systems(self) -> List[Dict]:
         return [
             system.describe()
-            for system in self.systems.values()
+            for system in self.all()
         ]
 
-
-    def find_capability(
-        self,
-        capability: str,
-    ):
-
+    def find_capability(self, capability: str):
         return [
             system
-            for system in self.systems.values()
+            for system in self.all()
             if system.has_capability(capability)
         ]

@@ -1,10 +1,12 @@
+from aios.core.identifiable import Identifiable
+
 from aios.learning.memory_writer import (
     MemoryClassifier,
     ExecutionMemoryWriter,
 )
 
 
-class MemoryEventSubscriber:
+class MemoryEventSubscriber(Identifiable):
 
 
     def __init__(

@@ -1,14 +1,10 @@
-class SkillRegistry:
+from aios.core.registry import Registry
 
-    def __init__(self):
-        self._skills = {}
+
+class SkillRegistry(Registry):
 
     def register(self, skill):
-        self._skills[skill.id] = skill
-
-    def get(self, skill_id):
-        return self._skills.get(skill_id)
+        return super().register(skill.id, skill)
 
     def all(self):
-        return list(self._skills.values())
-
+        return list(super().all())

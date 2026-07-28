@@ -1,8 +1,10 @@
+from aios.core.identifiable import Identifiable
+
 from pathlib import Path
 from datetime import datetime
 
 
-class ObsidianWriter:
+class ObsidianWriter(Identifiable):
 
     ROUTES = {
         "session": "Sessions",

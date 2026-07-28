@@ -1,93 +1,25 @@
-import { QuickTicket } from "./QuickTicket";
-import { ExecutionIntentCard } from "./ExecutionIntentCard";
-import { RiskSummaryCard } from "./RiskSummaryCard";
-
-import { CandleChart } from "@/modules/markets/CandleChart";
-import { RegimePanel } from "@/modules/markets/RegimePanel";
-
+import { useState, useCallback } from "react";
+import TradingPage from "@/pages/trading/TradingPage";
 
 export function TradingWorkspace() {
+  const [, setTicketCtx] = useState<any>(null);
+  const [positionRefreshKey, setPositionRefreshKey] = useState(0);
+
+  const triggerPositionRefresh = useCallback(() => {
+    setPositionRefreshKey((k) => k + 1);
+  }, []);
 
   return (
-
-    <div className="space-y-6">
-
-
-      <div>
-
-        <h1 className="text-3xl font-bold">
-          Execution Terminal
-        </h1>
-
-        <p className="text-sm text-white/40 mt-2">
-          Institutional order execution workspace
-        </p>
-
-      </div>
-
-
-
-      <ExecutionIntentCard />
-
-
-
-      <div className="
-        grid
-        grid-cols-12
-        gap-6
-      ">
-
-
-        <div className="
-          col-span-8
-          rounded-2xl
-          border
-          border-white/10
-          bg-white/5
-          p-6
-        ">
-
-          <RegimePanel />
-
-          <div className="mt-6">
-
-            <CandleChart />
-
-          </div>
-
+    <div className="h-full w-full p-4 overflow-hidden">
+      <div className="flex flex-col h-full gap-4">
+        <div className="flex-1 min-h-0">
+          <TradingPage
+            setTicketCtx={setTicketCtx}
+            positionRefreshKey={positionRefreshKey}
+            triggerPositionRefresh={triggerPositionRefresh}
+          />
         </div>
-
-
-
-        <div className="
-          col-span-4
-          space-y-6
-        ">
-
-
-          <RiskSummaryCard />
-
-
-          <div className="
-            rounded-2xl
-            border
-            border-white/10
-            bg-white/5
-            p-6
-          ">
-
-            <QuickTicket />
-
-          </div>
-
-
-        </div>
-
-
       </div>
-
-
     </div>
-
   );
 }

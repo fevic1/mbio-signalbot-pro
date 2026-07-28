@@ -1,10 +1,12 @@
+from aios.core.identifiable import Identifiable
+
 from pathlib import Path
 import json
 
 from .models import MemoryEntry
 
 
-class MemoryStore:
+class MemoryStore(Identifiable):
 
     def __init__(
         self,

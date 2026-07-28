@@ -1,7 +1,9 @@
+from aios.core.identifiable import Identifiable
+
 from .models import ProjectOperationResult
 
 
-class AutonomousProjectManager:
+class AutonomousProjectManager(Identifiable):
 
 
     def __init__(
