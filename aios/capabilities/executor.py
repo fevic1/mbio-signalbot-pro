@@ -203,6 +203,11 @@ class CapabilityExecutor:
             "capability": request.capability,
             "provider": response.provider,
             "model": response.model,
+            "selected_model": (
+                selected_model.name
+                if selected_model
+                else None
+            ),
             "content": final_content,
             "latency": latency,
             "cost": 0.0,
