@@ -71,3 +71,40 @@ class CapabilityHealth:
             self.total_latency /
             self.successes
         )
+
+
+    @property
+    def average_cost(self):
+
+        if self.successes == 0:
+            return 0
+
+        return (
+            self.total_cost /
+            self.successes
+        )
+
+
+    @property
+    def health_score(self):
+
+        score = self.success_rate
+
+        latency_penalty = min(
+            self.average_latency / 10,
+            1
+        )
+
+        return max(
+            0,
+            score * (1 - latency_penalty * 0.2)
+        )
+
+
+    @property
+    def degraded(self):
+
+        return (
+            self.executions >= 5
+            and self.success_rate < 0.8
+        )

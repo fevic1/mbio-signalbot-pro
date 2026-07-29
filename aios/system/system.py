@@ -76,6 +76,15 @@ class AIOSSystem:
                     "average_latency":
                         health.average_latency,
 
+                    "average_cost":
+                        health.average_cost,
+
+                    "health_score":
+                        health.health_score,
+
+                    "degraded":
+                        health.degraded,
+
                     "failures":
                         health.failures,
                 }
