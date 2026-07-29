@@ -1,5 +1,5 @@
 from aios.providers.types import ProviderRequest
-from aios.neural_proxy.protocol import AIOSRequest
+from aios.neural_proxy.protocol import AIOSRequest, AIOSResponse
 
 
 class OpenAIAdapter:
@@ -31,9 +31,11 @@ class OpenAIAdapter:
         response,
     ):
 
-        return {
-            "provider": response.provider,
-            "model": response.model,
-            "content": response.content,
-            "raw": response.raw,
-        }
+        return AIOSResponse(
+            provider=response.provider,
+            model=response.model,
+            content=response.content,
+            metadata={
+                "raw": response.raw,
+            },
+        )
