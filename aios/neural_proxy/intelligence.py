@@ -1,3 +1,6 @@
+from aios.providers.metrics import metrics
+
+
 class ModelIntelligence:
 
 
@@ -74,6 +77,40 @@ class ModelIntelligence:
                 ) == "high":
 
                     value += 20
+
+
+            provider_name = getattr(
+                model,
+                "provider",
+                None,
+            )
+
+            if provider_name:
+
+                telemetry = metrics.get(
+                    provider_name
+                )
+
+                if telemetry.successes:
+
+                    value += (
+                        telemetry.successes
+                        * 2
+                    )
+
+                if telemetry.failures:
+
+                    value -= (
+                        telemetry.failures
+                        * 5
+                    )
+
+                if telemetry.latency():
+
+                    value -= min(
+                        telemetry.latency(),
+                        10,
+                    )
 
 
             value += profile.get(
