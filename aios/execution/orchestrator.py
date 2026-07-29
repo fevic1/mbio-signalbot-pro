@@ -91,9 +91,19 @@ class ExecutionOrchestrator:
                     }
 
 
+        execution_governance = None
+
+        if approval_id:
+            execution_governance = {
+                "approval_id": approval_id,
+                "status": "approved",
+            }
+
+
         results = (
             self.executor.execute(
-                assignments
+                assignments,
+                governance=execution_governance,
             )
         )
 
