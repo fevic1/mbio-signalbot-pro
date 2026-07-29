@@ -116,6 +116,34 @@ class CapabilityExecutor:
 
         start = perf_counter()
 
+        allowed_models = (
+            self._get_capability_definition(
+                request.capability
+            )
+            .metadata
+            .get("allowed_models")
+        )
+
+        selected_model = None
+
+        if allowed_models:
+
+            llm_router = getattr(
+                self.system,
+                "llm_router",
+                None,
+            )
+
+            if llm_router:
+
+                selected_model = llm_router.select_model(
+                    request.capability,
+                    allowed_models=allowed_models,
+                )
+
+        if selected_model:
+            provider_request.model = selected_model.name
+
         response = await chat(
             provider_request,
             event_bus=self.system.event_bus,
