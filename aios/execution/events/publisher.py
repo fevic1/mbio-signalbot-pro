@@ -1,5 +1,6 @@
-from aios.core.events.publisher import EventPublisher
-from aios.events import AIOSDomainEvent
+from datetime import datetime, timezone
+
+from aios.events.models import AIOSDomainEvent
 
 
 class ExecutionEventPublisher:
@@ -7,75 +8,106 @@ class ExecutionEventPublisher:
 
     def __init__(
         self,
-        event_bus,
+        event_bus=None,
     ):
 
         self.event_bus = event_bus
 
 
 
-    def started(
+    def publish_started(
         self,
         agent,
         task,
     ):
 
-        event = AIOSDomainEvent(
-
-            event_type=
+        return self._publish(
             "execution.started",
-
-            source=
-            "aios_execution",
-
-            payload={
-                "agent":
-                    getattr(
-                        agent,
-                        "name",
-                        str(agent),
-                    ),
-
-                "task":
-                    task,
+            agent,
+            task,
+            {
+                "status": "started",
             },
         )
 
 
-        return self.event_bus.publish(
-            event
-        )
 
-
-
-    def completed(
+    def publish_completed(
         self,
         agent,
+        task,
         result,
     ):
 
-        event = AIOSDomainEvent(
-
-            event_type=
+        return self._publish(
             "execution.completed",
-
-            source=
-            "aios_execution",
-
-            payload={
-                "agent":
-                    getattr(
-                        agent,
-                        "name",
-                        str(agent),
-                    ),
-
-                "result":
-                    result,
+            agent,
+            task,
+            {
+                "status": "completed",
+                "result": result,
             },
         )
 
 
-        return self.event_bus.publish(
-            event
+
+    def publish_failed(
+        self,
+        agent,
+        task,
+        error,
+    ):
+
+        return self._publish(
+            "execution.failed",
+            agent,
+            task,
+            {
+                "status": "failed",
+                "error": str(error),
+            },
         )
+
+
+
+    def _publish(
+        self,
+        event_type,
+        agent,
+        task,
+        payload,
+    ):
+
+        event = AIOSDomainEvent(
+            event_type,
+            source="aios_execution",
+            payload={
+                "agent": (
+                    agent.name
+                    if hasattr(agent, "name")
+                    else str(agent)
+                ),
+                "role": (
+                    agent.role
+                    if hasattr(agent, "role")
+                    else ""
+                ),
+                "task": task,
+                "timestamp": (
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat()
+                ),
+                **payload,
+            },
+        )
+
+
+        if self.event_bus:
+
+            self.event_bus.publish(
+                event
+            )
+
+
+        return event

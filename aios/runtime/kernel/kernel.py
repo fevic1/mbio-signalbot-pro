@@ -3,7 +3,9 @@ from aios.runtime.memory_intelligence import MemoryIntelligence
 from aios.events.bus import EventBus
 from aios.governance.permissions import PermissionManager
 from aios.governance.approval import ApprovalManager
+from aios.governance.audit import AuditLogger
 from aios.control.approval_workflow import ApprovalWorkflow
+from aios.governance.runtime import GovernanceGateway
 from aios.control.audit import RuntimeAudit
 from aios.runtime.dag.graph import ExecutionGraph
 from aios.runtime.agent_runtime import AgentRuntime
@@ -81,10 +83,18 @@ class RuntimeKernel:
         self.permission_manager = PermissionManager()
         self.approval_manager = ApprovalManager()
         self.approval_workflow = ApprovalWorkflow()
+        self.audit_logger = AuditLogger()
+
+        self.governance_gateway = GovernanceGateway(
+            self.permission_manager,
+            self.approval_manager,
+            self.audit_logger,
+        )
         self.audit = RuntimeAudit()
         self.execution_graph = ExecutionGraph()
         self.execution_orchestrator = ExecutionOrchestrator(
-            event_bus=self.event_bus
+            event_bus=self.event_bus,
+            governance=self.governance_gateway,
         )
         self.register_services()
 
@@ -128,6 +138,7 @@ class RuntimeKernel:
             "permission_manager": self.permission_manager,
             "approval_manager": self.approval_manager,
             "approval_workflow": self.approval_workflow,
+            "governance_gateway": self.governance_gateway,
             "audit": self.audit,
         }
 
