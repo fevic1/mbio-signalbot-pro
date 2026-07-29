@@ -220,6 +220,36 @@ class AIOSServiceRegistry:
 
 
         #
+        # Learning System
+        #
+
+        from aios.learning import (
+            LearningCoordinator,
+            ProviderFeedbackHandler,
+        )
+
+
+        learning = LearningCoordinator()
+
+
+        services[
+            "learning"
+        ] = learning
+
+
+        provider_feedback = ProviderFeedbackHandler(
+            event_bus=event_bus,
+            learning=learning,
+        )
+
+
+        services[
+            "provider_feedback"
+        ] = provider_feedback
+
+
+
+        #
         # Capability Registry
         #
 
