@@ -220,6 +220,22 @@ class AIOSServiceRegistry:
 
 
         #
+        # Neural Model Intelligence
+        #
+
+        from aios.neural_proxy.intelligence import (
+            ModelIntelligence,
+        )
+
+        model_intelligence = ModelIntelligence()
+
+        services[
+            "model_intelligence"
+        ] = model_intelligence
+
+
+
+        #
         # Learning System
         #
 
@@ -240,6 +256,7 @@ class AIOSServiceRegistry:
         provider_feedback = ProviderFeedbackHandler(
             event_bus=event_bus,
             learning=learning,
+            model_intelligence=model_intelligence,
         )
 
 
@@ -957,14 +974,6 @@ class AIOSServiceRegistry:
         from aios.providers.router import (
             chat as provider_chat,
         )
-
-
-        model_intelligence = ModelIntelligence()
-
-        services[
-            "model_intelligence"
-        ] = model_intelligence
-
 
         neural_proxy_router = NeuralProxyRouter(
             llm_router=services.get(
