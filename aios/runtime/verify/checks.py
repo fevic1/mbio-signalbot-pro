@@ -97,3 +97,16 @@ def check_audit(kernel):
             "audit_logger"
         ),
     }
+
+
+def check_execution_audit(kernel):
+
+    return {
+        "handler": type(
+            kernel.execution_audit_handler
+        ).__name__,
+
+        "records": len(
+            kernel.audit.all()
+        ),
+    }

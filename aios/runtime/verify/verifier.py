@@ -8,6 +8,7 @@ from .checks import (
     check_governance,
     check_execution,
     check_audit,
+    check_execution_audit,
 )
 
 
@@ -27,4 +28,5 @@ class RuntimeVerifier:
             "governance": check_governance(self.kernel),
             "execution": check_execution(self.kernel),
             "audit": check_audit(self.kernel),
+            "execution_audit": check_execution_audit(self.kernel),
         }
