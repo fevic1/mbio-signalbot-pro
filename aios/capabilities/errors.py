@@ -1,0 +1,3 @@
+
+class CapabilityExecutionError(Exception):
+    pass

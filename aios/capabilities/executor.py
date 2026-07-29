@@ -6,13 +6,10 @@ from aios.intelligence.llm_adapter import LLMAdapter
 from aios.providers.router import chat
 from aios.providers.router import provider_pool
 from aios.providers.types import ProviderRequest
+from aios.capabilities.policy import CapabilityPolicyEngine
+from aios.capabilities.errors import CapabilityExecutionError
 
 from .request import CapabilityRequest
-
-
-class CapabilityExecutionError(Exception):
-    pass
-
 
 class CapabilityExecutor:
 
@@ -25,6 +22,10 @@ class CapabilityExecutor:
         self.adapter = LLMAdapter(
             provider_pool,
             system,
+        )
+
+        self.policy = CapabilityPolicyEngine(
+            provider_pool
         )
 
     def _get_capability_definition(self, name):
@@ -46,32 +47,15 @@ class CapabilityExecutor:
         return capability
 
 
-    def _validate_capability_policy(self, capability):
 
-        if not capability.enabled:
-            raise CapabilityExecutionError(
-                f"Capability disabled: {capability.name}"
-            )
+    def _validate_capability_policy(
+        self,
+        capability,
+    ):
 
-
-        metadata = capability.metadata or {}
-
-
-        if metadata.get(
-            "requires_provider",
-            False,
-        ):
-
-            provider = provider_pool.best()
-
-            if provider is None:
-                raise CapabilityExecutionError(
-                    f"{capability.name}: no usable provider"
-                )
-
-
-        return True
-
+        return self.policy.validate(
+            capability
+        )
 
 
     async def execute(

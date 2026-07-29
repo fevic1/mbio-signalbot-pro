@@ -665,5 +665,49 @@
       "timestamp": "2026-07-29T17:57:47.906743+00:00"
     },
     "timestamp": "2026-07-29T17:57:47.906748+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T18:20:06.964135+00:00"
+    },
+    "timestamp": "2026-07-29T18:20:06.964142+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T18:20:06.975583+00:00"
+    },
+    "timestamp": "2026-07-29T18:20:06.975589+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T18:20:07.949679+00:00"
+    },
+    "timestamp": "2026-07-29T18:20:07.949686+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T18:20:07.990625+00:00"
+    },
+    "timestamp": "2026-07-29T18:20:07.990631+00:00"
   }
 ]
