@@ -36,12 +36,32 @@ class Worker:
 
         started = datetime.now(timezone.utc)
 
-        capability = task.worker.capability.name
+        capability_definition = task.worker.capability
+
+        capability = capability_definition.name
 
         context.emit(
             "capability_started",
             {
                 "capability": capability,
+                "permission": capability_definition.permission,
+                "risk_level": (
+                    capability_definition.metadata.get(
+                        "risk_level"
+                    )
+                ),
+                "requires_provider": (
+                    capability_definition.metadata.get(
+                        "requires_provider",
+                        False,
+                    )
+                ),
+                "memory_write": (
+                    capability_definition.metadata.get(
+                        "memory_write",
+                        False,
+                    )
+                ),
                 "task": task.id,
             },
         )
@@ -70,9 +90,16 @@ class Worker:
                 "capability_completed",
                 {
                     "capability": capability,
+                    "permission": capability_definition.permission,
+                    "risk_level": (
+                        capability_definition.metadata.get(
+                            "risk_level"
+                        )
+                    ),
                     "provider": result.get("provider"),
                     "model": result.get("model"),
                     "latency": result.get("latency"),
+                    "success": True,
                 },
             )
 
@@ -97,6 +124,15 @@ class Worker:
                 "capability_failed",
                 {
                     "capability": capability,
+                    "permission": capability_definition.permission,
+                    "risk_level": (
+                        capability_definition.metadata.get(
+                            "risk_level"
+                        )
+                    ),
+                    "retry_limit": (
+                        capability_definition.retry_limit
+                    ),
                     "error": str(exc),
                 },
             )
