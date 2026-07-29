@@ -18,6 +18,7 @@ from aios.runtime.workflow_engine import WorkflowEngine
 from aios.agents.runtime import AgentRuntime
 from aios.execution.task_engine import TaskEngine
 from aios.execution import ExecutionOrchestrator
+from aios.risk import RiskEngine
 from aios.execution.audit import ExecutionAuditHandler
 from aios.memory.semantic import SemanticMemory
 from aios.policy import PolicyEngine
@@ -98,9 +99,12 @@ class RuntimeKernel:
             self.audit,
         )
         self.execution_graph = ExecutionGraph()
+        self.risk_engine = RiskEngine()
+
         self.execution_orchestrator = ExecutionOrchestrator(
             event_bus=self.event_bus,
             governance=self.governance_gateway,
+            risk_engine=self.risk_engine,
         )
         self.register_services()
 

@@ -16,9 +16,11 @@ class ExecutionOrchestrator:
         self,
         event_bus=None,
         governance=None,
+        risk_engine=None,
     ):
 
         self.governance = governance
+        self.risk_engine = risk_engine
 
         self.assignment = (
             TaskAssignmentEngine()
@@ -98,6 +100,23 @@ class ExecutionOrchestrator:
                 "approval_id": approval_id,
                 "status": "approved",
             }
+
+
+        if self.risk_engine:
+
+            risk = self.risk_engine.check(
+                action="execute_mission",
+                payload={
+                    "size": 1,
+                },
+            )
+
+            if not risk.allowed:
+                return {
+                    "assignments": assignments,
+                    "results": [],
+                    "risk": risk.describe(),
+                }
 
 
         results = (
