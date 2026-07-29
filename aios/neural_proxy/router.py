@@ -8,10 +8,12 @@ class NeuralProxyRouter:
         self,
         llm_router=None,
         provider_router=None,
+        intelligence=None,
     ):
 
         self.llm_router = llm_router
         self.provider_router = provider_router
+        self.intelligence = intelligence
 
 
     def select(
@@ -25,17 +27,24 @@ class NeuralProxyRouter:
 
         if self.llm_router:
 
-            model = self.llm_router.select_model(
+            candidates = self.llm_router.candidates(
                 capability,
                 allowed_models=allowed_models,
             )
 
-            if model:
-                candidates.append(model)
-
 
         if not candidates:
             return None
+
+
+        if self.intelligence:
+
+            candidates = self.intelligence.rank(
+                candidates,
+                {
+                    "quality": True,
+                },
+            )
 
 
         candidates.sort(

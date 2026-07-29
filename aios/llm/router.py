@@ -10,6 +10,30 @@ class LLMRouter:
         self.history = []
 
 
+    def candidates(
+        self,
+        capability,
+        allowed_models=None,
+    ):
+
+        models = (
+            self.registry
+            .find_by_capability(
+                capability
+            )
+        )
+
+        if allowed_models:
+
+            models = [
+                model
+                for model in models
+                if model.name in allowed_models
+            ]
+
+        return models
+
+
     def select_model(
         self,
         capability,
