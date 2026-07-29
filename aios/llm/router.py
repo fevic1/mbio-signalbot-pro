@@ -12,7 +12,8 @@ class LLMRouter:
 
     def select_model(
         self,
-        capability
+        capability,
+        allowed_models=None,
     ):
 
         models = (
@@ -21,6 +22,14 @@ class LLMRouter:
                 capability
             )
         )
+
+        if allowed_models:
+
+            models = [
+                model
+                for model in models
+                if model.name in allowed_models
+            ]
 
 
         if not models:
