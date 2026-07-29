@@ -47,10 +47,12 @@ class NeuralProxyRouter:
             )
 
 
-        candidates.sort(
-            key=self._score,
-            reverse=True,
-        )
+        provider = provider_pool.best()
+
+        if provider:
+            for candidate in candidates:
+                if candidate.provider == provider.name:
+                    return candidate
 
         return candidates[0]
 
