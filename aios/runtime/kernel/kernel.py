@@ -18,6 +18,7 @@ from aios.runtime.workflow_engine import WorkflowEngine
 from aios.agents.runtime import AgentRuntime
 from aios.execution.task_engine import TaskEngine
 from aios.execution import ExecutionOrchestrator
+from aios.execution.audit import ExecutionAuditHandler
 from aios.memory.semantic import SemanticMemory
 from aios.policy import PolicyEngine
 from aios.prompts import PromptEngine
@@ -91,6 +92,11 @@ class RuntimeKernel:
             self.audit_logger,
         )
         self.audit = RuntimeAudit()
+
+        self.execution_audit_handler = ExecutionAuditHandler(
+            self.event_bus,
+            self.audit,
+        )
         self.execution_graph = ExecutionGraph()
         self.execution_orchestrator = ExecutionOrchestrator(
             event_bus=self.event_bus,
