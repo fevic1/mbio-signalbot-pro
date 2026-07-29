@@ -91,6 +91,16 @@ class AIOSContainer:
 
 
     @property
+    def model_registry(self):
+        return self.services.get("model_registry")
+
+
+    @property
+    def llm_router(self):
+        return self.services.get("llm_router")
+
+
+    @property
     def memory_manager(self):
         return self.services.get("memory_manager")
 

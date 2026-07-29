@@ -236,6 +236,67 @@ class AIOSServiceRegistry:
         ] = capability_registry
 
 
+        #
+        # LLM Model Registry
+        #
+
+        from aios.llm.models import (
+            ModelRegistry,
+            LLMModel,
+        )
+
+        from aios.llm.router import (
+            LLMRouter,
+        )
+
+
+        model_registry = ModelRegistry()
+
+
+        model_registry.register(
+            LLMModel(
+                name="llama-3.1-8b-instant",
+                provider="groq",
+                capabilities=[
+                    "research",
+                    "market_analysis",
+                    "information_analysis",
+                ],
+                cost_level="low",
+                speed="fast",
+            )
+        )
+
+
+        model_registry.register(
+            LLMModel(
+                name="openai/gpt-oss-20b:free",
+                provider="openrouter",
+                capabilities=[
+                    "research",
+                    "strategy_review",
+                ],
+                cost_level="low",
+                speed="medium",
+            )
+        )
+
+
+        llm_router = LLMRouter(
+            model_registry
+        )
+
+
+        services[
+            "model_registry"
+        ] = model_registry
+
+
+        services[
+            "llm_router"
+        ] = llm_router
+
+
 
         #
         # AIOS Capability Bootstrap
