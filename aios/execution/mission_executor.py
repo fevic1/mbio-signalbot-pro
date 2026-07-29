@@ -30,6 +30,7 @@ class MissionExecutor(ExecutionRunner):
     def execute(
         self,
         assignments,
+        governance=None,
     ):
 
         results = []
@@ -58,6 +59,15 @@ class MissionExecutor(ExecutionRunner):
                     agent,
                     task,
                 )
+
+                if governance:
+                    result.metadata = getattr(
+                        result,
+                        "metadata",
+                        {}
+                    )
+
+                    result.metadata["governance"] = governance
 
 
                 self.events.publish_completed(
