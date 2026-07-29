@@ -49,6 +49,10 @@ class AgentResult:
         default_factory=list
     )
 
+    metadata: Dict = field(
+        default_factory=dict
+    )
+
     timestamp: str = field(
         default_factory=lambda:
         datetime.now(timezone.utc).isoformat()
@@ -65,5 +69,6 @@ class AgentResult:
             "confidence": self.confidence,
             "issues": self.issues,
             "recommendations": self.recommendations,
+            "metadata": self.metadata,
             "timestamp": self.timestamp,
         }
