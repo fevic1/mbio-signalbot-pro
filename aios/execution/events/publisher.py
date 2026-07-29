@@ -46,6 +46,10 @@ class ExecutionEventPublisher:
             {
                 "status": "completed",
                 "result": result,
+                "governance": (
+                    result.get("metadata", {})
+                    .get("governance")
+                ),
             },
         )
 
