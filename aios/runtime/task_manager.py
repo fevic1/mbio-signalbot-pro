@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 
@@ -38,7 +38,7 @@ class TaskManager:
             "assigned_agent": None,
 
             "created":
-                datetime.utcnow().isoformat()
+                datetime.now(timezone.utc).isoformat()
         }
 
 

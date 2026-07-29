@@ -104,3 +104,27 @@ class MemoryRecord:
             "created_at":
                 self.created_at,
         }
+
+
+@dataclass
+class MemoryEntry:
+
+    content: dict[str, Any] = field(
+        default_factory=dict
+    )
+
+    category: str = "general"
+
+    created_at: str = field(
+        default_factory=lambda:
+        datetime.now(
+            timezone.utc
+        ).isoformat()
+    )
+
+    def describe(self):
+        return {
+            "content": self.content,
+            "category": self.category,
+            "created_at": self.created_at,
+        }

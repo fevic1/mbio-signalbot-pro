@@ -1,3 +1,31 @@
+from dataclasses import dataclass, field
+from typing import List
+
+
+@dataclass
+class ExecutionFeedback:
+
+    execution_id: str
+
+    success: bool
+
+    score: float
+
+    observations: List[str] = field(
+        default_factory=list
+    )
+
+    asset: str = ""
+
+    strategy: str = ""
+
+    signal: str = ""
+
+    pnl: float = 0.0
+
+    confidence: float = 0.0
+
+
 class FeedbackAnalyzer:
 
 

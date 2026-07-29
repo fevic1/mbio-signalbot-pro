@@ -39,4 +39,9 @@ __all__ = [
 
     "MemoryRouter",
     "PersistentMemoryRouter",
+    "MemoryEvent",
+    "EventStore",
 ]
+
+from .event_store import EventStore
+from .events import MemoryEvent

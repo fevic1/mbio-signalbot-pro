@@ -9,6 +9,26 @@ class GoalManager:
         self.goals: Dict = {}
 
 
+    def create(
+        self,
+        objective=None,
+        **kwargs,
+    ):
+        from types import SimpleNamespace
+
+        goal = SimpleNamespace(
+            id=kwargs.get(
+                "id",
+                objective
+            ),
+            objective=objective,
+            status="active",
+            **kwargs,
+        )
+
+        return self.register(goal)
+
+
     def register(
         self,
         goal,

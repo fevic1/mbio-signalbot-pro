@@ -10,6 +10,10 @@ class RuntimeAgent:
     role: str
     state: str = "created"
     metadata: dict = field(default_factory=dict)
+
+    @property
+    def capabilities(self):
+        return self.metadata.get("capabilities", [])
     created: str = field(
         default_factory=lambda:
         datetime.now(timezone.utc).isoformat()
@@ -20,6 +24,7 @@ class RuntimeAgentManager:
 
     def __init__(self):
         self._agents = {}
+        self.agents = self._agents
 
     def register(
         self,

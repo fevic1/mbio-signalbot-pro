@@ -18,6 +18,10 @@ class AIOSBootstrap:
 
 
 
+    def boot(self):
+        return self.initialize()
+
+
     def initialize(self):
 
         integrity = IntegrityHealth(
@@ -59,6 +63,21 @@ class AIOSBootstrap:
                 name,
                 service
             )
+
+
+        from aios.workflows.multi_agent import (
+            MultiAgentWorkflow,
+        )
+
+
+        self.container.register(
+            "multi_agent_workflow",
+            MultiAgentWorkflow(
+                self.container
+            ),
+        )
+
+
 
 
         from aios.integrity.capability import CapabilityGuard

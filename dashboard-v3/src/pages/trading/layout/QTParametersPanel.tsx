@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronDown, Search, Save, Play, BarChart3 } from 'lucide-react';
+import { ChevronDown, Search, Save, Play, BarChart3, TrendingUp } from 'lucide-react';
+import { fetchWithAuth } from '@/lib/apiClient';
 
 interface QTParametersPanelProps {
   onDeploy?: () => void;
+  selectedAsset?: string;
+  onAssetSelect?: (asset: string) => void;
 }
 
 interface AccordionSectionProps {
@@ -49,9 +52,68 @@ function FormField({ label, value, type = "text" }: { label: string; value: stri
   );
 }
 
-export function QTParametersPanel({ onDeploy }: QTParametersPanelProps) {
+export function QTParametersPanel({ 
+  onDeploy, 
+  selectedAsset, 
+  onAssetSelect 
+}: QTParametersPanelProps) {
+  const [availableAssets, setAvailableAssets] = useState<string[]>([]);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
+
+  // Fetch available assets for selector
+  useEffect(() => {
+    const fetchAssets = async () => {
+      setIsLoadingAssets(true);
+      try {
+        const data = await fetchWithAuth<string[]>('/api/dashboard/assets', {
+          timeout: 5000,
+          retries: 2,
+          backoffMs: 1000,
+        });
+        if (data && Array.isArray(data)) {
+          setAvailableAssets(data.slice(0, 50));
+          if (!selectedAsset && data.length > 0 && onAssetSelect) {
+            onAssetSelect(data[0]);
+          }
+        }
+      } catch (err) {
+        console.error('[QT Parameters] Failed to fetch assets:', err);
+      } finally {
+        setIsLoadingAssets(false);
+      }
+    };
+
+    fetchAssets();
+  }, [selectedAsset, onAssetSelect]);
+
   return (
     <div className="flex h-full flex-col bg-card border-l border-border">
+      {/* Asset Selector Bar */}
+      <div className="px-4 py-3 border-b border-border bg-muted/30">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+            Trading Asset
+          </span>
+          <TrendingUp className="h-3 w-3 text-primary" />
+        </div>
+        <select
+          value={selectedAsset || ''}
+          onChange={(e) => onAssetSelect?.(e.target.value)}
+          disabled={isLoadingAssets}
+          className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+        >
+          {isLoadingAssets ? (
+            <option>Loading...</option>
+          ) : (
+            availableAssets.map(asset => (
+              <option key={asset} value={asset}>
+                {asset}/USDT
+              </option>
+            ))
+          )}
+        </select>
+      </div>
+
       {/* Sticky Header */}
       <div className="sticky-header flex items-center justify-between px-4 py-3 border-b border-border">
         <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
@@ -102,7 +164,7 @@ export function QTParametersPanel({ onDeploy }: QTParametersPanelProps) {
         </AccordionSection>
       </div>
 
-      {/* Sticky Footer */}
+      {/* Sticky Footer - EXECUTION BUTTONS */}
       <div className="sticky-footer px-4 py-3 border-t border-border space-y-2">
         <button className="w-full flex items-center justify-center gap-2 h-9 rounded bg-primary font-medium text-primary-foreground hover:bg-primary/90 transition-colors text-xs">
           <Save className="h-3 w-3" />

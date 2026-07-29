@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AIOSOrchestrator:
@@ -30,7 +30,7 @@ class AIOSOrchestrator:
 
         return {
             "status": "running",
-            "time": datetime.utcnow().isoformat(),
+            "time": datetime.now(timezone.utc).isoformat(),
             "agents": len(
                 self.system.registry.list()
             ),

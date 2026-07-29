@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 @dataclass
@@ -33,7 +33,7 @@ class CapabilityHealth:
         self.total_cost += cost
 
         self.last_execution = (
-            datetime.utcnow()
+            datetime.now(timezone.utc)
             .isoformat()
         )
 
@@ -44,7 +44,7 @@ class CapabilityHealth:
         self.failures += 1
 
         self.last_execution = (
-            datetime.utcnow()
+            datetime.now(timezone.utc)
             .isoformat()
         )
 

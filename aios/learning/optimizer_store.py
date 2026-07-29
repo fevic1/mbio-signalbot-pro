@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aios.memory import EventStore, MemoryEvent
 
@@ -23,7 +23,7 @@ class OptimizerStore:
             metadata={
                 "key": key,
                 "score": score,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 

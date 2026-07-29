@@ -1,6 +1,6 @@
 from aios.core.execution import ExecutionEngine
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Worker:
@@ -34,7 +34,7 @@ class Worker:
 
         context = self.context
 
-        started = datetime.utcnow()
+        started = datetime.now(timezone.utc)
 
         capability = task.worker.capability.name
 
@@ -61,7 +61,7 @@ class Worker:
             )
 
             task.started = started.isoformat()
-            task.completed = datetime.utcnow().isoformat()
+            task.completed = datetime.now(timezone.utc).isoformat()
             task.status = "completed"
 
             self.queue.finish(task)

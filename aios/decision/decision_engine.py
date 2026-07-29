@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class DecisionEngine:
@@ -57,7 +57,7 @@ class DecisionEngine:
             "confidence": confidence,
 
             "timestamp":
-                datetime.utcnow().isoformat(),
+                datetime.now(timezone.utc).isoformat(),
 
             "approval_required": False,
 

@@ -1,7 +1,7 @@
 from aios.core.identifiable import Identifiable
 
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ObsidianWriter(Identifiable):
@@ -54,7 +54,7 @@ class ObsidianWriter(Identifiable):
         )
 
 
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         filename = (
             timestamp.strftime("%Y-%m-%d-%H%M%S")

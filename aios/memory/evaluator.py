@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class DecisionEvaluator:
@@ -46,7 +46,7 @@ class DecisionEvaluator:
 
         return {
             "event_type": "decision_evaluation",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
 
             "asset": metadata.get(
                 "asset"

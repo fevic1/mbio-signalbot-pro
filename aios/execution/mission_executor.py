@@ -70,15 +70,20 @@ class MissionExecutor(ExecutionRunner):
                     result.metadata["governance"] = governance
 
 
+                if governance:
+                    result.metadata["governance"] = governance
+
+                result_data = result.describe()
+
                 self.events.publish_completed(
                     agent,
                     task.task,
-                    result.describe(),
+                    result_data,
                 )
 
 
                 results.append(
-                    result.describe()
+                    result_data
                 )
 
 

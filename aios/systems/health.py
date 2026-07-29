@@ -1,37 +1,37 @@
-from datetime import datetime, timezone
+
+from dataclasses import dataclass
+
+
+@dataclass
+class HealthResult:
+    status: str
+    details: dict
+
+    def get(self, key, default=None):
+        return getattr(self, key, default)
 
 
 class SystemHealth:
 
-    def __init__(self):
-
-        self.records = {}
-
-
-    def update(
-        self,
-        system_name,
-        status,
-        details=None,
-    ):
-
-        self.records[system_name] = {
-            "status": status,
-            "details": details or {},
-            "timestamp": datetime.now(
-                timezone.utc
-            ).isoformat(),
-        }
+    def __init__(self, checks=None):
+        self.checks = checks or []
 
 
-    def get(
-        self,
-        system_name,
-    ):
+    def check(self):
 
-        return self.records.get(
-            system_name,
-            {
-                "status": "unknown"
+        results = [
+            check()
+            for check in self.checks
+        ]
+
+        healthy = all(
+            r.get("passed", False)
+            for r in results
+        )
+
+        return HealthResult(
+            status="ok" if healthy else "warning",
+            details={
+                "checks": results
             },
         )

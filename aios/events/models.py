@@ -27,6 +27,11 @@ class AIOSDomainEvent:
     )
 
 
+    @property
+    def type(self):
+        return self.event_type
+
+
     def describe(self):
 
         return {

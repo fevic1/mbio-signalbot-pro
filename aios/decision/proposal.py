@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 
@@ -21,7 +21,7 @@ class Proposal:
 
     created_at: str = field(
         default_factory=lambda:
-            datetime.utcnow().isoformat()
+            datetime.now(timezone.utc).isoformat()
     )
 
     opinions: list = field(
@@ -47,7 +47,7 @@ class Proposal:
                 "confidence": confidence,
 
                 "timestamp":
-                    datetime.utcnow()
+                    datetime.now(timezone.utc)
                     .isoformat()
             }
         )

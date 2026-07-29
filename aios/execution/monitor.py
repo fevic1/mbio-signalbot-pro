@@ -1,6 +1,6 @@
 from aios.core.component import Component
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ExecutionMonitor(Component):
@@ -18,7 +18,7 @@ class ExecutionMonitor(Component):
     def start(self, task_id):
 
         self.metrics[task_id] = {
-            "started": datetime.utcnow(),
+            "started": datetime.now(timezone.utc),
             "finished": None,
             "duration": None,
             "status": "RUNNING",
@@ -30,7 +30,7 @@ class ExecutionMonitor(Component):
 
         metric = self.metrics[task_id]
 
-        metric["finished"] = datetime.utcnow()
+        metric["finished"] = datetime.now(timezone.utc)
 
         metric["duration"] = (
             metric["finished"] - metric["started"]
@@ -42,7 +42,7 @@ class ExecutionMonitor(Component):
 
         metric = self.metrics[task_id]
 
-        metric["finished"] = datetime.utcnow()
+        metric["finished"] = datetime.now(timezone.utc)
 
         metric["duration"] = (
             metric["finished"] - metric["started"]

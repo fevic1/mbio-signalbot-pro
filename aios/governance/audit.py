@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AuditLogger:
@@ -18,7 +18,7 @@ class AuditLogger:
         self.logs.append(
             {
                 "time":
-                    datetime.utcnow().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
 
                 "agent":
                     agent,

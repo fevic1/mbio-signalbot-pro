@@ -75,8 +75,6 @@ chart:any,
 candles:Candle[]
 ){
 
-return;
-
 const bridge =
 useRef<OverlayBridge|null>(null);
 

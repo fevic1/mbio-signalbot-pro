@@ -1,6 +1,6 @@
 from aios.core.identifiable import Identifiable
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class DecisionManager(Identifiable):
@@ -30,7 +30,7 @@ class DecisionManager(Identifiable):
             "subject": subject,
 
             "timestamp":
-                datetime.utcnow().isoformat(),
+                datetime.now(timezone.utc).isoformat(),
 
             "agents":
                 self.reports,

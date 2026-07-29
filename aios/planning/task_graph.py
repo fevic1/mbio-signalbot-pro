@@ -34,3 +34,12 @@ class TaskGraphFactory:
             previous = task
 
         return project
+
+
+
+
+class TaskGraphBuilder:
+
+    build = staticmethod(
+        TaskGraphFactory.from_project
+    )

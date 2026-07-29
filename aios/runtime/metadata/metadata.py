@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class RuntimeMetadata:
@@ -12,10 +12,10 @@ class RuntimeMetadata:
         self.metadata = {}
 
     def start(self):
-        self.started_at = datetime.utcnow()
+        self.started_at = datetime.now(timezone.utc)
 
     def stop(self):
-        self.stopped_at = datetime.utcnow()
+        self.stopped_at = datetime.now(timezone.utc)
 
     def set(self, key, value):
         self.metadata[key] = value

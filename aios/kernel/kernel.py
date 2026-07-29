@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AIOSKernel:
@@ -33,7 +33,7 @@ class AIOSKernel:
 
         return {
             "status": self.status,
-            "time": datetime.utcnow().isoformat()
+            "time": datetime.now(timezone.utc).isoformat()
         }
 
 

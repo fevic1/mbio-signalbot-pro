@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 import uuid
 
@@ -16,7 +16,7 @@ class EvidenceRecord:
 
     timestamp: str = field(
         default_factory=lambda:
-        datetime.utcnow().isoformat()
+        datetime.now(timezone.utc).isoformat()
     )
 
 
@@ -67,13 +67,13 @@ class DecisionResult:
 
     timestamp: str = field(
         default_factory=lambda:
-        datetime.utcnow().isoformat()
+        datetime.now(timezone.utc).isoformat()
     )
 
     # preserve old naming
     created_at: str = field(
         default_factory=lambda:
-        datetime.utcnow().isoformat()
+        datetime.now(timezone.utc).isoformat()
     )
 
     approval_required: bool = False

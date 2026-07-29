@@ -1,16 +1,13 @@
 from aios.core.identifiable import Identifiable
 
-from .agent import AgentRuntime
-from .registry import AgentRegistry
+from aios.runtime.agents import RuntimeAgentManager
 
 
 class AgentManager(Identifiable):
 
-
     def __init__(self):
-
-        self.registry = AgentRegistry()
-
+        self.runtime = RuntimeAgentManager()
+        self.registry = self.runtime
 
 
     def create_agent(
@@ -20,60 +17,45 @@ class AgentManager(Identifiable):
         capabilities=None,
     ):
 
-        agent = AgentRuntime(
+        return self.runtime.register(
             name=name,
             role=role,
-            capabilities=capabilities or [],
+            metadata={
+                "capabilities": capabilities or [],
+            },
         )
-
-        self.registry.register(
-            agent
-        )
-
-        return agent
-
 
 
     def start_agent(
         self,
-        name,
+        agent_id,
     ):
 
-        agent = self.registry.get(
-            name
+        return self.runtime.start(
+            agent_id
         )
-
-        if not agent:
-            raise ValueError(
-                "Agent not found"
-            )
-
-        agent.start()
-
-        return agent.describe()
-
 
 
     def stop_agent(
         self,
-        name,
+        agent_id,
     ):
 
-        agent = self.registry.get(
-            name
+        return self.runtime.stop(
+            agent_id
         )
-
-        if not agent:
-            raise ValueError(
-                "Agent not found"
-            )
-
-        agent.stop()
-
-        return agent.describe()
-
 
 
     def describe(self):
 
-        return self.registry.list()
+        return [
+            {
+                "id": agent.id,
+                "name": agent.name,
+                "role": agent.role,
+                "state": agent.state,
+                "metadata": agent.metadata,
+                "capabilities": agent.capabilities,
+            }
+            for agent in self.runtime.all()
+        ]

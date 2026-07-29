@@ -26,11 +26,18 @@ export default function TradingPage({
   positionRefreshKey,
 }: Props) {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Positions");
+  const [selectedAsset, setSelectedAsset] = useState<string>("BTC");
+
+  const handleAssetSelect = (asset: string) => {
+    setSelectedAsset(asset);
+    console.log(`[TradingPage] Asset selected: ${asset}`);
+    // In production: update chart, fetch orderbook, etc.
+  };
 
   // Left Panel: Watchlist (dynamic height)
   const leftPanel = (
     <div className="h-full lg:block hidden">
-      <WatchlistPanel />
+      <WatchlistPanel onSymbolSelect={handleAssetSelect} />
     </div>
   );
 
@@ -82,9 +89,11 @@ export default function TradingPage({
     </div>
   );
 
-  // Right Panel: QT Parameters (dynamic height)
+  // Right Panel: QT Parameters with asset selector and deploy flow
   const rightPanel = (
     <QTParametersPanel 
+      selectedAsset={selectedAsset}
+      onAssetSelect={handleAssetSelect}
       onDeploy={() => setTicketCtx({ type: "create_bot_choice" })} 
     />
   );

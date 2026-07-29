@@ -16,4 +16,21 @@ __all__ = [
     "LessonExtractor",
     "KnowledgePatternStore",
     "PlannerFeedbackEngine",
+    "ExecutionEvaluator",
+    "PlannerOptimizer",
 ]
+
+
+def __getattr__(name):
+
+    if name == "ExecutionEvaluator":
+        from .evaluator import ExecutionEvaluator
+        return ExecutionEvaluator
+
+    if name == "PlannerOptimizer":
+        from .optimizer import PlannerOptimizer
+        return PlannerOptimizer
+
+    raise AttributeError(
+        f"module 'aios.learning' has no attribute '{name}'"
+    )

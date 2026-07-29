@@ -1,6 +1,5 @@
 from .entities import Entity
 from .relations import Relation
-from .knowledge_graph import KnowledgeGraph
 
 
 __all__ = [
@@ -8,3 +7,11 @@ __all__ = [
     "Relation",
     "KnowledgeGraph",
 ]
+
+
+def __getattr__(name):
+    if name == "KnowledgeGraph":
+        from .knowledge_graph import KnowledgeGraph
+        return KnowledgeGraph
+
+    raise AttributeError(name)

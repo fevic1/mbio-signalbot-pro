@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 
@@ -29,7 +29,7 @@ class ApprovalManager:
 
             "status": "pending",
 
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
 
             "approved_at": None,
 
@@ -55,7 +55,7 @@ class ApprovalManager:
 
         request["status"] = "approved"
         request["approved_by"] = approved_by
-        request["approved_at"] = datetime.utcnow().isoformat()
+        request["approved_at"] = datetime.now(timezone.utc).isoformat()
 
         return True
 
@@ -73,7 +73,7 @@ class ApprovalManager:
 
         request["status"] = "rejected"
         request["approved_by"] = approved_by
-        request["approved_at"] = datetime.utcnow().isoformat()
+        request["approved_at"] = datetime.now(timezone.utc).isoformat()
 
         return True
 

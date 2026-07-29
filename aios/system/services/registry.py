@@ -51,6 +51,28 @@ class AIOSServiceRegistry:
 
 
         #
+        # Decision Engine
+        #
+
+        from aios.decision.decision_engine import (
+            DecisionEngine,
+        )
+
+
+        decision_engine = DecisionEngine(
+            audit=audit_logger,
+            event_bus=event_bus,
+        )
+
+
+        services[
+            "decision_engine"
+        ] = decision_engine
+
+
+
+
+        #
         # Memory System
         #
 
@@ -66,6 +88,100 @@ class AIOSServiceRegistry:
         ] = memory_router
 
 
+        #
+        # Memory Manager Compatibility Layer
+        #
+
+        class MemoryManagerAdapter:
+
+            def __init__(self, router):
+                self.router = router
+
+
+            def store(self, *args, **kwargs):
+                if hasattr(self.router, "store"):
+                    return self.router.store(
+                        *args,
+                        **kwargs,
+                    )
+
+                if hasattr(self.router, "append"):
+                    return self.router.append(
+                        *args,
+                        **kwargs,
+                    )
+
+                return None
+
+
+            def remember(
+                self,
+                memory_type=None,
+                title=None,
+                content=None,
+                metadata=None,
+                **kwargs,
+            ):
+
+                from aios.memory.models import (
+                    MemoryRecord,
+                    MemoryType,
+                    MemoryImportance,
+                    MemoryMetadata,
+                )
+
+
+                try:
+                    resolved_type = MemoryType(
+                        memory_type
+                    )
+
+                except Exception:
+                    resolved_type = MemoryType.OPERATIONAL
+
+
+                memory = MemoryRecord(
+                    content={
+                        "title": title or "AIOS Memory",
+                        "content": content or "",
+                    },
+                    memory_type=resolved_type,
+                    importance=MemoryImportance.NORMAL,
+                    metadata=MemoryMetadata(
+                        source="execution_executor",
+                        tags=[],
+                        confidence=1.0,
+                        access_count=0,
+                    ),
+                )
+
+
+                return self.router.store(
+                    memory
+                )
+
+
+            def retrieve(self, *args, **kwargs):
+                if hasattr(self.router, "retrieve"):
+                    return self.router.retrieve(
+                        *args,
+                        **kwargs,
+                    )
+
+                return None
+
+
+        memory_manager = MemoryManagerAdapter(
+            memory_router
+        )
+
+
+        services[
+            "memory_manager"
+        ] = memory_manager
+
+
+
 
         repository = (
             memory_router.repository
@@ -78,9 +194,7 @@ class AIOSServiceRegistry:
 
 
         layer_registry = (
-            MemoryLayerRegistry(
-                repository
-            )
+            MemoryLayerRegistry()
         )
 
 
@@ -177,6 +291,44 @@ class AIOSServiceRegistry:
         bootstrap_capabilities(
             capability_registry
         )
+
+
+
+        #
+        # Skill Registry
+        #
+
+        class DefaultSkill:
+
+            def __init__(self, name):
+                self.name = name
+
+            def execute(self, context):
+                context.metadata["skill"] = self.name
+                return context
+
+
+        class SkillRegistry:
+
+            def __init__(self):
+                self.skills = {}
+
+            def register(self, name, skill):
+                self.skills[name] = skill
+
+            def get(self, name):
+                if name not in self.skills:
+                    self.skills[name] = DefaultSkill(name)
+
+                return self.skills[name]
+
+
+        skill_registry = SkillRegistry()
+
+
+        services[
+            "skill_registry"
+        ] = skill_registry
 
 
 
@@ -425,6 +577,71 @@ class AIOSServiceRegistry:
         except ImportError:
 
             pass
+
+
+        #
+        # Task + Orchestration Compatibility Layer
+        #
+
+        from aios.runtime.task_manager import (
+            TaskManager,
+        )
+
+        from aios.orchestrator.orchestrator import (
+            AIOSOrchestrator,
+        )
+
+
+        task_manager = TaskManager()
+
+
+        services[
+            "task_manager"
+        ] = task_manager
+
+
+        class AgentRegistryAdapter:
+
+            def __init__(self, manager):
+                self.manager = manager
+
+            def list(self):
+                return self.manager.describe()
+
+
+        orchestrator = AIOSOrchestrator(
+            task_manager=task_manager,
+            registry=AgentRegistryAdapter(
+                agent_manager
+            ),
+            decision_engine=None,
+            workflow_engine=None,
+        )
+
+
+        services[
+            "orchestrator"
+        ] = orchestrator
+
+
+        #
+        # Registry Compatibility Adapter
+        #
+
+        class AgentRegistryAdapter:
+
+            def __init__(self, manager):
+                self.manager = manager
+
+            def list(self):
+                return self.manager.describe()
+
+
+        services[
+            "registry"
+        ] = AgentRegistryAdapter(
+            agent_manager
+        )
 
 
         return services
