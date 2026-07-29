@@ -9,6 +9,7 @@ from .exceptions import (
 )
 from .transport import http
 from .types import ProviderRequest, ProviderResponse
+from .validation import valid_secret
 
 
 class AnthropicProvider(BaseProvider):
@@ -101,10 +102,10 @@ class AnthropicProvider(BaseProvider):
         )
 
     def health(self):
-        return self.key is not None
+        return valid_secret(self.key)
 
     def available(self):
-        return self.key is not None
+        return valid_secret(self.key)
 
     def models(self):
         return [self.model]

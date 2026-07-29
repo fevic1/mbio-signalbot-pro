@@ -1,67 +1,41 @@
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
-class SkillDefinition:
+class SkillManifest:
 
     name: str
 
     description: str
 
-    capabilities: list[str] = field(
-        default_factory=list
-    )
+    permission: str
 
-    triggers: list[str] = field(
-        default_factory=list
-    )
+    handler: Any = None
 
-    quality_gates: list[str] = field(
-        default_factory=list
-    )
-
-    metadata: dict = field(
+    input_schema: dict = field(
         default_factory=dict
     )
 
+    memory_enabled: bool = True
 
-    def supports(
-        self,
-        request,
-    ):
+    llm_instructions: str = ""
 
-        capability = request.get(
-            "capability"
-        )
+    timeout: int = 60
 
-        trigger = request.get(
-            "trigger"
-        )
+    retry_limit: int = 2
 
 
-        if capability:
-            return (
-                capability
-                in self.capabilities
+    def validate(self):
+
+        if not self.name:
+            raise ValueError(
+                "Skill name required"
             )
 
-
-        if trigger:
-            return (
-                trigger
-                in self.triggers
+        if not self.permission:
+            raise ValueError(
+                "Skill permission required"
             )
 
-
-        return False
-
-
-    def describe(self):
-
-        return {
-            "name": self.name,
-            "description": self.description,
-            "capabilities": self.capabilities,
-            "triggers": self.triggers,
-            "quality_gates": self.quality_gates,
-        }
+        return True

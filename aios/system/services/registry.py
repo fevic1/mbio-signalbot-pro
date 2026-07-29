@@ -252,38 +252,185 @@ class AIOSServiceRegistry:
 
             capabilities = [
 
-                ("architecture_review", "system"),
-                ("system_design", "system"),
-                ("failure_analysis", "system"),
+                {
+                    "name": "architecture_review",
+                    "permission": "system",
+                    "metadata": {
+                        "requires_provider": False,
+                        "memory_write": True,
+                        "risk_level": "low",
+                    },
+                },
 
-                ("market_analysis", "research"),
-                ("strategy_review", "research"),
-                ("backtesting", "research"),
+                {
+                    "name": "system_design",
+                    "permission": "system",
+                    "metadata": {
+                        "requires_provider": False,
+                        "memory_write": True,
+                        "risk_level": "low",
+                    },
+                },
 
-                ("risk_review", "risk"),
-                ("exposure_analysis", "risk"),
-                ("capital_protection", "risk"),
+                {
+                    "name": "failure_analysis",
+                    "permission": "system",
+                    "metadata": {
+                        "requires_provider": True,
+                        "memory_write": True,
+                        "risk_level": "medium",
+                    },
+                },
 
-                ("assumption_testing", "review"),
-                ("failure_detection", "review"),
+                {
+                    "name": "market_analysis",
+                    "permission": "research",
+                    "metadata": {
+                        "requires_provider": True,
+                        "memory_write": True,
+                        "risk_level": "medium",
+                        "allowed_models": ["research"],
+                    },
+                    "timeout": 120,
+                    "retry_limit": 3,
+                },
 
-                ("validation", "verification"),
-                ("quality_control", "verification"),
+                {
+                    "name": "strategy_review",
+                    "permission": "research",
+                    "metadata": {
+                        "requires_provider": True,
+                        "memory_write": True,
+                        "risk_level": "medium",
+                    },
+                },
 
-                ("research", "research"),
-                ("information_analysis", "research"),
+                {
+                    "name": "backtesting",
+                    "permission": "research",
+                    "metadata": {
+                        "requires_provider": False,
+                        "memory_write": True,
+                        "risk_level": "low",
+                    },
+                },
+
+                {
+                    "name": "risk_review",
+                    "permission": "risk",
+                    "metadata": {
+                        "requires_provider": True,
+                        "memory_write": True,
+                        "risk_level": "high",
+                    },
+                },
+
+                {
+                    "name": "exposure_analysis",
+                    "permission": "risk",
+                    "metadata": {
+                        "requires_provider": True,
+                        "memory_write": True,
+                        "risk_level": "high",
+                    },
+                },
+
+                {
+                    "name": "capital_protection",
+                    "permission": "risk",
+                    "metadata": {
+                        "requires_provider": False,
+                        "memory_write": True,
+                        "risk_level": "critical",
+                    },
+                },
+
+                {
+                    "name": "assumption_testing",
+                    "permission": "review",
+                    "metadata": {
+                        "requires_provider": True,
+                        "memory_write": True,
+                        "risk_level": "medium",
+                    },
+                },
+
+                {
+                    "name": "failure_detection",
+                    "permission": "review",
+                    "metadata": {
+                        "requires_provider": False,
+                        "memory_write": True,
+                        "risk_level": "medium",
+                    },
+                },
+
+                {
+                    "name": "validation",
+                    "permission": "verification",
+                    "metadata": {
+                        "requires_provider": False,
+                        "memory_write": True,
+                        "risk_level": "low",
+                    },
+                },
+
+                {
+                    "name": "quality_control",
+                    "permission": "verification",
+                    "metadata": {
+                        "requires_provider": False,
+                        "memory_write": True,
+                        "risk_level": "low",
+                    },
+                },
+
+                {
+                    "name": "research",
+                    "permission": "research",
+                    "metadata": {
+                        "requires_provider": True,
+                        "memory_write": True,
+                        "risk_level": "low",
+                        "allowed_models": ["research"],
+                    },
+                    "timeout": 120,
+                    "retry_limit": 3,
+                },
+
+                {
+                    "name": "information_analysis",
+                    "permission": "research",
+                    "metadata": {
+                        "requires_provider": True,
+                        "memory_write": True,
+                        "risk_level": "low",
+                    },
+                },
 
             ]
 
 
-            for name, permission in capabilities:
+            for capability in capabilities:
 
                 registry.register(
                     Capability(
-                        name=name,
-                        permission=permission,
+                        name=capability["name"],
+                        permission=capability["permission"],
                         description=
-                            f"AIOS capability: {name}",
+                            f"AIOS capability: {capability['name']}",
+                        metadata=capability.get(
+                            "metadata",
+                            {},
+                        ),
+                        timeout=capability.get(
+                            "timeout",
+                            60,
+                        ),
+                        retry_limit=capability.get(
+                            "retry_limit",
+                            2,
+                        ),
                     )
                 )
 
@@ -294,36 +441,24 @@ class AIOSServiceRegistry:
 
 
 
+
         #
         # Skill Registry
         #
 
-        class DefaultSkill:
-
-            def __init__(self, name):
-                self.name = name
-
-            def execute(self, context):
-                context.metadata["skill"] = self.name
-                return context
-
-
-        class SkillRegistry:
-
-            def __init__(self):
-                self.skills = {}
-
-            def register(self, name, skill):
-                self.skills[name] = skill
-
-            def get(self, name):
-                if name not in self.skills:
-                    self.skills[name] = DefaultSkill(name)
-
-                return self.skills[name]
+        from aios.skills import (
+            SkillRegistry,
+            SkillLoader,
+        )
 
 
         skill_registry = SkillRegistry()
+
+        skill_loader = SkillLoader(
+            skill_registry
+        )
+
+        skill_loader.load_builtin()
 
 
         services[

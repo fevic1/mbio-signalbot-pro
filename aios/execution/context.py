@@ -31,6 +31,8 @@ class ExecutionContext(Component):
 
         self.agent_status = {}
 
+        self.capability_metadata = {}
+
         self.event_bus = event_bus
 
 
@@ -115,6 +117,7 @@ class ExecutionContext(Component):
                     "model": result.get("model"),
                     "latency": result.get("latency"),
                     "cost": result.get("cost"),
+                    "metadata": result.get("metadata", {}),
                 }
             )
 

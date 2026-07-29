@@ -76,6 +76,11 @@ class AIOSContainer:
     def capability_registry(self):
         return self.services.get("capability_registry")
 
+
+    @property
+    def capability_health(self):
+        return self.services.get("capability_health")
+
     @property
     def event_bus(self):
         return self.services.get("event_bus")

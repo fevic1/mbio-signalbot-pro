@@ -1,31 +1,32 @@
-from importlib import import_module
-
-from .core.manager import SkillManager
-from .registry import SkillRegistry
+from pathlib import Path
+import importlib
 
 
 class SkillLoader:
 
     def __init__(
         self,
-        system=None,
+        registry,
     ):
-        self.system = system
-        self.registry = SkillRegistry()
-        self.manager = SkillManager("aios/skills")
 
-    def load(self):
+        self.registry = registry
 
-        for manifest in self.manager.enabled():
 
-            module = import_module(
-                f'aios.skills.{manifest["id"].replace("-", "_")}.workflow'
+    def load_builtin(self):
+
+        root = Path(
+            "aios/skills/builtin"
+        )
+
+        for folder in root.iterdir():
+
+            if not folder.is_dir():
+                continue
+
+            module = importlib.import_module(
+                f"aios.skills.builtin.{folder.name}.manifest"
             )
 
-            skill = getattr(module, "LLMCouncilSkill")(
-                self.system
+            self.registry.register(
+                module.skill
             )
-
-            self.registry.register(skill)
-
-        return self.registry

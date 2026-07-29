@@ -434,5 +434,236 @@
       "timestamp": "2026-07-29T16:46:58.081004+00:00"
     },
     "timestamp": "2026-07-29T16:46:58.081009+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:25:33.936920+00:00"
+    },
+    "timestamp": "2026-07-29T17:25:33.936929+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:25:45.634880+00:00"
+    },
+    "timestamp": "2026-07-29T17:25:45.634888+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:25:45.647031+00:00"
+    },
+    "timestamp": "2026-07-29T17:25:45.647036+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:25:46.601348+00:00"
+    },
+    "timestamp": "2026-07-29T17:25:46.601355+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:25:46.638760+00:00"
+    },
+    "timestamp": "2026-07-29T17:25:46.638765+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:36:23.056756+00:00"
+    },
+    "timestamp": "2026-07-29T17:36:23.056762+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:36:23.067517+00:00"
+    },
+    "timestamp": "2026-07-29T17:36:23.067529+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:36:23.989900+00:00"
+    },
+    "timestamp": "2026-07-29T17:36:23.989907+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:36:24.031470+00:00"
+    },
+    "timestamp": "2026-07-29T17:36:24.031475+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:39:10.344776+00:00"
+    },
+    "timestamp": "2026-07-29T17:39:10.344783+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:39:10.355389+00:00"
+    },
+    "timestamp": "2026-07-29T17:39:10.355394+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:39:11.324726+00:00"
+    },
+    "timestamp": "2026-07-29T17:39:11.324732+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:39:11.367909+00:00"
+    },
+    "timestamp": "2026-07-29T17:39:11.367914+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:51:28.765243+00:00"
+    },
+    "timestamp": "2026-07-29T17:51:28.765250+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:51:28.782258+00:00"
+    },
+    "timestamp": "2026-07-29T17:51:28.782263+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:51:29.736338+00:00"
+    },
+    "timestamp": "2026-07-29T17:51:29.736345+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:51:29.773569+00:00"
+    },
+    "timestamp": "2026-07-29T17:51:29.773574+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:57:46.622611+00:00"
+    },
+    "timestamp": "2026-07-29T17:57:46.622617+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:57:46.636024+00:00"
+    },
+    "timestamp": "2026-07-29T17:57:46.636029+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:57:47.864327+00:00"
+    },
+    "timestamp": "2026-07-29T17:57:47.864334+00:00"
+  },
+  {
+    "event_type": "optimizer_learning",
+    "action": "score_recorded",
+    "source": "aios_optimizer",
+    "metadata": {
+      "key": "UNKNOWN:UNKNOWN:UNKNOWN",
+      "score": 1.0,
+      "timestamp": "2026-07-29T17:57:47.906743+00:00"
+    },
+    "timestamp": "2026-07-29T17:57:47.906748+00:00"
   }
 ]

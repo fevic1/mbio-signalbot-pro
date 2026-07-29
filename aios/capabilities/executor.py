@@ -27,10 +27,65 @@ class CapabilityExecutor:
             system,
         )
 
+    def _get_capability_definition(self, name):
+
+        registry = self.system.capability_registry
+
+        if registry is None:
+            raise CapabilityExecutionError(
+                "Capability registry unavailable"
+            )
+
+        capability = registry.get(name)
+
+        if capability is None:
+            raise CapabilityExecutionError(
+                f"Unknown capability: {name}"
+            )
+
+        return capability
+
+
+    def _validate_capability_policy(self, capability):
+
+        if not capability.enabled:
+            raise CapabilityExecutionError(
+                f"Capability disabled: {capability.name}"
+            )
+
+
+        metadata = capability.metadata or {}
+
+
+        if metadata.get(
+            "requires_provider",
+            False,
+        ):
+
+            provider = provider_pool.best()
+
+            if provider is None:
+                raise CapabilityExecutionError(
+                    f"{capability.name}: no usable provider"
+                )
+
+
+        return True
+
+
+
     async def execute(
         self,
         request: CapabilityRequest,
     ):
+
+        capability = self._get_capability_definition(
+            request.capability
+        )
+
+        self._validate_capability_policy(
+            capability
+        )
 
         last_error = None
 
