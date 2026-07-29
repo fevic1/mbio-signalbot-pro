@@ -5,7 +5,7 @@ from time import perf_counter
 from aios.intelligence.llm_adapter import LLMAdapter
 from aios.providers.router import chat
 from aios.providers.router import provider_pool
-from aios.providers.types import ProviderRequest
+from aios.neural_proxy.protocol import AIOSRequest
 from aios.capabilities.policy import CapabilityPolicyEngine
 from aios.capabilities.errors import CapabilityExecutionError
 
@@ -101,7 +101,8 @@ class CapabilityExecutor:
             request,
         )
 
-        provider_request = ProviderRequest(
+        aios_request = AIOSRequest(
+            capability=request.capability,
             messages=[
                 {
                     "role": "system",
@@ -111,7 +112,16 @@ class CapabilityExecutor:
                     "role": "user",
                     "content": str(prompt["context"]),
                 },
-            ]
+            ],
+            constraints={
+                "allowed_models": (
+                    self._get_capability_definition(
+                        request.capability
+                    )
+                    .metadata
+                    .get("allowed_models")
+                ),
+            },
         )
 
         start = perf_counter()
@@ -144,11 +154,10 @@ class CapabilityExecutor:
         if selected_model:
             provider_request.model = selected_model.name
 
-        response = await chat(
-            provider_request,
-            event_bus=self.system.event_bus,
-            capability=request.capability,
+        response = await self.system.neural_proxy.execute(
+            aios_request
         )
+
 
         latency = perf_counter() - start
 

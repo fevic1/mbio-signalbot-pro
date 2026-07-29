@@ -73,6 +73,11 @@ class AIOSContainer:
         return self.services.get("decision_engine")
 
     @property
+    def neural_proxy(self):
+        return self.services.get("neural_proxy")
+
+
+    @property
     def capability_registry(self):
         return self.services.get("capability_registry")
 
