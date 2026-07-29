@@ -920,9 +920,20 @@ class AIOSServiceRegistry:
             NeuralProxyRouter,
         )
 
+        from aios.neural_proxy.intelligence import (
+            ModelIntelligence,
+        )
+
         from aios.providers.router import (
             chat as provider_chat,
         )
+
+
+        model_intelligence = ModelIntelligence()
+
+        services[
+            "model_intelligence"
+        ] = model_intelligence
 
 
         neural_proxy_router = NeuralProxyRouter(
@@ -930,6 +941,7 @@ class AIOSServiceRegistry:
                 "llm_router"
             ),
             provider_router=None,
+            intelligence=model_intelligence,
         )
 
 
