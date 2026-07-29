@@ -70,6 +70,21 @@ class AIOSOrchestrator:
         )
 
 
+
+    def execute_task_sync(
+        self,
+        *args,
+        **kwargs,
+    ):
+        import asyncio
+
+        return asyncio.run(
+            self.execute_task(
+                *args,
+                **kwargs
+            )
+        )
+
     async def execute_task(
         self,
         task_id

@@ -144,3 +144,19 @@ class ExecutionExecutor(ExecutionRunner):
             raise
 
         return context
+
+    def execute_sync(
+        self,
+        *args,
+        **kwargs,
+    ):
+
+        import asyncio
+
+        return asyncio.run(
+            self.execute(
+                *args,
+                **kwargs,
+            )
+        )
+

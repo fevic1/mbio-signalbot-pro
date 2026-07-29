@@ -93,3 +93,13 @@ class AIOSContainer:
     @property
     def decision_workflow(self):
         return self.services.get("decision_workflow")
+
+
+    @property
+    def workflow_engine(self):
+        return self.services.get("workflow_engine")
+
+
+    @property
+    def execution_planner(self):
+        return self.services.get("execution_planner")

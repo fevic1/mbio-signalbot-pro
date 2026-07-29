@@ -54,7 +54,7 @@ class AIOSBootstrap:
         registry = AIOSServiceRegistry()
 
 
-        services = registry.build_core()
+        services = registry.build_core(self.container)
 
 
         for name, service in services.items():

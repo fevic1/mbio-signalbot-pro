@@ -8,6 +8,21 @@ class MultiAgentWorkflow:
     ):
         self.system = system
 
+
+    def execute_sync(
+        self,
+        *args,
+        **kwargs,
+    ):
+        import asyncio
+
+        return asyncio.run(
+            self.execute(
+                *args,
+                **kwargs
+            )
+        )
+
     async def execute(
         self,
         task,

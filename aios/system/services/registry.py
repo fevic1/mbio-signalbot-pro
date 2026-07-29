@@ -20,7 +20,7 @@ from aios.audit.logger import (
 class AIOSServiceRegistry:
 
 
-    def build_core(self):
+    def build_core(self, container=None):
 
         services = {}
 
@@ -592,6 +592,74 @@ class AIOSServiceRegistry:
         )
 
 
+        #
+        # Execution Planner
+        #
+
+        from aios.execution.planner import (
+            ExecutionPlanner,
+        )
+
+
+        execution_planner = ExecutionPlanner()
+
+
+        services[
+            "execution_planner"
+        ] = execution_planner
+
+
+
+        #
+        # Workflow Engine
+        #
+
+        from aios.workflows.execution_engine import (
+            WorkflowEngine,
+        )
+
+
+        #
+        # Workflow Engine
+        # Delayed initialization
+        #
+
+        class WorkflowEngineProxy:
+
+            def __init__(self, container):
+                self.container = container
+                self.engine = None
+
+
+            def _init(self):
+
+                if self.engine is None:
+
+                    self.engine = WorkflowEngine(
+                        self.container
+                    )
+
+                return self.engine
+
+
+            async def execute(self, task):
+
+                return await self._init().execute(
+                    task
+                )
+
+
+        workflow_engine = WorkflowEngineProxy(
+            container
+        )
+
+
+        services[
+            "workflow_engine"
+        ] = workflow_engine
+
+
+
         task_manager = TaskManager()
 
 
@@ -615,7 +683,7 @@ class AIOSServiceRegistry:
                 agent_manager
             ),
             decision_engine=None,
-            workflow_engine=None,
+            workflow_engine=workflow_engine,
         )
 
 
@@ -643,5 +711,10 @@ class AIOSServiceRegistry:
             agent_manager
         )
 
+
+        if container is not None:
+            container.services.update(
+                services
+            )
 
         return services
