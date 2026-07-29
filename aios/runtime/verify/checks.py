@@ -28,3 +28,72 @@ def check_events(kernel):
     return {
         "event_bus": type(kernel.event_bus).__name__,
     }
+
+
+def check_governance(kernel):
+
+    request = kernel.approval_manager.create_request(
+        action="verify_execution",
+        requested_by="runtime_verifier",
+    )
+
+    kernel.approval_manager.approve(
+        request["id"],
+        approved_by="verification",
+    )
+
+    approved = kernel.approval_manager.get(
+        request["id"]
+    )
+
+    return {
+        "status": approved["status"],
+        "approved_by": approved["approved_by"],
+    }
+
+
+def check_execution(kernel):
+
+    result = kernel.execution_orchestrator.run_mission(
+        [
+            {
+                "milestone": "research",
+                "tasks": [
+                    {
+                        "name": "verification_task"
+                    }
+                ],
+            }
+        ],
+        type(
+            "Team",
+            (),
+            {
+                "agents": [
+                    type(
+                        "Agent",
+                        (),
+                        {
+                            "name": "verifier",
+                            "role": "Researcher",
+                        }
+                    )()
+                ]
+            }
+        )(),
+    )
+
+    return {
+        "has_result": bool(result),
+        "governance_checked": "governance" in result,
+    }
+
+
+def check_audit(kernel):
+
+    return {
+        "audit_available": hasattr(
+            kernel,
+            "audit_logger"
+        ),
+    }

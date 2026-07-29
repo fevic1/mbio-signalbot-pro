@@ -5,6 +5,9 @@ from .checks import (
     check_supervisor,
     check_lifecycle,
     check_events,
+    check_governance,
+    check_execution,
+    check_audit,
 )
 
 
@@ -21,4 +24,7 @@ class RuntimeVerifier:
             "supervisor": check_supervisor(self.kernel),
             "lifecycle": check_lifecycle(self.kernel),
             "events": check_events(self.kernel),
+            "governance": check_governance(self.kernel),
+            "execution": check_execution(self.kernel),
+            "audit": check_audit(self.kernel),
         }
