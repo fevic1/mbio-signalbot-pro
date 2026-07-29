@@ -8,6 +8,10 @@ from .adapters import (
     adapter_registry,
 )
 
+from .context import (
+    SemanticContextProcessor,
+)
+
 
 class NeuralProxyGateway:
 
@@ -22,12 +26,17 @@ class NeuralProxyGateway:
         self.router = router
         self.provider_chat = provider_chat
         self.adapter = adapter
+        self.context_processor = SemanticContextProcessor()
 
 
     async def execute(
         self,
         request: AIOSRequest,
     ):
+
+        request = self.context_processor.process(
+            request
+        )
 
         model = self.router.select(
             request.capability,
