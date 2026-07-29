@@ -21,11 +21,13 @@ class NeuralProxyGateway:
         router,
         provider_chat,
         adapter=None,
+        event_bus=None,
     ):
 
         self.router = router
         self.provider_chat = provider_chat
         self.adapter = adapter
+        self.event_bus = event_bus
         self.context_processor = SemanticContextProcessor()
 
 
@@ -82,6 +84,24 @@ class NeuralProxyGateway:
         response = await self.provider_chat(
             provider_request
         )
+
+
+        if self.event_bus:
+
+            from aios.events.models import AIOSDomainEvent
+
+            self.event_bus.publish(
+                AIOSDomainEvent(
+                    "model_execution.completed",
+                    source="neural_proxy",
+                    payload={
+                        "provider": response.provider,
+                        "model": response.model,
+                        "capability": request.capability,
+                        "success": True,
+                    },
+                )
+            )
 
 
         return AIOSResponse(

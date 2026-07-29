@@ -936,6 +936,7 @@ class AIOSServiceRegistry:
         neural_proxy = NeuralProxyGateway(
             router=neural_proxy_router,
             provider_chat=provider_chat,
+            event_bus=event_bus,
         )
 
 
