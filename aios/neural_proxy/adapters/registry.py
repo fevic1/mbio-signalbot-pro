@@ -26,3 +26,37 @@ class AdapterRegistry:
 
 
 adapter_registry = AdapterRegistry()
+
+
+from .providers import (
+    OpenAIAdapter,
+    AnthropicAdapter,
+    GeminiAdapter,
+    LocalAdapter,
+)
+
+
+def register_default_adapters():
+
+    adapter_registry.register(
+        "openai",
+        OpenAIAdapter(),
+    )
+
+    adapter_registry.register(
+        "anthropic",
+        AnthropicAdapter(),
+    )
+
+    adapter_registry.register(
+        "gemini",
+        GeminiAdapter(),
+    )
+
+    adapter_registry.register(
+        "local",
+        LocalAdapter(),
+    )
+
+
+register_default_adapters()
