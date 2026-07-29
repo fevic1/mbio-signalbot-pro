@@ -908,6 +908,43 @@ class AIOSServiceRegistry:
         )
 
 
+        #
+        # AIOS Neural Proxy
+        #
+
+        from aios.neural_proxy import (
+            NeuralProxyGateway,
+        )
+
+        from aios.neural_proxy.router import (
+            NeuralProxyRouter,
+        )
+
+        from aios.providers.router import (
+            chat as provider_chat,
+        )
+
+
+        neural_proxy_router = NeuralProxyRouter(
+            llm_router=services.get(
+                "llm_router"
+            ),
+            provider_router=None,
+        )
+
+
+        neural_proxy = NeuralProxyGateway(
+            router=neural_proxy_router,
+            provider_chat=provider_chat,
+        )
+
+
+        services[
+            "neural_proxy"
+        ] = neural_proxy
+
+
+
         if container is not None:
             container.services.update(
                 services
