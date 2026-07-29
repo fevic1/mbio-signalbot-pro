@@ -5,6 +5,7 @@ from .protocol import (
 
 from .adapters import (
     NativeProviderAdapter,
+    adapter_registry,
 )
 
 
@@ -20,10 +21,7 @@ class NeuralProxyGateway:
 
         self.router = router
         self.provider_chat = provider_chat
-        self.adapter = (
-            adapter
-            or NativeProviderAdapter()
-        )
+        self.adapter = adapter
 
 
     async def execute(
@@ -46,8 +44,26 @@ class NeuralProxyGateway:
             ] = model.name
 
 
+        adapter = self.adapter
+
+        if adapter is None:
+
+            if model:
+
+                adapter = (
+                    adapter_registry.get(
+                        model.provider
+                    )
+                    or NativeProviderAdapter()
+                )
+
+            else:
+
+                adapter = NativeProviderAdapter()
+
+
         provider_request = (
-            self.adapter
+            adapter
             .translate_request(
                 request
             )
