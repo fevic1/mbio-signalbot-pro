@@ -72,7 +72,7 @@ class RuntimeKernel:
         self.container = ServiceContainer()
         self.extensions = ExtensionManager()
         self.task_engine = TaskEngine()
-        self.workflow_engine = WorkflowExecutionEngine(self.task_engine)
+        self.workflow_engine = RuntimeWorkflowEngine()
         self.tool_registry = ToolRegistry()
         self.prompt_engine = PromptEngine()
         self.agent_runtime = AgentRuntime()
