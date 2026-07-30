@@ -1,4 +1,4 @@
-from aios.runtime.supervisor import Supervisor
+from aios.runtime.supervisor import Supervisor as RuntimeSupervisor
 from aios.runtime.memory_intelligence import MemoryIntelligence
 from aios.events.bus import EventBus
 from aios.governance.permissions import PermissionManager
@@ -22,7 +22,7 @@ from aios.execution.audit import ExecutionAuditHandler
 from aios.memory.semantic import SemanticMemory
 from aios.policy import PolicyEngine as DomainPolicyEngine
 from aios.prompts import PromptEngine as DomainPromptEngine
-from aios.supervisor import Supervisor
+from aios.supervisor import Supervisor as DomainSupervisor
 from aios.tools import ToolRegistry
 from aios.runtime.container import ServiceContainer
 from aios.runtime.metadata import RuntimeMetadata
@@ -76,7 +76,7 @@ class RuntimeKernel:
         self.prompt_engine = RuntimePromptEngine()
         self.agent_runtime = AgentRuntime()
         self.policy_engine = RuntimePolicyEngine()
-        self.supervisor = Supervisor()
+        self.supervisor = DomainSupervisor()
         self.semantic_memory = SemanticMemory()
         self.memory_intelligence = MemoryIntelligence()
         self.event_bus = EventBus()
