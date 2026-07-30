@@ -889,18 +889,36 @@ function sendMessage() {
 
   showTyping();
 
-  // Wire to your backend here:
-  // fetch('/api/chat', { method: 'POST', body: JSON.stringify({ message: text }) })
-  //   .then(r => r.json())
-  //   .then(data => { removeTyping(); addMessage('ai', data.reply, true); })
-
-  setTimeout(() => {
+  fetch('/aios/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      message: text
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
     removeTyping();
-    addMessage('ai', `Received: <code>${escapeHtml(text)}</code><br><br><span class="text-slate-400 text-xs">Wire this to your /api/chat endpoint. See deployment guide for backend setup.</span>`, true);
+
+    const reply = data.content || data.reply || JSON.stringify(data);
+
+    addMessage('ai', escapeHtml(reply), true);
+
     isProcessing = false;
     sendBtn.disabled = false;
     chatInput.focus();
-  }, 800);
+  })
+  .catch(error => {
+    removeTyping();
+
+    addMessage('ai', `Error: ${escapeHtml(error.message)}`, true);
+
+    isProcessing = false;
+    sendBtn.disabled = false;
+    chatInput.focus();
+  });
 }
 
 // ─── Microphone / Waveform ───────────────────────────────────────────────────
