@@ -73,9 +73,39 @@ class ExecutionExecutor(ExecutionRunner):
             policy_context
         )
 
-        if not policy_result["allowed"]:
+        blocked = []
+
+        for name, result in policy_result.get(
+            "checks",
+            {}
+        ).items():
+
+            if isinstance(result, dict):
+                severity = result.get(
+                    "severity",
+                    "ALLOW",
+                )
+                allowed = result.get(
+                    "allowed",
+                    True,
+                )
+
+            else:
+                severity = "BLOCK" if not result else "ALLOW"
+                allowed = bool(result)
+
+            if severity == "BLOCK" and not allowed:
+                blocked.append(
+                    name
+                )
+
+        if blocked:
             raise PermissionError(
-                f"Execution blocked by policy: {policy_result}"
+                {
+                    "reason": "Execution blocked by policy",
+                    "policies": blocked,
+                    "policy_result": policy_result,
+                }
             )
 
         context = ExecutionContext(
