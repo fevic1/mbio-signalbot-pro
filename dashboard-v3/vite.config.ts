@@ -15,6 +15,7 @@ export default defineConfig({
         markets: resolve(__dirname, 'pages/markets/index.html'),
         research: resolve(__dirname, 'pages/research/index.html'),
         system: resolve(__dirname, 'pages/system/index.html'),
+        aios: resolve(__dirname, 'pages/aios/index.html'),
       },
     },
   },
