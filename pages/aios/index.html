@@ -1007,10 +1007,62 @@ function stopRecording() {
   analyser = null;
   recordingTimeEl.textContent = '00:00';
 
-  // Optionally send recorded audio to backend here
-  // const blob = new Blob(audioChunks, { type: 'audio/webm' });
-  // formData.append('audio', blob);
-  // fetch('/api/chat/audio', { method: 'POST', body: formData });
+
+  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+
+  try {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      const ws = new WebSocket(
+          wsProtocol + window.location.host + '/ws/aios/voice'
+      );
+
+      ws.onopen = () => {
+          ws.send(blob);
+      };
+
+      ws.onmessage = (event) => {
+          try {
+              const data = JSON.parse(event.data);
+
+              if (data.response) {
+                  addMessage(
+                      'ai',
+                      data.response,
+                      false
+                  );
+              } else {
+                  addMessage(
+                      'ai',
+                      event.data,
+                      false
+                  );
+              }
+
+          } catch {
+              addMessage(
+                  'ai',
+                  event.data,
+                  false
+              );
+          }
+      };
+
+      ws.onerror = () => {
+          addMessage(
+              'ai',
+              '⚠️ Voice connection failed',
+              true
+          );
+      };
+
+  } catch(error) {
+
+      addMessage(
+          'ai',
+          '⚠️ Voice transport error: ' + error.message,
+          true
+      );
+  }
 }
 
 function resizeWaveformCanvas() {
