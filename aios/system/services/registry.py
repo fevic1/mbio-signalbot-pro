@@ -245,7 +245,9 @@ class AIOSServiceRegistry:
         )
 
 
-        learning = LearningCoordinator()
+        learning = LearningCoordinator(
+            memory_manager=memory_manager,
+        )
 
 
         services[
