@@ -23,6 +23,7 @@ class PolicyEngine:
         return PolicyResult(
             allowed=allowed,
             policy=policy.name,
+            severity=policy.severity,
             reason="" if allowed else "Policy denied",
         )
 
@@ -33,6 +34,7 @@ class PolicyEngine:
                 PolicyResult(
                     allowed=policy.evaluate(*args, **kwargs),
                     policy=policy.name,
+                    severity=policy.severity,
                 )
             )
         return results
