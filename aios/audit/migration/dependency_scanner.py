@@ -4,6 +4,31 @@ from pathlib import Path
 
 class DependencyScanner:
 
+    def __init__(self):
+        self.excluded = {
+            ".venv",
+            "__pycache__",
+            ".git",
+            "node_modules",
+        }
+
+    def _python_files(self):
+
+        for path in Path("aios").rglob("*.py"):
+
+            if any(
+                part in self.excluded
+                for part in path.parts
+            ):
+                continue
+
+            # skip generated/huge files
+            if path.stat().st_size > 500_000:
+                continue
+
+            yield path
+
+
     def scan(self, component):
 
         results = {
@@ -13,14 +38,33 @@ class DependencyScanner:
 
         aliases = {}
 
-        for path in Path(".").rglob("*.py"):
+        component_name = (
+            component.split(".")[-1]
+        )
+
+        for path in self._python_files():
 
             try:
-                source = path.read_text()
-                tree = ast.parse(source)
+                source = path.read_text(
+                    encoding="utf-8"
+                )
 
             except Exception:
                 continue
+
+            # fast filter before AST parse
+            if (
+                component not in source
+                and component_name not in source
+            ):
+                continue
+
+            try:
+                tree = ast.parse(source)
+
+            except SyntaxError:
+                continue
+
 
             for node in ast.walk(tree):
 
@@ -32,9 +76,11 @@ class DependencyScanner:
 
                         for item in node.names:
 
-                            local_name = item.asname or item.name
+                            local = (
+                                item.asname or item.name
+                            )
 
-                            aliases[local_name] = (
+                            aliases[local] = (
                                 module,
                                 item.name,
                             )
@@ -46,29 +92,8 @@ class DependencyScanner:
                             }
                         )
 
-                elif isinstance(node, ast.Import):
 
-                    for item in node.names:
-
-                        if component in item.name:
-
-                            aliases[
-                                item.asname or item.name
-                            ] = (
-                                item.name,
-                                None,
-                            )
-
-                            results["imports"].append(
-                                {
-                                    "file": str(path),
-                                    "import": item.name,
-                                }
-                            )
-
-            for node in ast.walk(tree):
-
-                if isinstance(node, ast.Call):
+                elif isinstance(node, ast.Call):
 
                     if isinstance(node.func, ast.Name):
 
@@ -84,8 +109,6 @@ class DependencyScanner:
                                     "class": name,
                                     "resolved": (
                                         f"{module}.{symbol}"
-                                        if symbol
-                                        else module
                                     ),
                                 }
                             )
