@@ -8,7 +8,7 @@ from aios.control.approval_workflow import ApprovalWorkflow
 from aios.governance.runtime import GovernanceGateway
 from aios.control.audit import RuntimeAudit
 from aios.runtime.dag.graph import ExecutionGraph
-from aios.runtime.prompts import PromptEngine
+from aios.runtime.prompts import PromptEngine as RuntimePromptEngine
 from aios.runtime.policy_engine import PolicyEngine as RuntimePolicyEngine
 from aios.runtime.tools import ToolRegistry
 from aios.runtime.dag import ExecutionGraph
@@ -21,7 +21,7 @@ from aios.risk import RiskEngine
 from aios.execution.audit import ExecutionAuditHandler
 from aios.memory.semantic import SemanticMemory
 from aios.policy import PolicyEngine as DomainPolicyEngine
-from aios.prompts import PromptEngine
+from aios.prompts import PromptEngine as DomainPromptEngine
 from aios.supervisor import Supervisor
 from aios.tools import ToolRegistry
 from aios.runtime.container import ServiceContainer
@@ -73,7 +73,7 @@ class RuntimeKernel:
         self.task_engine = RuntimeTaskEngine()
         self.workflow_engine = RuntimeWorkflowEngine()
         self.tool_registry = ToolRegistry()
-        self.prompt_engine = PromptEngine()
+        self.prompt_engine = RuntimePromptEngine()
         self.agent_runtime = AgentRuntime()
         self.policy_engine = RuntimePolicyEngine()
         self.supervisor = Supervisor()
