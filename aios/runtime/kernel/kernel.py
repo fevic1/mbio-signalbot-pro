@@ -10,7 +10,7 @@ from aios.control.audit import RuntimeAudit
 from aios.runtime.dag.graph import ExecutionGraph
 from aios.runtime.prompts import PromptEngine as RuntimePromptEngine
 from aios.runtime.policy_engine import PolicyEngine as RuntimePolicyEngine
-from aios.runtime.tools import ToolRegistry
+from aios.runtime.tools import ToolRegistry as RuntimeToolRegistry
 from aios.runtime.dag import ExecutionGraph
 from aios.runtime.task_engine import TaskEngine as RuntimeTaskEngine
 from aios.runtime.workflow_engine import WorkflowEngine as RuntimeWorkflowEngine
@@ -23,7 +23,7 @@ from aios.memory.semantic import SemanticMemory
 from aios.policy import PolicyEngine as DomainPolicyEngine
 from aios.prompts import PromptEngine as DomainPromptEngine
 from aios.supervisor import Supervisor as DomainSupervisor
-from aios.tools import ToolRegistry
+from aios.tools import ToolRegistry as DomainToolRegistry
 from aios.runtime.container import ServiceContainer
 from aios.runtime.metadata import RuntimeMetadata
 from aios.runtime.capabilities import RuntimeCapabilities
@@ -72,7 +72,7 @@ class RuntimeKernel:
         self.extensions = ExtensionManager()
         self.task_engine = RuntimeTaskEngine()
         self.workflow_engine = RuntimeWorkflowEngine()
-        self.tool_registry = ToolRegistry()
+        self.tool_registry = DomainToolRegistry()
         self.prompt_engine = RuntimePromptEngine()
         self.agent_runtime = AgentRuntime()
         self.policy_engine = RuntimePolicyEngine()
