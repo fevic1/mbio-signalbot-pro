@@ -11,7 +11,7 @@ from aios.runtime.prompts import PromptEngine as RuntimePromptEngine
 from aios.runtime.policy_engine import PolicyEngine as RuntimePolicyEngine
 from aios.runtime.tools import ToolRegistry as RuntimeToolRegistry
 from aios.runtime.agent_runtime.adapter import AgentRuntimeAdapter
-from aios.execution.task_engine import TaskEngine as ExecutionTaskEngine
+from aios.runtime.task_engine.adapter import TaskEngineAdapter
 from aios.execution import ExecutionOrchestrator
 from aios.workflows.engine import WorkflowEngine as WorkflowExecutionEngine
 from aios.risk import RiskEngine
@@ -67,7 +67,7 @@ class RuntimeKernel:
         self.plugins = RuntimePluginRegistry()
         self.container = ServiceContainer()
         self.extensions = ExtensionManager()
-        self.task_engine = ExecutionTaskEngine()
+        self.task_engine = TaskEngineAdapter()
         self.workflow_engine = WorkflowExecutionEngine(self.task_engine)
         self.tool_registry = DomainToolRegistry()
         self.prompt_engine = RuntimePromptEngine()
