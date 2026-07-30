@@ -1,0 +1,529 @@
+{
+  "WorkflowEngine": {
+    "canonical": "aios.workflows.engine",
+    "risk": "runtime",
+    "owner": "workflow-domain",
+    "status": "migration_pending"
+  },
+  "TaskEngine": {
+    "canonical": "aios.execution.task_engine",
+    "risk": "runtime",
+    "owner": "execution-domain",
+    "status": "migration_pending"
+  },
+  "PolicyEngine": {
+    "canonical": "aios.policy.engine",
+    "risk": "runtime",
+    "owner": "policy-domain",
+    "status": "migration_pending"
+  },
+  "AgentRuntime": {
+    "canonical": "aios.agents.runtime.runtime",
+    "risk": "runtime",
+    "owner": "agent-domain",
+    "status": "migration_pending"
+  },
+  "PromptEngine": {
+    "canonical": "aios.prompts.engine",
+    "risk": "review",
+    "owner": "prompt-domain",
+    "status": "migration_pending"
+  },
+  "ToolRegistry": {
+    "canonical": "aios.tools.registry",
+    "risk": "review",
+    "owner": "tool-domain",
+    "status": "migration_pending"
+  },
+  "AgentExecutor": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.runtime.executor",
+      "aios.workforce.execution"
+    ]
+  },
+  "RuntimeWorker": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.runtime.worker",
+      "aios.runtime.workers.manager"
+    ]
+  },
+  "TaskScheduler": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.runtime.scheduler",
+      "aios.runtime.scheduler.__init__"
+    ]
+  },
+  "HealthResult": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.systems.health",
+      "aios.monitoring.health"
+    ]
+  },
+  "SystemHealth": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.systems.health",
+      "aios.monitoring.health"
+    ]
+  },
+  "PolicyRegistry": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.policy.registry",
+      "aios.policies.registry"
+    ]
+  },
+  "PolicyResult": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.policy.result",
+      "aios.decision.models"
+    ]
+  },
+  "Agent": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.core.agent",
+      "aios.agents.models",
+      "aios.agents.runtime.agent"
+    ]
+  },
+  "Factory": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.core.factory",
+      "aios.core.factory.legacy_factory"
+    ]
+  },
+  "Workflow": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.core.workflow",
+      "aios.workflows.engine.workflow"
+    ]
+  },
+  "DecisionEvaluator": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.decision.evaluator",
+      "aios.memory.evaluator"
+    ]
+  },
+  "ArchitectureGuard": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.integrity.architecture",
+      "aios.governance.architecture_guard"
+    ]
+  },
+  "PlannerFeedbackEngine": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.learning.planner_feedback",
+      "aios.learning.planner_feedback.engine"
+    ]
+  },
+  "PatternDetector": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.learning.pattern_detector",
+      "aios.evolution.pattern_detector"
+    ]
+  },
+  "ExecutionMemory": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.learning.execution_memory",
+      "aios.memory.layers.execution.store"
+    ]
+  },
+  "RollbackManager": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.operations.rollback_manager",
+      "aios.control.rollback_manager"
+    ]
+  },
+  "QualityGate": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.governance.quality_gate",
+      "aios.reviews.reviewers.quality"
+    ]
+  },
+  "AuditLogger": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.governance.audit",
+      "aios.audit.logger"
+    ]
+  },
+  "RuntimeAudit": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.control.audit",
+      "aios.runtime.audit.audit"
+    ]
+  },
+  "ProjectPlanner": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.projects.planner_integration",
+      "aios.project.planner"
+    ]
+  },
+  "Project": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.projects.models",
+      "aios.project.models"
+    ]
+  },
+  "Milestone": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.projects.milestones",
+      "aios.project.models"
+    ]
+  },
+  "ProjectManager": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.projects.manager",
+      "aios.project.manager"
+    ]
+  },
+  "RecoveryManager": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.storage.recovery",
+      "aios.execution.recovery"
+    ]
+  },
+  "ProviderResponse": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.providers.base",
+      "aios.providers.types"
+    ]
+  },
+  "ProviderHealth": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.providers.types",
+      "aios.providers.health"
+    ]
+  },
+  "ProviderError": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.providers.exceptions",
+      "aios.providers.models"
+    ]
+  },
+  "ProviderUnavailable": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.providers.exceptions",
+      "aios.providers.models"
+    ]
+  },
+  "AgentRegistry": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.workforce.registry",
+      "aios.agents.runtime.registry"
+    ]
+  },
+  "ExecutionEventPublisher": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.execution.events",
+      "aios.execution.events.publisher"
+    ]
+  },
+  "Worker": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.execution.worker",
+      "aios.core.worker.worker"
+    ]
+  },
+  "Dispatcher": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.execution.dispatcher",
+      "aios.core.dispatcher.dispatcher"
+    ]
+  },
+  "Scheduler": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.execution.scheduler",
+      "aios.core.scheduler.scheduler"
+    ]
+  },
+  "TaskNode": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.project.models",
+      "aios.project.graph.models"
+    ]
+  },
+  "Skill": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.skills.base",
+      "aios.skills.core.models"
+    ]
+  },
+  "SkillRegistry": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.skills.registry",
+      "aios.skills.core.registry"
+    ]
+  },
+  "HealthState": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.supervisor.health",
+      "aios.supervisor.health.__init__"
+    ]
+  },
+  "HealthStatus": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.supervisor.health",
+      "aios.supervisor.health.__init__"
+    ]
+  },
+  "Supervisor": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.supervisor.supervisor",
+      "aios.runtime.supervisor.engine"
+    ]
+  },
+  "TaskGraphBuilder": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.planning.task_graph",
+      "aios.project.graph.builder"
+    ]
+  },
+  "MemoryRetriever": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.memory.retriever",
+      "aios.memory.search.retriever"
+    ]
+  },
+  "MemoryEvent": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.memory.events",
+      "aios.memory.events.model"
+    ]
+  },
+  "RuntimeState": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.runtime.state.state",
+      "aios.runtime.state.models"
+    ]
+  },
+  "LifecycleManager": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.runtime.lifecycle.manager",
+      "aios.system.lifecycle.manager"
+    ]
+  },
+  "RuntimeVerifier": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.runtime.verification.verifier",
+      "aios.runtime.verify.verifier"
+    ]
+  },
+  "ExecutionGraph": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.runtime.dag.graph",
+      "aios.execution.graph.graph"
+    ]
+  },
+  "AgentRegistryAdapter": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.system.services.registry",
+      "aios.system.services.registry"
+    ]
+  },
+  "MemoryLayer": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.core.memory.layer",
+      "aios.memory.layers.base"
+    ]
+  },
+  "AgentWorkspace": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.agents.runtime.workspace",
+      "aios.agents.workspace.workspace"
+    ]
+  }
+}
