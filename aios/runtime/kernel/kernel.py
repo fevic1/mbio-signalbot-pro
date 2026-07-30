@@ -13,7 +13,7 @@ from aios.runtime.tools import ToolRegistry as RuntimeToolRegistry
 from aios.runtime.agent_runtime.adapter import AgentRuntimeAdapter
 from aios.runtime.task_engine.adapter import TaskEngineAdapter
 from aios.execution import ExecutionOrchestrator
-from aios.workflows.engine import WorkflowEngine as WorkflowExecutionEngine
+from aios.runtime.workflow_engine.adapter import WorkflowEngineAdapter
 from aios.risk import RiskEngine
 from aios.execution.audit import ExecutionAuditHandler
 from aios.memory.semantic import SemanticMemory
