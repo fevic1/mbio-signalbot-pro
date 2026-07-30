@@ -97,3 +97,6 @@ dashboard-v3-source.tar.gz
 # AIOS generated artifacts
 aios_system_audit.json
 research/
+
+# AIOS generated audit reports
+.aios/audits/
