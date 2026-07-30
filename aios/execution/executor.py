@@ -60,6 +60,15 @@ class ExecutionExecutor(ExecutionRunner):
             event_bus=self.system.event_bus,
         )
 
+        context.set_metadata(
+            "aios_agent_context",
+            getattr(
+                task,
+                "metadata",
+                {}
+            )
+        )
+
         context.start()
 
         self.worker.bind(
