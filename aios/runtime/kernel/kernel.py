@@ -7,7 +7,7 @@ from aios.control.approval_workflow import ApprovalWorkflow
 from aios.governance.runtime import GovernanceGateway
 from aios.control.audit import RuntimeAudit
 from aios.runtime.dag.graph import ExecutionGraph
-from aios.runtime.prompts import PromptEngine as RuntimePromptEngine
+from aios.runtime.prompts.adapter import PromptEngineAdapter
 from aios.runtime.policy_engine.adapter import PolicyEngineAdapter
 from aios.runtime.tools import ToolRegistry as RuntimeToolRegistry
 from aios.runtime.agent_runtime.adapter import AgentRuntimeAdapter
@@ -70,7 +70,7 @@ class RuntimeKernel:
         self.task_engine = TaskEngineAdapter()
         self.workflow_engine = WorkflowExecutionEngine(self.task_engine)
         self.tool_registry = DomainToolRegistry()
-        self.prompt_engine = RuntimePromptEngine()
+        self.prompt_engine = PromptEngineAdapter()
         self.agent_runtime = AgentRuntimeAdapter()
         self.policy_engine = PolicyEngineAdapter()
         self.supervisor = DomainSupervisor()
