@@ -14,7 +14,7 @@ from aios.runtime.policy_engine import PolicyEngine
 from aios.runtime.tools import ToolRegistry
 from aios.runtime.dag import ExecutionGraph
 from aios.runtime.task_engine import TaskEngine
-from aios.runtime.workflow_engine import WorkflowEngine
+from aios.runtime.workflow_engine import WorkflowEngine as RuntimeWorkflowEngine
 from aios.agents.runtime import AgentRuntime
 from aios.execution.task_engine import TaskEngine
 from aios.execution import ExecutionOrchestrator
@@ -25,7 +25,7 @@ from aios.policy import PolicyEngine
 from aios.prompts import PromptEngine
 from aios.supervisor import Supervisor
 from aios.tools import ToolRegistry
-from aios.workflows.engine import WorkflowEngine
+from aios.workflows.engine import WorkflowEngine as WorkflowExecutionEngine
 from aios.runtime.container import ServiceContainer
 from aios.runtime.metadata import RuntimeMetadata
 from aios.runtime.capabilities import RuntimeCapabilities
@@ -73,7 +73,7 @@ class RuntimeKernel:
         self.container = ServiceContainer()
         self.extensions = ExtensionManager()
         self.task_engine = TaskEngine()
-        self.workflow_engine = WorkflowEngine(self.task_engine)
+        self.workflow_engine = WorkflowExecutionEngine(self.task_engine)
         self.tool_registry = ToolRegistry()
         self.prompt_engine = PromptEngine()
         self.agent_runtime = AgentRuntime()
