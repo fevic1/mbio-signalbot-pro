@@ -9,7 +9,7 @@ from aios.control.audit import RuntimeAudit
 from aios.runtime.dag.graph import ExecutionGraph
 from aios.runtime.prompts.adapter import PromptEngineAdapter
 from aios.runtime.policy_engine.adapter import PolicyEngineAdapter
-from aios.runtime.tools import ToolRegistry as RuntimeToolRegistry
+from aios.runtime.tools.adapter import ToolRegistryAdapter
 from aios.runtime.agent_runtime.adapter import AgentRuntimeAdapter
 from aios.runtime.task_engine.adapter import TaskEngineAdapter
 from aios.execution import ExecutionOrchestrator
