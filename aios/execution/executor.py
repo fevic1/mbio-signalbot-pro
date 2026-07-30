@@ -19,6 +19,8 @@ from aios.learning import (
     PlannerOptimizer,
 )
 
+from aios.runtime.policy_engine.adapter import PolicyEngineAdapter
+
 
 class ExecutionExecutor(ExecutionRunner):
 
@@ -50,10 +52,31 @@ class ExecutionExecutor(ExecutionRunner):
         self.learning_evaluator = ExecutionEvaluator()
         self.planner_optimizer = PlannerOptimizer()
 
+        self.policy_engine = PolicyEngineAdapter()
+
     async def execute(
         self,
         task,
     ):
+
+        policy_context = {
+            "task": task,
+            "agent_context": getattr(
+                task,
+                "metadata",
+                {}
+            ),
+            "telemetry_active": True,
+        }
+
+        policy_result = self.policy_engine.evaluate(
+            policy_context
+        )
+
+        if not policy_result["allowed"]:
+            raise PermissionError(
+                f"Execution blocked by policy: {policy_result}"
+            )
 
         context = ExecutionContext(
             task,
@@ -67,6 +90,11 @@ class ExecutionExecutor(ExecutionRunner):
                 "metadata",
                 {}
             )
+        )
+
+        context.set_metadata(
+            "policy_result",
+            policy_result,
         )
 
         context.start()
