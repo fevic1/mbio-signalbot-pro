@@ -1,0 +1,50 @@
+name: AIOS Architecture Audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - aios-production-hardening
+
+jobs:
+  architecture-audit:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+
+      - name: Run AIOS architecture ownership audit
+        run: |
+          python - <<'PY'
+          from aios.audit.commands.architecture import run
+
+          result = run(strict=True)
+
+          if not result["healthy"]:
+              raise SystemExit(
+                  "Architecture ownership audit failed"
+              )
+
+          print(
+              "AIOS architecture gate passed"
+          )
+          PY
