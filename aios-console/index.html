@@ -679,7 +679,7 @@
                   <div class="wc-title">System Status</div>
                   <div class="wc-desc">Check runtime health</div>
                 </div>
-                <div class="welcome-card" onclick="sendQuick('/agents')">
+                <div class="welcome-card" onclick="loadAgents()">
                   <div class="wc-icon">🤖</div>
                   <div class="wc-title">Agent Workforce</div>
                   <div class="wc-desc">List active agents</div>
@@ -706,7 +706,7 @@
     <div class="chat-input-area flex-shrink-0">
       <div class="quick-actions" id="quickActions">
         <button class="quick-action" onclick="sendQuick('/status')">/status</button>
-        <button class="quick-action" onclick="sendQuick('/agents')">/agents</button>
+        <button class="quick-action" onclick="loadAgents()">/agents</button>
         <button class="quick-action" onclick="sendQuick('/council')">/council</button>
         <button class="quick-action" onclick="sendQuick('/memory')">/memory</button>
         <button class="quick-action" onclick="sendQuick('/decisions')">/decisions</button>
@@ -804,6 +804,21 @@ function handleKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendMessage();
+  }
+}
+
+async function loadAgents() {
+  try {
+    const res = await fetch('/aios/agents');
+    const data = await res.json();
+
+    addMessage(
+      'ai',
+      `<pre>${escapeHtml(JSON.stringify(data.agents, null, 2))}</pre>`,
+      true
+    );
+  } catch (error) {
+    addMessage('ai', `Agent load failed: ${error.message}`);
   }
 }
 
