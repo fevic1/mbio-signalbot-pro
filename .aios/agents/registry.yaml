@@ -1,0 +1,23 @@
+version: AIOS-AGENT-REGISTRY-v1
+
+agents:
+
+  architecture:
+    prompt: .aios/prompts/agents/ArchitectureAgent.md
+    permission: Level1
+    owner: architecture-domain
+
+  security:
+    prompt: .aios/prompts/agents/SecurityAgent.md
+    permission: Level0
+    owner: security-domain
+
+  execution:
+    prompt: .aios/prompts/agents/ExecutionAgent.md
+    permission: Level2
+    owner: execution-domain
+
+  verifier:
+    prompt: .aios/prompts/agents/VerifierAgent.md
+    permission: Level0
+    owner: quality-domain
