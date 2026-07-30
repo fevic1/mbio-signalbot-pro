@@ -24,7 +24,6 @@ from aios.policy import PolicyEngine as DomainPolicyEngine
 from aios.prompts import PromptEngine
 from aios.supervisor import Supervisor
 from aios.tools import ToolRegistry
-from aios.workflows.engine import WorkflowEngine as WorkflowExecutionEngine
 from aios.runtime.container import ServiceContainer
 from aios.runtime.metadata import RuntimeMetadata
 from aios.runtime.capabilities import RuntimeCapabilities
