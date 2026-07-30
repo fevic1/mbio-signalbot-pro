@@ -8,7 +8,7 @@ from aios.governance.runtime import GovernanceGateway
 from aios.control.audit import RuntimeAudit
 from aios.runtime.dag.graph import ExecutionGraph
 from aios.runtime.prompts import PromptEngine as RuntimePromptEngine
-from aios.runtime.policy_engine import PolicyEngine as RuntimePolicyEngine
+from aios.runtime.policy_engine.adapter import PolicyEngineAdapter
 from aios.runtime.tools import ToolRegistry as RuntimeToolRegistry
 from aios.runtime.agent_runtime.adapter import AgentRuntimeAdapter
 from aios.runtime.task_engine.adapter import TaskEngineAdapter
@@ -72,7 +72,7 @@ class RuntimeKernel:
         self.tool_registry = DomainToolRegistry()
         self.prompt_engine = RuntimePromptEngine()
         self.agent_runtime = AgentRuntimeAdapter()
-        self.policy_engine = RuntimePolicyEngine()
+        self.policy_engine = PolicyEngineAdapter()
         self.supervisor = DomainSupervisor()
         self.semantic_memory = SemanticMemory()
         self.memory_intelligence = MemoryIntelligence()
