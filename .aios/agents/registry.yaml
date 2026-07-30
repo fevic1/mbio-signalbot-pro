@@ -2,22 +2,42 @@ version: AIOS-AGENT-REGISTRY-v1
 
 agents:
 
-  architecture:
+  ArchitectureAgent:
     prompt: .aios/prompts/agents/ArchitectureAgent.md
-    permission: Level1
-    owner: architecture-domain
+    permission: Level 1
+    role_title: Chief Architecture Agent
+    memory:
+      read:
+        - .aios/memory/
+      write:
+        - .aios/decisions/
 
-  security:
+  SecurityAgent:
     prompt: .aios/prompts/agents/SecurityAgent.md
-    permission: Level0
-    owner: security-domain
+    permission: Level 0
+    role_title: Security Red Team Agent
+    memory:
+      read:
+        - .aios/memory/
+      write:
+        - .aios/audits/
 
-  execution:
+  ExecutionAgent:
     prompt: .aios/prompts/agents/ExecutionAgent.md
-    permission: Level2
-    owner: execution-domain
+    permission: Level 2
+    role_title: Production Execution Agent
+    memory:
+      read:
+        - .aios/memory/
+      write:
+        - .aios/decisions/
 
-  verifier:
+  VerifierAgent:
     prompt: .aios/prompts/agents/VerifierAgent.md
-    permission: Level0
-    owner: quality-domain
+    permission: Level 0
+    role_title: Verification Agent
+    memory:
+      read:
+        - .aios/memory/
+      write:
+        - .aios/audits/
