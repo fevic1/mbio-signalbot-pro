@@ -11,13 +11,9 @@ class DependencyScanner:
             "constructors": [],
         }
 
-        targets = [
-            component.replace(".", "/") + ".py",
-        ]
+        aliases = {}
 
-        root = Path(".")
-
-        for path in root.rglob("*.py"):
+        for path in Path(".").rglob("*.py"):
 
             try:
                 source = path.read_text()
@@ -28,10 +24,41 @@ class DependencyScanner:
 
             for node in ast.walk(tree):
 
-                if isinstance(node, ast.Import):
+                if isinstance(node, ast.ImportFrom):
+
+                    module = node.module or ""
+
+                    if component in module:
+
+                        for item in node.names:
+
+                            local_name = item.asname or item.name
+
+                            aliases[local_name] = (
+                                module,
+                                item.name,
+                            )
+
+                        results["imports"].append(
+                            {
+                                "file": str(path),
+                                "import": module,
+                            }
+                        )
+
+                elif isinstance(node, ast.Import):
 
                     for item in node.names:
+
                         if component in item.name:
+
+                            aliases[
+                                item.asname or item.name
+                            ] = (
+                                item.name,
+                                None,
+                            )
+
                             results["imports"].append(
                                 {
                                     "file": str(path),
@@ -39,16 +66,28 @@ class DependencyScanner:
                                 }
                             )
 
-                elif isinstance(node, ast.ImportFrom):
+            for node in ast.walk(tree):
 
-                    module = node.module or ""
+                if isinstance(node, ast.Call):
 
-                    if component in module:
-                        results["imports"].append(
-                            {
-                                "file": str(path),
-                                "import": module,
-                            }
-                        )
+                    if isinstance(node.func, ast.Name):
+
+                        name = node.func.id
+
+                        if name in aliases:
+
+                            module, symbol = aliases[name]
+
+                            results["constructors"].append(
+                                {
+                                    "file": str(path),
+                                    "class": name,
+                                    "resolved": (
+                                        f"{module}.{symbol}"
+                                        if symbol
+                                        else module
+                                    ),
+                                }
+                            )
 
         return results
