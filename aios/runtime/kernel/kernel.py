@@ -11,7 +11,6 @@ from aios.runtime.dag.graph import ExecutionGraph
 from aios.runtime.prompts import PromptEngine as RuntimePromptEngine
 from aios.runtime.policy_engine import PolicyEngine as RuntimePolicyEngine
 from aios.runtime.tools import ToolRegistry as RuntimeToolRegistry
-from aios.runtime.dag import ExecutionGraph
 from aios.runtime.task_engine import TaskEngine as RuntimeTaskEngine
 from aios.runtime.workflow_engine import WorkflowEngine as RuntimeWorkflowEngine
 from aios.agents.runtime import AgentRuntime
