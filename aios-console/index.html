@@ -708,7 +708,7 @@
         <button class="quick-action" onclick="sendQuick('/status')">/status</button>
         <button class="quick-action" onclick="loadAgents()">/agents</button>
         <button class="quick-action" onclick="sendQuick('/council')">/council</button>
-        <button class="quick-action" onclick="sendQuick('/memory')">/memory</button>
+        <button class="quick-action" onclick="loadMemory()">/memory</button>
         <button class="quick-action" onclick="sendQuick('/decisions')">/decisions</button>
         <button class="quick-action" onclick="sendQuick('/governance')">/governance</button>
         <button class="quick-action" onclick="sendQuick('/trade help')">/trade</button>
@@ -819,6 +819,21 @@ async function loadAgents() {
     );
   } catch (error) {
     addMessage('ai', `Agent load failed: ${error.message}`);
+  }
+}
+
+async function loadMemory() {
+  try {
+    const res = await fetch('/aios/memory');
+    const data = await res.json();
+
+    addMessage(
+      'ai',
+      `<pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>`,
+      true
+    );
+  } catch (error) {
+    addMessage('ai', `Memory load failed: ${error.message}`);
   }
 }
 
