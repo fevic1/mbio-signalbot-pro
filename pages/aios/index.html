@@ -934,7 +934,7 @@ function sendMessage() {
 
     const reply = data.content || data.reply || JSON.stringify(data);
 
-    addMessage('ai', escapeHtml(reply), true);
+    addMessage('ai', reply);
 
     isProcessing = false;
     sendBtn.disabled = false;
