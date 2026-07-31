@@ -1,46 +1,41 @@
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
+from aios.capabilities.executor import CapabilityExecutor
+from aios.capabilities.request import CapabilityRequest
+
+router = APIRouter()
 
 
-router = APIRouter(
-    prefix="/api/chat",
-    tags=["AIOS Chat"],
-)
+@router.post("/aios/chat")
+async def aios_chat(request: Request, payload: dict):
+    system = request.app.state.aios
 
+    executor = CapabilityExecutor(system)
 
-class ChatRequest(BaseModel):
-    session_id: str | None = None
-    agent: str | None = None
-    message: str
-
-
-@router.get("/status")
-async def chat_status():
-
-    return {
-        "service": "AIOS Chat",
-        "status": "online",
-        "transport": "http",
-        "websocket": "/ws/chat/{session_id}",
-    }
-
-
-@router.post("")
-async def chat(
-    payload: ChatRequest,
-    request: Request,
-):
-
-    runtime = getattr(
-        request.app.state,
-        "aios_runtime",
-        None,
+    chat_request = CapabilityRequest(
+        capability="reasoning",
+        context={
+            "message": payload.get("message", "")
+        },
     )
 
+    result = await executor.execute(chat_request)
+
+    content = result.get("content")
+
+    if isinstance(content, dict):
+        content = (
+            content.get("summary")
+            or content.get("reasoning")
+            or str(content)
+        )
+
     return {
-        "status": "received",
-        "session_id": payload.session_id,
-        "agent": payload.agent,
-        "message": payload.message,
-        "runtime_available": runtime is not None,
+        "success": result.get("success"),
+        "capability": result.get("capability"),
+        "provider": result.get("provider"),
+        "model": result.get("model"),
+        "content": content,
+        "latency": result.get("latency"),
+        "cost": result.get("cost"),
+        "attempt": result.get("attempt"),
     }
