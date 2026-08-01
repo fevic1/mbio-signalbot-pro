@@ -1,4 +1,3 @@
-
 import inspect
 from abc import ABC, abstractmethod
 from typing import Any
@@ -23,19 +22,37 @@ class MCPClient(ABC):
 
 
 class InProcessMCPClient(MCPClient):
-    """Adapter for local Vibe Trading tools."""
+    """Expose selected in-process MCP servers to AIOS."""
 
-    def __init__(self, registry):
+    def __init__(
+        self,
+        registry,
+        allowed_servers: set[str] | None = None,
+    ):
         self.registry = registry
+        self.allowed_servers = (
+            set(allowed_servers)
+            if allowed_servers is not None
+            else None
+        )
 
     async def initialize(self):
         return True
+
+    def _is_allowed(self, server_id: str) -> bool:
+        return (
+            self.allowed_servers is None
+            or server_id in self.allowed_servers
+        )
 
     async def list_tools(self) -> list[dict[str, Any]]:
         tools = await self.registry.get_all_tools()
         definitions = []
 
         for server_id, server_tools in tools.items():
+            if not self._is_allowed(server_id):
+                continue
+
             for tool_name, handler in server_tools.items():
                 definitions.append({
                     "name": f"{server_id}__{tool_name}",
@@ -58,6 +75,11 @@ class InProcessMCPClient(MCPClient):
 
         server_id, tool_name = name.split("__", 1)
 
+        if not self._is_allowed(server_id):
+            raise PermissionError(
+                f"MCP server '{server_id}' is not enabled for AIOS"
+            )
+
         return await self.registry.invoke_tool(
             server_id,
             tool_name,
@@ -76,8 +98,10 @@ class InProcessMCPClient(MCPClient):
             annotation = parameter.annotation
             json_type = "string"
 
-            if annotation in (int, float):
-                json_type = "number" if annotation is float else "integer"
+            if annotation is float:
+                json_type = "number"
+            elif annotation is int:
+                json_type = "integer"
             elif annotation is bool:
                 json_type = "boolean"
 

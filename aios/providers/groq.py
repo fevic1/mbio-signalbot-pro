@@ -82,10 +82,13 @@ class GroqProvider(BaseProvider):
 
         data = response.json()
 
+        message = data["choices"][0]["message"]
+
         return ProviderResponse(
             provider=self.name,
             model=request.model or self.model,
-            content=data["choices"][0]["message"]["content"],
+            # Tool-call responses may have no assistant text.
+            content=message.get("content") or "",
             raw=data,
         )
 

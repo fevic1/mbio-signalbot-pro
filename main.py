@@ -977,8 +977,26 @@ if __name__ == "__main__":
         )
         await mcp_registry.register_server(risk_config)
         
-        logger.info("✅ Multi-MCP Registry initialized with 2 servers.")
+        await mcp_registry.register_server(
+            MCPServerConfig(
+                server_id="internet",
+                name="Public Web Retrieval",
+                description="Read-only public webpage retrieval for AIOS research",
+                endpoint="internal://read-only-web",
+                rate_limit_per_min=int(os.getenv("MCP_INTERNET_RATE_LIMIT", "20")),
+            )
+        )
+        await mcp_registry.register_server(
+            MCPServerConfig(
+                server_id="ipinfo",
+                name="IP Intelligence",
+                description="Read-only IP geolocation and network intelligence",
+                endpoint="https://ipinfo.io",
+                rate_limit_per_min=int(os.getenv("MCP_IPINFO_RATE_LIMIT", "30")),
+            )
+        )
 
+        logger.info("Multi-MCP Registry initialized with 4 servers.")
         await init_mcp_tools()
     async def main_with_mcp():
         # 1. Run your existing main() logic (state sync, executor init, etc.)

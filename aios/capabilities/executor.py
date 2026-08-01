@@ -139,7 +139,11 @@ class CapabilityExecutor:
             ],
             constraints={
                 "temperature": 0.2,
-                "max_tokens": 256,
+                "max_tokens": (
+                    512
+                    if request.capability == "research"
+                    else 256
+                ),
                 "allowed_models": (
                     self._get_capability_definition(
                         request.capability

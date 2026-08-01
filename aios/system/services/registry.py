@@ -352,6 +352,21 @@ class AIOSServiceRegistry:
 
         model_registry.register(
             LLMModel(
+                name="llama-3.3-70b-versatile",
+                provider="groq",
+                capabilities=[
+                    "research",
+                    "information_analysis",
+                    "market_analysis",
+                ],
+                cost_level="medium",
+                speed="fast",
+            )
+        )
+
+
+        model_registry.register(
+            LLMModel(
                 name="openai/gpt-oss-20b:free",
                 provider="openrouter",
                 capabilities=[
@@ -433,7 +448,7 @@ class AIOSServiceRegistry:
                         "requires_provider": True,
                         "memory_write": True,
                         "risk_level": "medium",
-                        "allowed_models": ["research"],
+                        "allowed_models": ["llama-3.3-70b-versatile"],
                     },
                     "timeout": 120,
                     "retry_limit": 3,
@@ -536,7 +551,7 @@ class AIOSServiceRegistry:
                         "requires_provider": True,
                         "memory_write": True,
                         "risk_level": "low",
-                        "allowed_models": ["research"],
+                        "allowed_models": ["llama-3.3-70b-versatile"],
                     },
                     "timeout": 120,
                     "retry_limit": 3,
@@ -1057,9 +1072,10 @@ class AIOSServiceRegistry:
 
         from aios.mcp.client import InProcessMCPClient
 
-        services[
-            "mcp_client"
-        ] = InProcessMCPClient(mcp_registry)
+        services["mcp_client"] = InProcessMCPClient(
+            mcp_registry,
+            allowed_servers={"internet", "ipinfo"},
+        )
 
 
         if container is not None:

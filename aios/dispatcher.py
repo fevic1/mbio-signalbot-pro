@@ -208,6 +208,12 @@ class AIOSDispatcher:
             key in text
             for key in [
                 "research",
+                "search",
+                "look up",
+                "look for",
+                "latest",
+                "current",
+                "today",
                 "news",
                 "investigate",
                 "analysis",
