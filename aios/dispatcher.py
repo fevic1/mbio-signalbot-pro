@@ -3,6 +3,8 @@ from typing import Any, Dict, Tuple
 
 from aios.capabilities.executor import CapabilityExecutor
 from aios.capabilities.request import CapabilityRequest
+from aios.intelligence.compact_context import CompactContextBuilder
+from aios.events.models import AIOSDomainEvent
 
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,10 @@ class AIOSDispatcher:
     def __init__(self, system: Any):
         self.system = system
         self.executor = CapabilityExecutor(system)
+        self.context_builder = CompactContextBuilder(
+            max_items=8,
+            max_chars=5000,
+        )
 
     async def dispatch(
         self,
@@ -325,22 +331,93 @@ class AIOSDispatcher:
             "aios_mode": "dispatcher",
         }
 
-        mcp_registry = self.system.services.get(
-            "mcp_registry"
-        )
+        services = getattr(
+            self.system,
+            "services",
+            {},
+        ) or {}
+
+        mcp_registry = services.get("mcp_registry")
+        mcp_client = services.get("mcp_client")
+
+        tools = []
+        skills = []
+        capabilities = []
+        agents = []
+
+        if mcp_client and hasattr(mcp_client, "list_tools"):
+            try:
+                tools = await mcp_client.list_tools()
+            except Exception:
+                logger.exception("Compact context MCP discovery failed")
 
         if mcp_registry:
+            try:
+                context["mcp_servers"] = [
+                    server.server_id
+                    for server in await mcp_registry.get_all_servers()
+                ]
+            except Exception:
+                context["mcp_servers"] = []
 
-            context["mcp_tools"] = await (
-                mcp_registry.get_all_tools()
-            )
+        skill_registry = services.get("skill_registry")
 
-            context["mcp_servers"] = [
-                server.server_id
-                for server in await (
-                    mcp_registry.get_all_servers()
+        if skill_registry:
+            try:
+                if hasattr(skill_registry, "list_skills"):
+                    skills = skill_registry.list_skills()
+                elif hasattr(skill_registry, "list"):
+                    skills = skill_registry.list()
+            except Exception:
+                logger.exception("Compact context skill discovery failed")
+
+        capability_registry = services.get("capability_registry")
+
+        if capability_registry and hasattr(capability_registry, "list"):
+            try:
+                capabilities = capability_registry.list()
+            except Exception:
+                logger.exception("Compact context capability discovery failed")
+
+        agent_manager = services.get("agent_manager")
+
+        if agent_manager and hasattr(agent_manager, "describe"):
+            try:
+                agents = agent_manager.describe() or []
+            except Exception:
+                logger.exception("Compact context agent discovery failed")
+
+        compact_context = self.context_builder.build(
+            query=message,
+            capability=agent,
+            tools=tools,
+            skills=skills,
+            capabilities=capabilities,
+            agents=agents,
+        )
+
+        context["compact_context"] = compact_context
+        context["mcp_tools"] = [
+            entry
+            for entry in compact_context["entries"]
+            if entry["kind"] == "tool"
+        ]
+
+        event_bus = services.get("event_bus")
+
+        if event_bus:
+            event_bus.publish(
+                AIOSDomainEvent(
+                    "context.compacted",
+                    source="aios_dispatcher",
+                    payload={
+                        "agent": agent,
+                        "selected_count": compact_context["selected_count"],
+                        "available_count": compact_context["available_count"],
+                        "characters_used": compact_context["characters_used"],
+                    },
                 )
-            ]
+            )
 
         diagnostic_terms = (
             "status",
