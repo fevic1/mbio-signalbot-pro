@@ -8,6 +8,13 @@ import logging
 import os
 from core.mcp_registry import mcp_registry, MCPServerConfig
 from routes.mcp_gateway import router as mcp_gateway_router
+from routes.aios_chat import router as aios_chat_router
+from routes.aios_agents import router as aios_agents_router
+from routes.aios_memory import router as aios_memory_router
+from routes.aios_voice import router as aios_voice_router
+from routes.aios_governance import router as aios_governance_router
+from routes.aios_settings import router as aios_settings_router
+
 from core.mcp_tools import init_mcp_tools
 os.environ["CHROMA_TELEMETRY_DISABLED"] = "true"
 import threading
@@ -168,8 +175,25 @@ import os as _os
 
 if _os.path.isdir("frontend/static"):
     api.mount("/static", StaticFiles(directory="frontend/static"), name="dashboard_static")
-    # Phase 14: Static assets for new modular frontend
-    import os as _os
+
+api.include_router(aios_chat_router)
+api.include_router(aios_agents_router)
+api.include_router(aios_memory_router)
+api.include_router(aios_voice_router)
+api.include_router(aios_governance_router)
+api.include_router(aios_settings_router)
+
+api.mount(
+    "/aios",
+    StaticFiles(
+        directory="aios-console",
+        html=True,
+    ),
+    name="aios_console",
+)
+
+# Phase 14: Static assets for new modular frontend
+import os as _os
 # [DISABLED]     _v2_dist = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "frontend-v2-dist")
 # [DISABLED]     if _os.path.isdir(_v2_dist):
 # Safely mount frontend assets ONLY if the directory exists

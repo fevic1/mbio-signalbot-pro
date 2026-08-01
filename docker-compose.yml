@@ -28,6 +28,7 @@ services:
       - ./data:/app/data
       - ./db:/app/db
       - ./templates:/app/templates:ro
+      - ./aios-console:/app/aios-console:ro
     environment:
       HL_PRIVATE_KEY: ${HL_PRIVATE_KEY}
       HL_ACCOUNT_ADDRESS: ${HL_ACCOUNT_ADDRESS}

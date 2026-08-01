@@ -19,6 +19,13 @@ async def chat(
 
     ranked = provider_pool.ranked()
 
+    if request.provider:
+        ranked = [
+            provider
+            for provider in ranked
+            if provider.name == request.provider
+        ]
+
     for provider in ranked:
 
         name = provider.name

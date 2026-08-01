@@ -66,6 +66,31 @@ class MCPRegistry:
             logger.debug(f"[TOOL] Registered tool '{tool_name}' for server {server_id}")
             return True
 
+    async def invoke_tool(self, server_id: str, tool_name: str, arguments: Dict[str, Any] | None = None):
+        """Invoke a registered async or sync MCP tool."""
+        arguments = arguments or {}
+
+        async with self._lock:
+            tools = self._tools.get(server_id, {})
+            tool = tools.get(tool_name)
+
+        if tool is None:
+            raise KeyError(f"Tool '{tool_name}' not found on server '{server_id}'")
+
+        result = tool(**arguments)
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
+
+    async def get_tools_for_server(self, server_id: str):
+        """Compatibility alias used by the MCP gateway."""
+        return await self.get_tools(server_id)
+
+    async def verify_api_key(self, server_id: str, api_key: str) -> bool:
+        """Validate the configured API key for a registered server."""
+        server = await self.get_server(server_id)
+        return bool(server and server.enabled and server.api_key == api_key)
+
     async def get_server(self, server_id: str) -> Optional[MCPServerConfig]:
         """Get server configuration by ID."""
         async with self._lock:

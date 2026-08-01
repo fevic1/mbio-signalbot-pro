@@ -906,7 +906,7 @@ function scrollToBottom() {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-function sendMessage() {
+async function sendMessage() {
   const text = chatInput.value.trim();
   if (!text || isProcessing) return;
 
@@ -916,39 +916,65 @@ function sendMessage() {
   addMessage('user', text);
   chatInput.value = '';
   chatInput.style.height = 'auto';
-
   showTyping();
 
-  fetch('/aios/chat', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      message: text
-    })
-  })
-  .then(r => r.json())
-  .then(data => {
+  try {
+    const response = await fetch('/aios/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ message: text })
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
     removeTyping();
+    addMessage('ai', '');
 
-    const reply = data.content || data.reply || JSON.stringify(data);
+    const replyEl = chatMessages.lastElementChild.querySelector('.msg-content');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let reply = '';
+    let done = false;
 
-    addMessage('ai', reply);
+    while (!done) {
+      const chunk = await reader.read();
+      done = chunk.done;
+      buffer += decoder.decode(chunk.value || new Uint8Array(), {
+        stream: !done
+      });
 
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
+
+      for (const event of events) {
+        const line = event.split('\\n').find(line => line.startsWith('data: '));
+        if (!line) continue;
+
+        const payload = line.slice(6);
+        if (payload === '[DONE]') {
+          done = true;
+          break;
+        }
+
+        const data = JSON.parse(payload);
+        reply += data.content || '';
+        replyEl.textContent = reply;
+        scrollToBottom();
+      }
+    }
+  } catch (error) {
+    removeTyping();
+    addMessage('ai', `Error: ${error.message}`, true);
+  } finally {
     isProcessing = false;
     sendBtn.disabled = false;
     chatInput.focus();
-  })
-  .catch(error => {
-    removeTyping();
-
-    addMessage('ai', `Error: ${escapeHtml(error.message)}`, true);
-
-    isProcessing = false;
-    sendBtn.disabled = false;
-    chatInput.focus();
-  });
+  }
 }
 
 // ─── Microphone / Waveform ───────────────────────────────────────────────────

@@ -101,6 +101,16 @@ class CapabilityExecutor:
             request,
         )
 
+        mcp_client = None
+        tools = []
+
+        services = getattr(self.system, "services", None)
+        if services:
+            mcp_client = services.get("mcp_client")
+
+        if mcp_client:
+            tools = await mcp_client.list_tools()
+
         aios_request = AIOSRequest(
             capability=request.capability,
             messages=[
@@ -113,7 +123,23 @@ class CapabilityExecutor:
                     "content": str(prompt["context"]),
                 },
             ],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "parameters": tool.get(
+                            "inputSchema",
+                            {"type": "object"},
+                        ),
+                    },
+                }
+                for tool in tools
+            ],
             constraints={
+                "temperature": 0.2,
+                "max_tokens": 256,
                 "allowed_models": (
                     self._get_capability_definition(
                         request.capability
@@ -152,12 +178,59 @@ class CapabilityExecutor:
                 )
 
         if selected_model:
-            provider_request.model = selected_model.name
+            aios_request.constraints["model"] = selected_model.name
 
         response = await self.system.neural_proxy.execute(
             aios_request
         )
 
+        for _ in range(3):
+            raw = response.metadata.get("raw", {})
+            message = (
+                raw.get("choices", [{}])[0]
+                .get("message", {})
+            )
+            tool_calls = message.get("tool_calls") or []
+
+            if not tool_calls or not mcp_client:
+                break
+
+            aios_request.messages.append(message)
+
+            for tool_call in tool_calls:
+                function = tool_call.get("function", {})
+                tool_name = function.get("name")
+                arguments = function.get("arguments", "{}")
+
+                try:
+                    arguments = json.loads(arguments)
+                except Exception:
+                    arguments = {}
+
+                try:
+                    tool_result = await mcp_client.call_tool(
+                        tool_name,
+                        arguments,
+                    )
+                except Exception as error:
+                    tool_result = {
+                        "success": False,
+                        "error": str(error),
+                    }
+
+                aios_request.messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.get("id"),
+                    "name": tool_name,
+                    "content": json.dumps(
+                        tool_result,
+                        default=str,
+                    ),
+                })
+
+            response = await self.system.neural_proxy.execute(
+                aios_request
+            )
 
         latency = perf_counter() - start
 

@@ -11,3 +11,6 @@ class MemoryLayerRegistry(Registry):
 
     def layers(self):
         return list(self.all())
+
+    def available(self):
+        return self.layers()

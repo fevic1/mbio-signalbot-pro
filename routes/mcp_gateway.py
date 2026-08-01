@@ -36,7 +36,7 @@ async def invoke_mcp_tool(
     """
     # 1. Validate Server
     server_config = await mcp_registry.get_server(server_id)
-    if not server_config or not server_config.is_active:
+    if not server_config or not server_config.enabled:
         raise HTTPException(status_code=404, detail=f"MCP Server '{server_id}' not found or inactive")
     
     # 2. Validate API Key

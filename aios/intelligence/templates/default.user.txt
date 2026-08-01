@@ -4,6 +4,9 @@ Project:
 Metadata:
 {metadata}
 
+User Message:
+{message}
+
 Previous Results:
 {results}
 

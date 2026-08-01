@@ -20,4 +20,11 @@ class BootstrapLoader:
 
         from aios.system.bootstrap import AIOSBootstrap
 
-        return AIOSBootstrap().initialize()
+        container = AIOSBootstrap().initialize()
+
+        container.register(
+            "capability_registry",
+            self.registry,
+        )
+
+        return container

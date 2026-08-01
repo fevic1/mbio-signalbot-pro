@@ -25,11 +25,43 @@ class AIOSServiceRegistry:
         services = {}
 
 
+
         #
         # Audit System
         #
 
         audit_logger = AuditLogger()
+
+        from aios.governance.runtime import (
+            GovernanceGateway,
+        )
+
+        from aios.governance.permissions import (
+            PermissionManager,
+        )
+
+        from aios.governance.approval import (
+            ApprovalManager,
+        )
+
+
+        permission_manager = PermissionManager()
+
+        approval_manager = ApprovalManager()
+
+
+        governance_gateway = GovernanceGateway(
+            permission_manager,
+            approval_manager,
+            audit_logger,
+        )
+
+
+        services[
+            "governance_gateway"
+        ] = governance_gateway
+
+
 
 
         services[
@@ -307,6 +339,7 @@ class AIOSServiceRegistry:
                 name="llama-3.1-8b-instant",
                 provider="groq",
                 capabilities=[
+                    "reasoning",
                     "research",
                     "market_analysis",
                     "information_analysis",
@@ -322,6 +355,7 @@ class AIOSServiceRegistry:
                 name="openai/gpt-oss-20b:free",
                 provider="openrouter",
                 capabilities=[
+                    "reasoning",
                     "research",
                     "strategy_review",
                 ],
@@ -694,6 +728,16 @@ class AIOSServiceRegistry:
                     ],
                 ),
 
+                (
+                    "reasoning",
+                    "general reasoning agent",
+                    [
+                        "reasoning",
+                        "analysis",
+                        "problem_solving",
+                    ],
+                ),
+
             ]
 
 
@@ -997,6 +1041,25 @@ class AIOSServiceRegistry:
             "neural_proxy"
         ] = neural_proxy
 
+
+
+        #
+        # MCP Registry
+        #
+
+        from core.mcp_registry import (
+            mcp_registry,
+        )
+
+        services[
+            "mcp_registry"
+        ] = mcp_registry
+
+        from aios.mcp.client import InProcessMCPClient
+
+        services[
+            "mcp_client"
+        ] = InProcessMCPClient(mcp_registry)
 
 
         if container is not None:

@@ -21,6 +21,9 @@ class NativeProviderAdapter:
             model=request.constraints.get(
                 "model"
             ),
+            provider=request.constraints.get(
+                "provider"
+            ),
             temperature=request.constraints.get(
                 "temperature",
                 0.2,
@@ -29,6 +32,7 @@ class NativeProviderAdapter:
                 "max_tokens",
                 2048,
             ),
+            tools=request.tools,
         )
 
 

@@ -54,6 +54,10 @@ class NeuralProxyGateway:
                 "model"
             ] = model.name
 
+            request.constraints[
+                "provider"
+            ] = model.provider
+
 
         adapter = self.adapter
 
@@ -109,7 +113,7 @@ class NeuralProxyGateway:
             model=response.model,
             content=response.content,
             metadata={
-                "capability":
-                    request.capability,
+                "capability": request.capability,
+                "raw": response.raw,
             },
         )

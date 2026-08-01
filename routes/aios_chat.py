@@ -1,6 +1,11 @@
+import json
+
 from fastapi import APIRouter, Request
-from aios.capabilities.executor import CapabilityExecutor
-from aios.capabilities.request import CapabilityRequest
+from fastapi.responses import StreamingResponse
+
+from aios.api.chat.stream import stream_response
+from aios.dispatcher import AIOSDispatcher
+
 
 router = APIRouter()
 
@@ -8,34 +13,24 @@ router = APIRouter()
 @router.post("/aios/chat")
 async def aios_chat(request: Request, payload: dict):
     system = request.app.state.aios
+    dispatcher = AIOSDispatcher(system)
 
-    executor = CapabilityExecutor(system)
+    async def events():
+        result = await dispatcher.dispatch(payload)
+        content = str(result.get("content", ""))
 
-    chat_request = CapabilityRequest(
-        capability="reasoning",
-        context={
-            "message": payload.get("message", "")
+        async for chunk in stream_response(content):
+            event = json.dumps({"content": chunk})
+            yield f"data: {event}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
-
-    result = await executor.execute(chat_request)
-
-    content = result.get("content")
-
-    if isinstance(content, dict):
-        content = (
-            content.get("summary")
-            or content.get("reasoning")
-            or str(content)
-        )
-
-    return {
-        "success": result.get("success"),
-        "capability": result.get("capability"),
-        "provider": result.get("provider"),
-        "model": result.get("model"),
-        "content": content,
-        "latency": result.get("latency"),
-        "cost": result.get("cost"),
-        "attempt": result.get("attempt"),
-    }
