@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AIOS Enterprise — Command Center</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.tailwindcss.com">
+</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/fira-code@5.0.0/index.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.0/index.min.css">
 <style>
@@ -645,7 +646,7 @@
     </div>
     <div class="flex items-center gap-2">
       <span class="clear-btn" onclick="clearChat()">Clear conversation</span>
-      <button class="bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2">
+      <button onclick="newSession()" class="bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
         New Session
       </button>
@@ -833,7 +834,8 @@ async function loadMemory() {
       true
     );
   } catch (error) {
-    addMessage('ai', `Memory load failed: ${error.message}`);
+    removeTyping();
+    addMessage('ai', `Error: ${error.message}`);
   }
 }
 
@@ -844,14 +846,67 @@ function sendQuick(text) {
 
 function clearChat() {
   chatMessages.innerHTML = '';
-  addMessage('ai', 'Conversation cleared. How can I help you?', true);
+  aiosChatHistory = [];
+  localStorage.removeItem(AIOS_CHAT_HISTORY_KEY);
+  addMessage('ai', 'Conversation cleared. How can I help you?');
+}
+
+function newSession() {
+  chatMessages.innerHTML = '';
+  aiosChatHistory = [];
+  localStorage.removeItem(AIOS_CHAT_HISTORY_KEY);
+  addMessage('ai', 'New AIOS session started. How can I help you?');
+  chatInput.focus();
 }
 
 function getTime() {
   return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
-function addMessage(type, content, isHtml = false) {
+const AIOS_CHAT_HISTORY_KEY = 'aios_chat_history_v1';
+let aiosChatHistory = [];
+
+function saveChatHistory() {
+  try {
+    localStorage.setItem(
+      AIOS_CHAT_HISTORY_KEY,
+      JSON.stringify(aiosChatHistory.slice(-100))
+    );
+  } catch (error) {
+    console.warn('Unable to save chat history:', error);
+  }
+}
+
+function restoreChatHistory() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(AIOS_CHAT_HISTORY_KEY) || '[]'
+    );
+
+    if (!Array.isArray(saved) || !saved.length) return;
+
+    aiosChatHistory = saved.slice(-100);
+    chatMessages.innerHTML = '';
+
+    for (const item of aiosChatHistory) {
+      addMessage(item.type, item.content, false, false);
+    }
+  } catch (error) {
+    console.warn('Unable to restore chat history:', error);
+  }
+}
+
+function updateStreamingHistory(content) {
+  if (
+    aiosChatHistory.length &&
+    aiosChatHistory[aiosChatHistory.length - 1].type === 'ai'
+  ) {
+    aiosChatHistory[aiosChatHistory.length - 1].content = content;
+    saveChatHistory();
+  }
+}
+
+function addMessage(type, content, isHtml = false, persist = true) {
   const msg = document.createElement('div');
   msg.className = `message ${type} msg-in`;
 
@@ -868,6 +923,15 @@ function addMessage(type, content, isHtml = false) {
     </div>
   `;
   chatMessages.appendChild(msg);
+
+  if (persist) {
+    aiosChatHistory.push({
+      type,
+      content: typeof content === 'string' ? content : String(content),
+    });
+    saveChatHistory();
+  }
+
   scrollToBottom();
 }
 
@@ -924,7 +988,10 @@ async function sendMessage() {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ message: text })
+      body: JSON.stringify({
+        message: text,
+        history: aiosChatHistory.slice(0, -1).slice(-20)
+      })
     });
 
     if (!response.ok || !response.body) {
@@ -964,6 +1031,7 @@ async function sendMessage() {
         const data = JSON.parse(payload);
         reply += data.content || '';
         replyEl.textContent = reply;
+        updateStreamingHistory(reply);
         scrollToBottom();
       }
     }
@@ -1179,6 +1247,10 @@ window.addEventListener('resize', () => {
 
 // Init
 chatInput.focus();
+
+window.addEventListener('load', () => {
+  restoreChatHistory();
+});
 </script>
 </body>
 </html>

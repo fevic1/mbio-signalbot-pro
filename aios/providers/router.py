@@ -44,8 +44,8 @@ async def chat(
                     provider.chat(request),
                     timeout=60,
                 ),
-                retries=3,
-                delay=1.0,
+                retries=1,
+                delay=0.25,
             )
 
             latency = perf_counter() - start

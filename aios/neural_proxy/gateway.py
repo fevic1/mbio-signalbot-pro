@@ -1,3 +1,5 @@
+import os
+
 from .protocol import (
     AIOSRequest,
     AIOSResponse,
@@ -40,23 +42,23 @@ class NeuralProxyGateway:
             request
         )
 
-        model = self.router.select(
-            request.capability,
-            request.constraints.get(
-                "allowed_models"
-            ),
-        )
+        # AIOS_PROVIDER_ORDER controls provider selection and fallback.
+        # The legacy model router otherwise pins requests to Groq.
+        if os.getenv("AIOS_PROVIDER_ORDER"):
+            model = None
+            request.constraints.pop("model", None)
+            request.constraints.pop("provider", None)
+        else:
+            model = self.router.select(
+                request.capability,
+                request.constraints.get(
+                    "allowed_models"
+                ),
+            )
 
-
-        if model:
-
-            request.constraints[
-                "model"
-            ] = model.name
-
-            request.constraints[
-                "provider"
-            ] = model.provider
+            if model:
+                request.constraints["model"] = model.name
+                request.constraints["provider"] = model.provider
 
 
         adapter = self.adapter
@@ -85,15 +87,30 @@ class NeuralProxyGateway:
         )
 
 
-        response = await self.provider_chat(
-            provider_request
-        )
+        from aios.events.models import AIOSDomainEvent
 
+        try:
+            response = await self.provider_chat(
+                provider_request,
+                event_bus=self.event_bus,
+                capability=request.capability,
+            )
+        except Exception as error:
+            if self.event_bus:
+                self.event_bus.publish(
+                    AIOSDomainEvent(
+                        "model_execution.failed",
+                        source="neural_proxy",
+                        payload={
+                            "capability": request.capability,
+                            "error": str(error),
+                            "success": False,
+                        },
+                    )
+                )
+            raise
 
         if self.event_bus:
-
-            from aios.events.models import AIOSDomainEvent
-
             self.event_bus.publish(
                 AIOSDomainEvent(
                     "model_execution.completed",

@@ -260,18 +260,17 @@ class CouncilManager:
         )
 
         if self.event_bus:
+            from aios.events.models import AIOSDomainEvent
 
             self.event_bus.publish(
-                {
-                    "event":
-                        "council_decision_created",
-
-                    "decision":
-                        decision,
-
-                    "session":
-                        session.id,
-                }
+                AIOSDomainEvent(
+                    "council.decision.created",
+                    source="council_manager",
+                    payload={
+                        "decision": decision,
+                        "session": session.id,
+                    },
+                )
             )
 
         return decision

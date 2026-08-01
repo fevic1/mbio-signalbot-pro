@@ -995,8 +995,17 @@ if __name__ == "__main__":
                 rate_limit_per_min=int(os.getenv("MCP_IPINFO_RATE_LIMIT", "30")),
             )
         )
+        await mcp_registry.register_server(
+            MCPServerConfig(
+                server_id="tavily",
+                name="Tavily Web Search",
+                description="Read-only current web search for AIOS research",
+                endpoint="https://api.tavily.com",
+                rate_limit_per_min=int(os.getenv("MCP_TAVILY_RATE_LIMIT", "30")),
+            )
+        )
 
-        logger.info("Multi-MCP Registry initialized with 4 servers.")
+        logger.info("Multi-MCP Registry initialized with 5 servers.")
         await init_mcp_tools()
     async def main_with_mcp():
         # 1. Run your existing main() logic (state sync, executor init, etc.)

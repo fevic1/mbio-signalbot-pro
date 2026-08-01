@@ -81,6 +81,22 @@ class AIOSServiceRegistry:
         ] = event_bus
 
 
+        from aios.events.persistence import EventPersistence
+
+        event_persistence = EventPersistence(
+            path=".aios/memory/events.json",
+        )
+
+        event_bus.subscribe(
+            "*",
+            event_persistence.append,
+        )
+
+        services[
+            "event_persistence"
+        ] = event_persistence
+
+
 
         #
         # Decision Engine
@@ -273,6 +289,7 @@ class AIOSServiceRegistry:
 
         from aios.learning import (
             LearningCoordinator,
+            LearningEventHandler,
             ProviderFeedbackHandler,
         )
 
@@ -297,6 +314,16 @@ class AIOSServiceRegistry:
         services[
             "provider_feedback"
         ] = provider_feedback
+
+
+        learning_event_handler = LearningEventHandler(
+            event_bus=event_bus,
+            learning=learning,
+        )
+
+        services[
+            "learning_event_handler"
+        ] = learning_event_handler
 
 
 
@@ -794,6 +821,25 @@ class AIOSServiceRegistry:
         ] = council_manager
 
 
+        from aios.council.consensus import Consensus
+        from aios.council.improvement_review import ImprovementReview
+
+        council_consensus = Consensus()
+
+        improvement_review = ImprovementReview(
+            council=council_manager,
+            consensus=council_consensus,
+        )
+
+        services[
+            "council_consensus"
+        ] = council_consensus
+
+        services[
+            "improvement_review"
+        ] = improvement_review
+
+
 
 
         #
@@ -1074,7 +1120,7 @@ class AIOSServiceRegistry:
 
         services["mcp_client"] = InProcessMCPClient(
             mcp_registry,
-            allowed_servers={"internet", "ipinfo"},
+            allowed_servers={"internet", "ipinfo", "tavily"},
         )
 
 

@@ -1,4 +1,5 @@
 import json
+import logging
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
@@ -8,6 +9,7 @@ from aios.dispatcher import AIOSDispatcher
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/aios/chat")
@@ -16,14 +18,36 @@ async def aios_chat(request: Request, payload: dict):
     dispatcher = AIOSDispatcher(system)
 
     async def events():
-        result = await dispatcher.dispatch(payload)
-        content = str(result.get("content", ""))
+        try:
+            result = await dispatcher.dispatch(payload)
+            content = str(result.get("content", ""))
 
-        async for chunk in stream_response(content):
-            event = json.dumps({"content": chunk})
+            metadata_event = json.dumps({
+                "metadata": {
+                    "provider": result.get("provider"),
+                    "model": result.get("model"),
+                    "latency": result.get("latency"),
+                }
+            })
+            yield f"data: {metadata_event}\n\n"
+
+            async for chunk in stream_response(content):
+                event = json.dumps({"content": chunk})
+                yield f"data: {event}\n\n"
+
+        except Exception as error:
+            logger.exception("AIOS chat stream failed")
+            event = json.dumps({
+                "content": (
+                    "AIOS could not complete this response because its "
+                    "language-model providers are temporarily unavailable."
+                ),
+                "error": True,
+            })
             yield f"data: {event}\n\n"
 
-        yield "data: [DONE]\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         events(),

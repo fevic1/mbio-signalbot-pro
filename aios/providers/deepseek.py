@@ -7,17 +7,22 @@ from .types import ProviderRequest, ProviderResponse
 from .validation import valid_secret
 
 
-class GroqProvider(BaseProvider):
+class DeepSeekProvider(BaseProvider):
 
-    name = "groq"
+    name = "deepseek"
 
     def __init__(self):
-        self.key = os.getenv("AIOS_GROQ_API_KEY")
+        self.key = os.getenv("AIOS_DEEPSEEK_API_KEY")
 
         self.model = os.getenv(
-            "AIOS_GROQ_MODEL",
-            "llama-3.1-8b-instant",
+            "AIOS_DEEPSEEK_MODEL",
+            "deepseek-v4-flash",
         )
+
+        self.base_url = os.getenv(
+            "AIOS_DEEPSEEK_BASE_URL",
+            "https://api.deepseek.com",
+        ).rstrip("/")
 
     async def chat(
         self,
@@ -26,7 +31,7 @@ class GroqProvider(BaseProvider):
 
         if not self.key:
             raise AuthenticationError(
-                "AIOS_GROQ_API_KEY not configured"
+                "AIOS_DEEPSEEK_API_KEY not configured"
             )
 
         messages = []
@@ -62,7 +67,7 @@ class GroqProvider(BaseProvider):
             payload["tool_choice"] = "auto"
 
         response = await http.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+            f"{self.base_url}/chat/completions",
             headers={
                 "Authorization": f"Bearer {self.key}",
                 "Content-Type": "application/json",
@@ -71,19 +76,16 @@ class GroqProvider(BaseProvider):
         )
 
         if response.status_code >= 400:
-            print("GROQ ERROR:", response.text, flush=True)
+            print("DEEPSEEK ERROR:", response.text, flush=True)
 
         response.raise_for_status()
 
         data = response.json()
 
-        message = data["choices"][0]["message"]
-
         return ProviderResponse(
             provider=self.name,
             model=self.model,
-            # Tool-call responses may have no assistant text.
-            content=message.get("content") or "",
+            content=data["choices"][0]["message"]["content"] or "",
             raw=data,
         )
 

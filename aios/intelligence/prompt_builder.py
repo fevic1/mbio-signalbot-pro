@@ -69,6 +69,51 @@ class PromptBuilder:
             message=message,
         )
 
+        history = (
+            context.get("metadata", {})
+            .get("conversation_history", [])
+            if isinstance(context.get("metadata"), dict)
+            else []
+        )
+
+        if history:
+            user += "\n\nCONVERSATION HISTORY:\n"
+
+            for item in history[-20:]:
+                role = str(item.get("role", "user")).upper()
+                content = str(item.get("content", "")).strip()
+
+                if content:
+                    user += f"{role}: {content}\n"
+
+            user += (
+                "\nContinue the conversation using this history. "
+                "Resolve short follow-ups from prior messages. "
+                "Never claim the user owns an asset unless explicitly stated.\n"
+            )
+
+        runtime_evidence = (
+            context.get("metadata", {})
+            .get("runtime_evidence")
+            if isinstance(context.get("metadata"), dict)
+            else None
+        )
+
+        if runtime_evidence:
+            user += (
+                "\n\nVERIFIED AIOS RUNTIME EVIDENCE:\n"
+                + json.dumps(
+                    runtime_evidence,
+                    ensure_ascii=False,
+                    default=str,
+                )
+                + "\nUse this evidence as authoritative for questions "
+                  "about AIOS health, services, telemetry, learning, "
+                  "providers, and council availability. Do not claim "
+                  "you lack diagnostic access when this evidence answers "
+                  "the question. Do not expose credentials or secrets.\n"
+            )
+
         schema_file = (
             self.root.parent
             / "schemas"

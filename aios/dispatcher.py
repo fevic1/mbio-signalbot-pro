@@ -51,9 +51,28 @@ class AIOSDispatcher:
             message
         )
 
+        lowered_message = message.lower()
+        research_overrides = (
+            "look into",
+            "research",
+            "search",
+            "latest",
+            "news",
+            "etf",
+            "fund",
+        )
+
+        if any(
+            term in lowered_message
+            for term in research_overrides
+        ):
+            agent = "research"
+            capability = "research"
+
         context = await self._build_context(
             message,
             agent,
+            payload.get("history", []),
         )
 
         request = CapabilityRequest(
@@ -186,6 +205,32 @@ class AIOSDispatcher:
                 "risk_analysis",
             )
 
+        # Current-information intent must win before market terms like
+        # bitcoin/btc/price, otherwise news searches become market_analysis.
+        if any(
+            key in text
+            for key in [
+                "research",
+                "search",
+                "look up",
+                "look for",
+                "find",
+                "fetch",
+                "latest",
+                "current",
+                "today",
+                "news",
+                "internet",
+                "website",
+                "web",
+                "investigate",
+            ]
+        ):
+            return (
+                "research",
+                "research",
+            )
+
         if any(
             key in text
             for key in [
@@ -202,26 +247,6 @@ class AIOSDispatcher:
             return (
                 "quant",
                 "market_analysis",
-            )
-
-        if any(
-            key in text
-            for key in [
-                "research",
-                "search",
-                "look up",
-                "look for",
-                "latest",
-                "current",
-                "today",
-                "news",
-                "investigate",
-                "analysis",
-            ]
-        ):
-            return (
-                "research",
-                "research",
             )
 
         if any(
@@ -262,10 +287,40 @@ class AIOSDispatcher:
         self,
         message: str,
         agent: str,
+        history: Any = None,
     ) -> Dict[str, Any]:
+
+        conversation_history = []
+
+        if isinstance(history, list):
+            for item in history[-20:]:
+                if not isinstance(item, dict):
+                    continue
+
+                role = str(
+                    item.get("role")
+                    or item.get("type")
+                    or ""
+                ).lower()
+
+                if role == "ai":
+                    role = "assistant"
+
+                if role not in {"user", "assistant"}:
+                    continue
+
+                content = str(item.get("content", "")).strip()
+                if not content:
+                    continue
+
+                conversation_history.append({
+                    "role": role,
+                    "content": content[:4000],
+                })
 
         context = {
             "message": message,
+            "conversation_history": conversation_history,
             "target_agent": agent,
             "aios_mode": "dispatcher",
         }
@@ -286,6 +341,85 @@ class AIOSDispatcher:
                     mcp_registry.get_all_servers()
                 )
             ]
+
+        diagnostic_terms = (
+            "status",
+            "health",
+            "operational",
+            "telemetry",
+            "learning",
+            "event",
+            "council",
+            "provider",
+            "runtime",
+            "system diagnostic",
+        )
+
+        if any(
+            term in message.lower()
+            for term in diagnostic_terms
+        ):
+            services = getattr(
+                self.system,
+                "services",
+                {},
+            ) or {}
+
+            event_bus = services.get(
+                "event_bus"
+            )
+
+            event_history = (
+                event_bus.get_history()
+                if event_bus
+                and hasattr(event_bus, "get_history")
+                else []
+            )
+
+            recent_event_types = [
+                event.get("event_type")
+                for event in event_history[-12:]
+                if isinstance(event, dict)
+            ]
+
+            persistence = services.get(
+                "event_persistence"
+            )
+
+            persisted_events = (
+                persistence.load()
+                if persistence
+                and hasattr(persistence, "load")
+                else []
+            )
+
+            try:
+                from aios.providers.manager import provider_manager
+
+                provider_health = (
+                    provider_manager.health()
+                )
+            except Exception:
+                provider_health = {}
+
+            context["runtime_evidence"] = {
+                "kernel": "online",
+                "event_bus": event_bus is not None,
+                "learning_service": services.get("learning") is not None,
+                "learning_event_handler": services.get(
+                    "learning_event_handler"
+                ) is not None,
+                "council_manager": services.get(
+                    "council_manager"
+                ) is not None,
+                "improvement_review": services.get(
+                    "improvement_review"
+                ) is not None,
+                "event_persistence": persistence is not None,
+                "persisted_event_count": len(persisted_events),
+                "recent_event_types": recent_event_types,
+                "provider_health": provider_health,
+            }
 
         return context
 

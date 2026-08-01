@@ -21,7 +21,7 @@ class ProviderExecutionMonitor:
             {
                 "type": event.type,
                 **event.payload,
-                "timestamp": event.time,
+                "timestamp": event.timestamp,
             }
         )
 
@@ -32,7 +32,7 @@ class ProviderExecutionMonitor:
             {
                 "type": event.type,
                 **event.payload,
-                "timestamp": event.time,
+                "timestamp": event.timestamp,
             }
         )
 
