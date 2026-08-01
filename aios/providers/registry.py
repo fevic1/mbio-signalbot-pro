@@ -2,7 +2,6 @@ from .groq import GroqProvider
 from .cerebras import CerebrasProvider
 from .openrouter import OpenRouterProvider
 from .anthropic import AnthropicProvider
-from .mock import MockProvider
 
 
 class ProviderRegistry:
@@ -13,7 +12,6 @@ class ProviderRegistry:
             "cerebras": CerebrasProvider,
             "openrouter": OpenRouterProvider,
             "anthropic": AnthropicProvider,
-            "mock": MockProvider,
         }
 
         self.providers = None
