@@ -3,6 +3,7 @@ import { useResizable } from '@/hooks/useResizable';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { DragHandle } from '@/components/DragHandle';
 import { cn } from '@/lib/utils';
+import { Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface TradingTerminalProps {
   leftPanel: React.ReactNode;
@@ -17,6 +18,7 @@ export function TradingTerminal({
 }: TradingTerminalProps) {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [rightMinimized, setRightMinimized] = useState(false); // Icon rail mode
   const [isMobile, setIsMobile] = useState(false);
 
   // Check screen size on mount and resize
@@ -53,9 +55,14 @@ export function TradingTerminal({
     setRightCollapsed(prev => !prev);
   }, []);
 
+  const minimizeRightPanel = useCallback(() => {
+    setRightMinimized(prev => !prev);
+  }, []);
+
   const maximizeChart = useCallback(() => {
     setLeftCollapsed(true);
     setRightCollapsed(true);
+    setRightMinimized(false);
   }, []);
 
   useKeyboardShortcuts({
@@ -79,7 +86,7 @@ export function TradingTerminal({
         <>
           <div
             className={cn(
-              'panel-transition flex-shrink-0 overflow-hidden',
+              'panel-transition flex-shrink-0 overflow-hidden h-full',
               leftCollapsed ? 'w-0' : ''
             )}
             style={{ 
@@ -100,32 +107,64 @@ export function TradingTerminal({
       )}
 
       {/* Center Panel: Always visible, takes remaining space */}
-      <div className="flex-1 min-w-0 overflow-hidden">
+      <div className="flex-1 min-w-0 overflow-hidden h-full flex flex-col">
         {centerPanel}
       </div>
 
-      {/* Right Panel: Visible on desktop, hidden on mobile */}
+      {/* Right Panel: Sliding with icon rail mode */}
       {!isMobile && (
         <>
           {/* Right Drag Handle */}
-          {!rightCollapsed && (
+          {!rightCollapsed && !rightMinimized && (
             <DragHandle
               onMouseDown={rightResizable.handleMouseDown}
               onDoubleClick={rightResizable.handleDoubleClick}
             />
           )}
 
-          <div
-            className={cn(
-              'panel-transition flex-shrink-0 overflow-hidden',
-              rightCollapsed ? 'w-0' : ''
-            )}
-            style={{ 
-              width: rightCollapsed ? '0px' : `${rightResizable.width}px`,
-            }}
-          >
-            {rightPanel}
-          </div>
+          {/* Icon Rail (when minimized) */}
+          {rightMinimized && (
+            <div className="flex-shrink-0 h-full w-12 bg-card border-l border-border flex flex-col items-center py-4 gap-4">
+              <button
+                onClick={() => setRightMinimized(false)}
+                className="p-2 rounded hover:bg-muted transition-colors"
+                title="Expand QT Parameters"
+              >
+                <Settings className="h-5 w-5 text-muted-foreground" />
+              </button>
+              <div className="flex-1" />
+              <button
+                onClick={() => setRightCollapsed(true)}
+                className="p-2 rounded hover:bg-muted transition-colors"
+                title="Hide panel"
+              >
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </button>
+            </div>
+          )}
+
+          {/* Full Panel */}
+          {!rightCollapsed && !rightMinimized && (
+            <div
+              className={cn(
+                'panel-transition flex-shrink-0 overflow-hidden h-full relative',
+                rightCollapsed ? 'w-0' : ''
+              )}
+              style={{ 
+                width: rightCollapsed ? '0px' : `${rightResizable.width}px`,
+              }}
+            >
+              {/* Minimize button */}
+              <button
+                onClick={minimizeRightPanel}
+                className="absolute top-3 left-3 z-10 p-1.5 rounded bg-muted/50 hover:bg-muted transition-colors"
+                title="Minimize to icon rail"
+              >
+                <ChevronLeft className="h-3 w-3 text-muted-foreground" />
+              </button>
+              {rightPanel}
+            </div>
+          )}
         </>
       )}
     </div>

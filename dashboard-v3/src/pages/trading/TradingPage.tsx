@@ -31,25 +31,24 @@ export default function TradingPage({
   const handleAssetSelect = (asset: string) => {
     setSelectedAsset(asset);
     console.log(`[TradingPage] Asset selected: ${asset}`);
-    // In production: update chart, fetch orderbook, etc.
   };
 
-  // Left Panel: Watchlist (dynamic height)
+  // Left Panel: Watchlist (constrained height)
   const leftPanel = (
     <div className="h-full lg:block hidden">
       <WatchlistPanel onSymbolSelect={handleAssetSelect} />
     </div>
   );
 
-  // Center Panel: Chart + Bottom Workspace (dynamic heights, no scrolling)
+  // Center Panel: Chart + Bottom Workspace (FITS IN VIEWPORT)
   const centerPanel = (
-    <div className="flex h-full flex-col bg-background">
-      {/* Chart Section: Takes 60% of available height dynamically */}
+    <div className="flex h-full flex-col bg-background overflow-hidden">
+      {/* Chart Section: 60% of center panel */}
       <div className="flex-[3] min-h-0 border-b border-border">
         <CandleChart />
       </div>
       
-      {/* Bottom Workspace: Takes 40% of available height, internal scroll only */}
+      {/* Bottom Workspace: 40% of center panel, internal scroll only */}
       <div className="flex-[2] min-h-0 flex-col bg-card overflow-hidden flex">
         <div className="flex border-b border-border overflow-x-auto flex-shrink-0">
           {TABS.map((tab) => (
@@ -89,7 +88,7 @@ export default function TradingPage({
     </div>
   );
 
-  // Right Panel: QT Parameters with asset selector and deploy flow
+  // Right Panel: QT Parameters with sliding behavior
   const rightPanel = (
     <QTParametersPanel 
       selectedAsset={selectedAsset}

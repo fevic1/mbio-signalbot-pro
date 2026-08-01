@@ -19,6 +19,7 @@ const NAV = [
   { label: "Research", path: "research", icon: Brain },
   { label: "Risk", path: "risk", icon: Shield },
   { label: "System", path: "system", icon: Layers },
+  { label: "AIOS", path: "aios", icon: Brain },
 ];
 
 
@@ -71,7 +72,9 @@ export default function TerminalShell({
 
             <a
               key={path}
-              href={`/pages/${path}/`}
+              target={path === "aios" ? "_blank" : undefined}
+              rel={path === "aios" ? "noopener noreferrer" : undefined}
+              href={path === "aios" ? "http://172.238.11.219:8001/aios/" : `/pages/${path}/`}
               className="
                 w-full
                 flex

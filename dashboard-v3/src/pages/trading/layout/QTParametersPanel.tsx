@@ -87,9 +87,9 @@ export function QTParametersPanel({
   }, [selectedAsset, onAssetSelect]);
 
   return (
-    <div className="flex h-full flex-col bg-card border-l border-border">
-      {/* Asset Selector Bar */}
-      <div className="px-4 py-3 border-b border-border bg-muted/30">
+    <div className="flex h-full flex-col bg-card border-l border-border overflow-hidden">
+      {/* Asset Selector Bar - Fixed height */}
+      <div className="px-4 py-3 border-b border-border bg-muted/30 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-bold uppercase tracking-wider text-foreground">
             Trading Asset
@@ -114,8 +114,8 @@ export function QTParametersPanel({
         </select>
       </div>
 
-      {/* Sticky Header */}
-      <div className="sticky-header flex items-center justify-between px-4 py-3 border-b border-border">
+      {/* Header - Fixed height */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
         <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
           QT Parameters
         </h3>
@@ -124,8 +124,8 @@ export function QTParametersPanel({
         </button>
       </div>
 
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Scrollable Content - Constrained height */}
+      <div className="flex-1 overflow-y-auto min-h-0">
         <AccordionSection title="General Settings" defaultOpen={true}>
           <FormField label="Strategy Name" value="AIOS QT Strategy" />
           <div className="flex items-center justify-between gap-4">
@@ -164,8 +164,8 @@ export function QTParametersPanel({
         </AccordionSection>
       </div>
 
-      {/* Sticky Footer - EXECUTION BUTTONS */}
-      <div className="sticky-footer px-4 py-3 border-t border-border space-y-2">
+      {/* Execution Footer - ALWAYS VISIBLE, fixed height */}
+      <div className="px-4 py-3 border-t border-border bg-muted/30 flex-shrink-0 space-y-2">
         <button className="w-full flex items-center justify-center gap-2 h-9 rounded bg-primary font-medium text-primary-foreground hover:bg-primary/90 transition-colors text-xs">
           <Save className="h-3 w-3" />
           Save Parameters
