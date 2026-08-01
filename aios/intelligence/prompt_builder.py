@@ -58,11 +58,14 @@ class PromptBuilder:
             permission=context.get("permission", ""),
         )
 
+        metadata = context.get("metadata") or {}
+        results = context.get("results") or {}
+
         user = self.user_template.format(
-            project=context.get("project_manager"),
-            metadata=context.get("metadata"),
-            results=context.get("results"),
-            memory=context.get("memory"),
+            project="AIOS",
+            metadata=metadata,
+            results=results,
+            memory="",
             message=message,
         )
 
