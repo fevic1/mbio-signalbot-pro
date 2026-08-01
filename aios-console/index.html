@@ -518,6 +518,98 @@
       transform: translateX(0);
     }
   }
+
+.feature-view {
+  display: none;
+  flex: 1;
+  overflow: auto;
+  padding: 28px;
+  animation: featureSlideIn .22s ease-out;
+}
+.feature-view.active { display: block; }
+.feature-panel {
+  max-width: 1100px;
+  margin: 0 auto;
+  background: #111827;
+  border: 1px solid #1e293b;
+  border-radius: 16px;
+  padding: 24px;
+}
+.feature-panel pre {
+  white-space: pre-wrap;
+  color: #cbd5e1;
+  font: 13px/1.6 "Fira Code", monospace;
+}
+.feature-back {
+  margin-bottom: 20px;
+  color: #a78bfa;
+  cursor: pointer;
+}
+@keyframes featureSlideIn {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, .72);
+  backdrop-filter: blur(5px);
+  z-index: 100;
+}
+.settings-overlay.open { display: flex; }
+.settings-modal {
+  width: min(920px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 32px));
+  overflow: auto;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .5);
+}
+.settings-tabs { display: flex; gap: 8px; border-bottom: 1px solid #1e293b; padding: 16px 20px 0; }
+.settings-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px 14px;
+  color: #94a3b8;
+  background: transparent;
+  cursor: pointer;
+}
+.settings-tab.active { color: #c4b5fd; border-bottom-color: #8b5cf6; }
+.settings-pane { display: none; padding: 20px; }
+.settings-pane.active { display: block; }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.settings-input {
+  width: 100%;
+  margin-top: 5px;
+  padding: 10px;
+  color: #e2e8f0;
+  background: #111827;
+  border: 1px solid #334155;
+  border-radius: 8px;
+}
+.settings-card {
+  padding: 14px;
+  background: #111827;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+}
+.settings-button {
+  padding: 9px 12px;
+  color: white;
+  background: #7c3aed;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.settings-button.secondary { background: #1e293b; }
+.settings-button.danger { background: #991b1b; }
+
 </style>
 </head>
 <body class="grid-bg">
@@ -547,42 +639,42 @@
   <div class="sidebar-nav">
     <div class="nav-section-title">Navigation</div>
 
-    <div class="nav-item active" onclick="navClick(this)">
+    <div class="nav-item active" onclick="showCommandChat(this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       Command Chat
     </div>
-    <div class="nav-item" onclick="navClick(this)">
+    <div class="nav-item" onclick="navClick(this); loadAgents()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       Agent Workforce
     </div>
-    <div class="nav-item" onclick="navClick(this)">
+    <div class="nav-item" onclick="navClick(this); sendQuick('/council')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
       Council Process
     </div>
-    <div class="nav-item" onclick="navClick(this)">
+    <div class="nav-item" onclick="navClick(this); loadMemory()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
       Memory System
     </div>
-    <div class="nav-item" onclick="navClick(this)">
+    <div class="nav-item" onclick="navClick(this); sendQuick('/decisions')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/></svg>
       Decision Engine
     </div>
-    <div class="nav-item" onclick="navClick(this)">
+    <div class="nav-item" onclick="navClick(this); loadGovernance()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       Governance
     </div>
-    <div class="nav-item" onclick="navClick(this)">
+    <div class="nav-item" onclick="navClick(this); sendQuick('/trade help')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
       MBIO SignalPro
     </div>
 
     <div class="nav-section-title mt-4">System</div>
 
-    <div class="nav-item" onclick="navClick(this)">
+    <div class="nav-item" onclick="navClick(this); sendQuick('/status')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>
       Runtime & Kernel
     </div>
-    <div class="nav-item" onclick="navClick(this)">
+    <div class="nav-item" onclick="navClick(this); sendQuick('/help')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
       Learning & Evolution
     </div>
@@ -609,7 +701,7 @@
         <div class="text-xs font-semibold truncate">Operator</div>
         <div class="text-[10px] text-slate-500 truncate">admin@aios.local</div>
       </div>
-      <button class="text-slate-500 hover:text-white p-1 rounded transition-colors">
+      <button onclick="openSettings()" title="Settings" class="text-slate-500 hover:text-white p-1 rounded transition-colors">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
     </div>
@@ -653,7 +745,9 @@
   </div>
 
   <!-- Chat Container -->
-  <div class="chat-container">
+  <div id="featureView" class="feature-view"></div>
+
+    <div class="chat-container">
     <div class="chat-messages" id="chatMessages">
       <!-- Welcome message -->
       <div class="message ai msg-in">
@@ -704,16 +798,6 @@
 
     <!-- Input Area -->
     <div class="chat-input-area flex-shrink-0">
-      <div class="quick-actions" id="quickActions">
-        <button class="quick-action" onclick="sendQuick('/status')">/status</button>
-        <button class="quick-action" onclick="loadAgents()">/agents</button>
-        <button class="quick-action" onclick="sendQuick('/council')">/council</button>
-        <button class="quick-action" onclick="loadMemory()">/memory</button>
-        <button class="quick-action" onclick="sendQuick('/decisions')">/decisions</button>
-        <button class="quick-action" onclick="sendQuick('/governance')">/governance</button>
-        <button class="quick-action" onclick="sendQuick('/trade help')">/trade</button>
-        <button class="quick-action" onclick="sendQuick('/help')">/help</button>
-      </div>
       <div class="input-wrapper">
         <!-- Waveform container (appears when recording) -->
         <div class="waveform-container" id="waveformContainer">
@@ -789,6 +873,14 @@ function toggleSidebar() {
   }
 }
 
+function showCommandChat(el) {
+  navClick(el);
+  document.getElementById('featureView').classList.remove('active');
+  document.querySelector('.chat-container').style.display = 'flex';
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  chatInput.focus();
+}
+
 function navClick(el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   el.classList.add('active');
@@ -807,34 +899,114 @@ function handleKey(e) {
   }
 }
 
-async function loadAgents() {
-  try {
-    const res = await fetch('/aios/agents');
-    const data = await res.json();
+async function showFeatureView(title, subtitle, loader) {
+  const featureView = document.getElementById('featureView');
+  const chat = document.querySelector('.chat-container');
 
-    addMessage(
-      'ai',
-      `<pre>${escapeHtml(JSON.stringify(data.agents, null, 2))}</pre>`,
-      true
-    );
+  chat.style.display = 'none';
+  featureView.classList.add('active');
+  featureView.innerHTML = `
+    <div class="feature-panel">
+      <div class="feature-back" onclick="showCommandChat(document.querySelector('.nav-item'))">
+        ← Back to Command Chat
+      </div>
+      <h2 class="text-xl font-semibold text-white">${escapeHtml(title)}</h2>
+      <p class="text-slate-400 text-sm mt-1">${escapeHtml(subtitle)}</p>
+      <div id="featureContent" class="mt-6 text-slate-300">Loading...</div>
+    </div>
+  `;
+
+  try {
+    const data = await loader();
+
+    if (title === 'Agent Workforce') {
+      document.getElementById('featureContent').innerHTML =
+        renderAgentCards(data.agents || []);
+    } else {
+      document.getElementById('featureContent').innerHTML =
+        `<pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+    }
   } catch (error) {
-    addMessage('ai', `Agent load failed: ${error.message}`);
+    document.getElementById('featureContent').textContent =
+      `Unable to load ${title}: ${error.message}`;
   }
 }
 
-async function loadMemory() {
-  try {
-    const res = await fetch('/aios/memory');
-    const data = await res.json();
-
-    addMessage(
-      'ai',
-      `<pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>`,
-      true
-    );
-  } catch (error) {
-    addMessage('ai', `Memory load failed: ${error.message}`);
+function renderAgentCards(agents) {
+  if (!agents.length) {
+    return '<div class="text-slate-400">No active agents found.</div>';
   }
+
+  return `
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      ${agents.map(agent => {
+        const metadata = agent.metadata || {};
+        const capabilities =
+          agent.capabilities || metadata.capabilities || [];
+
+        return `
+          <div class="feature-panel">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-white">
+                ${escapeHtml(agent.name || 'Unknown Agent')}
+              </h3>
+              <span class="text-xs text-emerald-400">
+                ${escapeHtml(agent.state || 'available')}
+              </span>
+            </div>
+
+            <p class="mt-2 text-slate-400">
+              ${escapeHtml(agent.role || metadata.role || 'AIOS agent')}
+            </p>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+              ${capabilities.map(capability =>
+                `<span class="px-2 py-1 rounded bg-purple-500/10 text-purple-300 text-xs">
+                  ${escapeHtml(String(capability))}
+                </span>`
+              ).join('')}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function loadAgents() {
+  return showFeatureView(
+    'Agent Workforce',
+    'Active AIOS agents and capabilities',
+    async () => {
+      const response = await fetch('/aios/agents');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }
+  );
+}
+
+function loadMemory() {
+  return showFeatureView(
+    'Memory System',
+    'AIOS memory layers and retrieved context',
+    async () => {
+      const response = await fetch('/aios/memory');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }
+  );
+}
+
+function loadGovernance() {
+  return showFeatureView(
+    'Governance',
+    'Approvals, pending actions, and audit history',
+    async () => {
+      const response = await fetch('/aios/governance');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }
+  );
 }
 
 function sendQuick(text) {
@@ -851,7 +1023,31 @@ function getTime() {
   return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
+
+function normalizeChatContent(content) {
+  if (content === null || content === undefined) {
+    return '';
+  }
+
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return JSON.stringify(content, null, 2);
+  }
+
+  if (typeof content === 'object') {
+    return JSON.stringify(content, null, 2);
+  }
+
+  return String(content);
+}
+
 function addMessage(type, content, isHtml = false) {
+
+  content = normalizeChatContent(content);
+
   const msg = document.createElement('div');
   msg.className = `message ${type} msg-in`;
 
@@ -906,7 +1102,7 @@ function scrollToBottom() {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-function sendMessage() {
+async function sendMessage() {
   const text = chatInput.value.trim();
   if (!text || isProcessing) return;
 
@@ -916,39 +1112,65 @@ function sendMessage() {
   addMessage('user', text);
   chatInput.value = '';
   chatInput.style.height = 'auto';
-
   showTyping();
 
-  fetch('/aios/chat', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      message: text
-    })
-  })
-  .then(r => r.json())
-  .then(data => {
+  try {
+    const response = await fetch('/aios/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ message: text })
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
     removeTyping();
+    addMessage('ai', '');
 
-    const reply = data.content || data.reply || JSON.stringify(data);
+    const replyEl = chatMessages.lastElementChild.querySelector('.msg-content');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let reply = '';
+    let done = false;
 
-    addMessage('ai', reply);
+    while (!done) {
+      const chunk = await reader.read();
+      done = chunk.done;
+      buffer += decoder.decode(chunk.value || new Uint8Array(), {
+        stream: !done
+      });
 
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
+
+      for (const event of events) {
+        const line = event.split('\\n').find(line => line.startsWith('data: '));
+        if (!line) continue;
+
+        const payload = line.slice(6);
+        if (payload === '[DONE]') {
+          done = true;
+          break;
+        }
+
+        const data = JSON.parse(payload);
+        reply += data.content || '';
+        replyEl.textContent = reply;
+        scrollToBottom();
+      }
+    }
+  } catch (error) {
+    removeTyping();
+    addMessage('ai', `Error: ${error.message}`, true);
+  } finally {
     isProcessing = false;
     sendBtn.disabled = false;
     chatInput.focus();
-  })
-  .catch(error => {
-    removeTyping();
-
-    addMessage('ai', `Error: ${escapeHtml(error.message)}`, true);
-
-    isProcessing = false;
-    sendBtn.disabled = false;
-    chatInput.focus();
-  });
+  }
 }
 
 // ─── Microphone / Waveform ───────────────────────────────────────────────────
@@ -1153,6 +1375,290 @@ window.addEventListener('resize', () => {
 
 // Init
 chatInput.focus();
+
+function openSettings() {
+  document.getElementById('settingsOverlay').classList.add('open');
+}
+
+function closeSettings(event) {
+  const overlay = document.getElementById('settingsOverlay');
+  if (!event || event.target === overlay) {
+    overlay.classList.remove('open');
+  }
+}
+
+function switchSettingsTab(tab) {
+  const mcp = tab === 'mcp';
+
+  document.getElementById('settingsMcp').classList.toggle('active', mcp);
+  document.getElementById('settingsSkills').classList.toggle('active', !mcp);
+  document.getElementById('settingsTabMcp').classList.toggle('active', mcp);
+  document.getElementById('settingsTabSkills').classList.toggle('active', !mcp);
+
+  if (mcp) loadMcpServers();
+  else loadSkills();
+}
+
+function settingsHeaders() {
+  const key = document.getElementById('settingsAdminKey').value.trim();
+
+  if (!key) {
+    throw new Error('Enter the Settings admin key first.');
+  }
+
+  return {
+    'Content-Type': 'application/json',
+    'X-API-Key': key
+  };
+}
+
+async function settingsRequest(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      ...settingsHeaders(),
+      ...(options.headers || {})
+    }
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.detail || `HTTP ${response.status}`);
+  }
+
+  return data;
+}
+
+async function loadSettingsData() {
+  await Promise.all([loadMcpServers(), loadSkills()]);
+}
+
+async function loadMcpServers() {
+  const target = document.getElementById('mcpServerList');
+
+  try {
+    const data = await settingsRequest('/aios/settings/mcp-servers');
+    const servers = data.servers || [];
+
+    target.innerHTML = servers.length
+      ? servers.map(server => `
+          <article class="settings-card">
+            <div class="flex items-center justify-between gap-3">
+              <strong class="text-white">${escapeHtml(server.name)}</strong>
+              <span class="text-xs ${server.enabled ? 'text-emerald-400' : 'text-amber-400'}">
+                ${server.enabled ? 'enabled' : 'disabled'}
+              </span>
+            </div>
+            <div class="text-xs text-purple-300 mt-2">${escapeHtml(server.server_id)}</div>
+            <p class="text-sm text-slate-400 mt-2">${escapeHtml(server.description || 'No description')}</p>
+            <p class="text-xs text-slate-500 mt-2">${escapeHtml(server.endpoint || 'Local / in-process')}</p>
+            <button class="settings-button danger mt-3"
+              data-id="${escapeHtml(server.server_id)}"
+              onclick="removeMcpServer(this.dataset.id)">
+              Remove
+            </button>
+          </article>
+        `).join('')
+      : '<div class="text-slate-400">No MCP servers registered.</div>';
+  } catch (error) {
+    target.textContent = error.message;
+  }
+}
+
+async function registerMcpServer(event) {
+  event.preventDefault();
+
+  try {
+    await settingsRequest('/aios/settings/mcp-servers', {
+      method: 'POST',
+      body: JSON.stringify({
+        server_id: document.getElementById('mcpServerId').value.trim(),
+        name: document.getElementById('mcpServerName').value.trim(),
+        description: document.getElementById('mcpServerDescription').value.trim(),
+        endpoint: document.getElementById('mcpServerEndpoint').value.trim() || null,
+        server_api_key: document.getElementById('mcpServerApiKey').value || null,
+        rate_limit_per_min: Number(document.getElementById('mcpRateLimit').value || 60)
+      })
+    });
+
+    event.target.reset();
+    document.getElementById('mcpRateLimit').value = 60;
+    await loadMcpServers();
+  } catch (error) {
+    alert(`Unable to register MCP server: ${error.message}`);
+  }
+}
+
+async function removeMcpServer(serverId) {
+  if (!confirm(`Remove MCP server "${serverId}"?`)) return;
+
+  try {
+    await settingsRequest(`/aios/settings/mcp-servers/${encodeURIComponent(serverId)}`, {
+      method: 'DELETE'
+    });
+    await loadMcpServers();
+  } catch (error) {
+    alert(`Unable to remove MCP server: ${error.message}`);
+  }
+}
+
+async function loadSkills() {
+  const target = document.getElementById('skillList');
+
+  try {
+    const data = await settingsRequest('/aios/settings/skills');
+    const skills = data.skills || [];
+
+    target.innerHTML = skills.length
+      ? skills.map(skill => `
+          <article class="settings-card">
+            <div class="flex items-center justify-between gap-3">
+              <strong class="text-white">${escapeHtml(skill.name)}</strong>
+              <span class="text-xs text-emerald-400">${escapeHtml(skill.status || 'registered')}</span>
+            </div>
+            <div class="text-xs text-purple-300 mt-2">${escapeHtml(skill.domain)}</div>
+            <p class="text-sm text-slate-400 mt-2">${escapeHtml(skill.description || 'No description')}</p>
+            <p class="text-xs text-slate-500 mt-2">${escapeHtml((skill.capabilities || []).join(', ') || 'No capabilities')}</p>
+            <button class="settings-button danger mt-3"
+              data-name="${escapeHtml(skill.name)}"
+              onclick="removeSkill(this.dataset.name)">
+              Remove
+            </button>
+          </article>
+        `).join('')
+      : '<div class="text-slate-400">No skills registered.</div>';
+  } catch (error) {
+    target.textContent = error.message;
+  }
+}
+
+async function registerSkill(event) {
+  event.preventDefault();
+
+  try {
+    const capabilities = document.getElementById('skillCapabilities').value
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean);
+
+    await settingsRequest('/aios/settings/skills', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: document.getElementById('skillName').value.trim(),
+        domain: document.getElementById('skillDomain').value.trim(),
+        description: document.getElementById('skillDescription').value.trim(),
+        capabilities,
+        version: document.getElementById('skillVersion').value.trim() || '1.0'
+      })
+    });
+
+    event.target.reset();
+    document.getElementById('skillVersion').value = '1.0';
+    await loadSkills();
+  } catch (error) {
+    alert(`Unable to register skill: ${error.message}`);
+  }
+}
+
+
 </script>
+
+<div id="settingsOverlay" class="settings-overlay" onclick="closeSettings(event)">
+  <section class="settings-modal" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between px-5 pt-5">
+      <div>
+        <h2 class="text-xl font-semibold text-white">AIOS Settings</h2>
+        <p class="text-sm text-slate-400">Manage MCP servers and declarative AIOS skills.</p>
+      </div>
+      <button class="text-slate-400 hover:text-white text-xl" onclick="closeSettings()">×</button>
+    </div>
+
+    <div class="settings-tabs">
+      <button id="settingsTabMcp" class="settings-tab active" onclick="switchSettingsTab('mcp')">MCP Portal</button>
+      <button id="settingsTabSkills" class="settings-tab" onclick="switchSettingsTab('skills')">Skills Portal</button>
+    </div>
+
+    <div id="settingsMcp" class="settings-pane active">
+      <label class="text-sm text-slate-300">
+        Admin key
+        <input id="settingsAdminKey" class="settings-input" type="password"
+          placeholder="Required for this session only; never stored">
+      </label>
+
+      <div class="flex gap-2 mt-3">
+        <button class="settings-button secondary" onclick="loadSettingsData()">Refresh lists</button>
+      </div>
+
+      <div class="mt-6">
+        <h3 class="text-base font-semibold text-white">Registered MCP servers</h3>
+        <div id="mcpServerList" class="settings-grid mt-3 text-slate-400">
+          Enter the admin key and select Refresh lists.
+        </div>
+      </div>
+
+      <form class="mt-7" onsubmit="registerMcpServer(event)">
+        <h3 class="text-base font-semibold text-white">Add MCP server</h3>
+        <div class="settings-grid mt-3">
+          <label class="text-sm text-slate-300">Server ID
+            <input id="mcpServerId" class="settings-input" required placeholder="analytics-mcp">
+          </label>
+          <label class="text-sm text-slate-300">Display name
+            <input id="mcpServerName" class="settings-input" required placeholder="Analytics MCP">
+          </label>
+          <label class="text-sm text-slate-300">Endpoint
+            <input id="mcpServerEndpoint" class="settings-input" placeholder="https://example.com/mcp">
+          </label>
+          <label class="text-sm text-slate-300">Rate limit / minute
+            <input id="mcpRateLimit" class="settings-input" type="number" min="1" value="60">
+          </label>
+        </div>
+        <label class="block text-sm text-slate-300 mt-3">Description
+          <input id="mcpServerDescription" class="settings-input" placeholder="What this MCP server provides">
+        </label>
+        <label class="block text-sm text-slate-300 mt-3">Server API key (optional)
+          <input id="mcpServerApiKey" class="settings-input" type="password"
+            placeholder="Stored server-side; not shown again">
+        </label>
+        <button class="settings-button mt-4" type="submit">Register MCP server</button>
+      </form>
+    </div>
+
+    <div id="settingsSkills" class="settings-pane">
+      <div>
+        <h3 class="text-base font-semibold text-white">Registered skills</h3>
+        <div id="skillList" class="settings-grid mt-3 text-slate-400">
+          Enter the admin key and select Refresh lists.
+        </div>
+      </div>
+
+      <form class="mt-7" onsubmit="registerSkill(event)">
+        <h3 class="text-base font-semibold text-white">Add declarative skill</h3>
+        <p class="text-sm text-slate-400 mt-1">
+          This registers skill metadata and capabilities; it does not upload or execute code.
+        </p>
+        <div class="settings-grid mt-3">
+          <label class="text-sm text-slate-300">Skill name
+            <input id="skillName" class="settings-input" required placeholder="market-brief">
+          </label>
+          <label class="text-sm text-slate-300">Domain
+            <input id="skillDomain" class="settings-input" required placeholder="research">
+          </label>
+          <label class="text-sm text-slate-300">Version
+            <input id="skillVersion" class="settings-input" value="1.0">
+          </label>
+          <label class="text-sm text-slate-300">Capabilities (comma separated)
+            <input id="skillCapabilities" class="settings-input" placeholder="research, summarization">
+          </label>
+        </div>
+        <label class="block text-sm text-slate-300 mt-3">Description
+          <input id="skillDescription" class="settings-input" placeholder="What this skill helps AIOS do">
+        </label>
+        <button class="settings-button mt-4" type="submit">Register skill</button>
+      </form>
+    </div>
+  </section>
+</div>
+
 </body>
 </html>
