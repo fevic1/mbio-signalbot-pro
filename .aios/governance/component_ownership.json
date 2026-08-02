@@ -525,5 +525,35 @@
       "aios.agents.runtime.workspace",
       "aios.agents.workspace.workspace"
     ]
+  },
+  "CircuitBreaker": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.providers.circuit",
+      "aios.runtime.safety.circuit_breaker"
+    ]
+  },
+  "LLMAdapter": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.intelligence.llm_adapter",
+      "aios.runtime.chat.llm_adapter"
+    ]
+  },
+  "MemoryConfig": {
+    "canonical": null,
+    "risk": "review",
+    "owner": null,
+    "status": "review_required",
+    "implementations": [
+      "aios.memory.config",
+      "aios.runtime.prompt_loader.models"
+    ]
   }
 }
