@@ -48,7 +48,6 @@ def save_state() -> None:
             "trade_history": TRADE_HISTORY,
         }
         # Include Auto-DCA state for restart survival
-        global auto_dca_active, auto_dca_params, auto_dca_consec_losses
         data["auto_dca_active"] = auto_dca_active
         data["auto_dca_params"] = auto_dca_params
         data["auto_dca_consec_losses"] = auto_dca_consec_losses
@@ -139,7 +138,6 @@ def record_closed_trade(asset: str, side: str, entry: float, exit_price: float, 
 
 def get_live_performance_stats():
     """Calculate real-time performance statistics from TRADE_HISTORY."""
-    global TRADE_HISTORY, daily_pnl
     
     if not TRADE_HISTORY:
         return {

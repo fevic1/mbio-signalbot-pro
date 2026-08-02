@@ -226,6 +226,10 @@ async def health():
 
 # Phase 13: HIP-4 Multi-Asset API Routes
 from routes.hip4_api import router as hip4_router
+from core.risk_manager import (
+    RiskManager,
+    calculate_trade_plan,
+)
 
 # Register MCP Gateway Router (High Priority)
 api.include_router(mcp_gateway_router)

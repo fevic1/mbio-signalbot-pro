@@ -36,7 +36,6 @@ def set_bot_ready(ready: bool = True):
 
 async def safe_send_message(chat_id, text, parse_mode=None):
     """Send message only if bot is initialized. Silently skip otherwise."""
-    global _bot_ready
     if not _bot_ready:
         return
     try:
