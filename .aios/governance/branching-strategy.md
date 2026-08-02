@@ -105,3 +105,38 @@ Feature branches never merge directly into main.
 - Architecture compliance
 - Reviewable history
 - No unresolved ownership conflicts
+
+---
+
+## Pull Request Policy
+
+### feature/* → aios-production-hardening
+
+Required.
+
+Conditions:
+
+- AIOS Architecture Audit passes.
+- MBIO SignalBot CI passes.
+- Review completed.
+
+---
+
+### aios-production-hardening → main
+
+Not required after every AIOS commit.
+
+Open a Pull Request only when promoting a production-ready AIOS release into MBIO SignalBot Pro.
+
+Requirements:
+
+- Production ready.
+- Required GitHub Actions passing.
+- Architecture approved.
+- Release approved.
+
+---
+
+### hotfix/* → main
+
+Required unless emergency maintenance procedures apply.
