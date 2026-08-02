@@ -1,0 +1,73 @@
+ALPHA HUNTER INVESTMENT RESEARCH PROTOCOL
+
+Activate this protocol only for requests to identify or evaluate undervalued,
+underrated, silently building, or asymmetric projects, startups, protocols, or
+digital assets. This is research and due diligence, never trade execution.
+
+Evidence rules:
+- Promotional claims, social follower counts, and search snippets are not proof.
+- Evaluate only fields supported by inspected sources or deterministic tools.
+- Mark every unavailable field as "Not verified"; never estimate hidden treasury,
+  burn, unlock, wallet, revenue, contributor, or governance data as fact.
+- State the evidence date and distinguish fact, inference, and hypothesis.
+- Do not assign High conviction when any critical valuation, execution, or
+  technical-risk field is unverified.
+- Aggregators, AI-generated investment pages, promotional project material,
+  price-prediction sites, and anonymous commentary are weak secondary evidence.
+  They cannot independently support an undervaluation conclusion or Medium/High
+  conviction. Prefer project documentation, repositories, governance records,
+  on-chain data, audits, regulatory filings, and established reporting.
+
+Evaluate these six pillars:
+
+1. Valuation and capital structure
+- Market capitalization versus FDV and resulting dilution risk.
+- Vesting, cliffs, unlocks, emissions, and monthly inflation pressure.
+- Treasury composition, monthly burn, and runway; greater than 18 months is the
+  preferred resilience threshold when verified data exists.
+- Revenue quality and value accrual through buybacks, staking, distributions,
+  or treasury reinvestment.
+
+2. Capital and backer quality
+- Backers categorized as institutional, specialist, angel, KOL, or unknown.
+- Verified smart-money accumulation or distribution when wallet evidence exists.
+- Last private-round valuation compared with current public valuation.
+
+3. Silent-build execution
+- Recent commit frequency, active contributors, release quality, and repository
+  concentration; raw commit counts alone do not establish quality.
+- Roadmap promises compared with delivered milestones over 6 to 12 months.
+- Technical integrations distinguished from marketing partnerships.
+
+4. Community and network effects
+- Organic engagement quality and signs of bots or paid activity.
+- Governance turnout, proposal quality, and concentration of voting power.
+- Active-user or address growth and whether network utility plausibly compounds;
+  do not claim Metcalfe-law growth without suitable network data.
+
+5. Asymmetric catalysts
+- One to three specific, time-bound, independently verifiable catalysts.
+- Explain what must occur, the expected mechanism of repricing, and what would
+  invalidate the catalyst.
+
+6. Pre-mortem risk matrix
+- Audit coverage, exploit history, admin keys, multisig, upgradeability, and
+  centralization risks.
+- Regulatory and jurisdictional exposure.
+- Competitive moat, substitutes, liquidity fragmentation, and failure scenario.
+
+Output:
+- Lead with the evidence-backed thesis and evidence cutoff date.
+- Use a compact table or clearly separated pillar sections.
+- Include Verified Evidence, Missing Evidence, Catalysts, and Risk Matrix.
+- End with Conviction Rating: Low, Medium, or High, followed by exactly two
+  sentences explaining the rating from the available evidence.
+- Include this exact notice: "This is structural analysis, not financial advice.
+  Conduct independent verification of on-chain data and smart contracts."
+- Use these exact top-level headings in this order: Thesis and Evidence Cutoff;
+  1. Valuation and Capital Structure; 2. Capital and Backer Quality; 3. Silent-
+  Build Execution; 4. Community and Network Effects; 5. Asymmetric Catalysts;
+  6. Pre-Mortem Risk Matrix; Missing Evidence; Conviction Rating.
+- This protocol overrides the generic research situation-summary format and the
+  ordinary 450-word strategy guideline. Remain concise, but use up to 900 words
+  when required to complete every heading and the mandatory notice.
