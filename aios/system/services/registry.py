@@ -97,6 +97,25 @@ class AIOSServiceRegistry:
         ] = event_persistence
 
 
+        from aios.council.review_store import (
+            CouncilReviewStore,
+        )
+
+        council_review_store = CouncilReviewStore(
+            event_bus=event_bus,
+            approval_manager=approval_manager,
+        )
+
+        event_bus.subscribe(
+            "*",
+            council_review_store.capture_event,
+        )
+
+        services[
+            "council_review_store"
+        ] = council_review_store
+
+
 
         #
         # Decision Engine
@@ -227,6 +246,24 @@ class AIOSServiceRegistry:
         services[
             "memory_manager"
         ] = memory_manager
+
+
+        #
+        # Two-speed response learning: immediate lesson path
+        #
+
+        from aios.learning.response_learning import (
+            ResponseLearningEngine,
+        )
+
+        response_learning = ResponseLearningEngine(
+            memory_manager=memory_manager,
+            event_bus=event_bus,
+        )
+
+        services[
+            "response_learning"
+        ] = response_learning
 
 
 
@@ -959,6 +996,22 @@ class AIOSServiceRegistry:
         ] = execution_planner
 
 
+        from aios.execution.scoped_planner import (
+            ScopedWorkflowPlanner,
+        )
+
+
+        scoped_workflow_planner = ScopedWorkflowPlanner(
+            execution_planner=execution_planner,
+            max_steps=6,
+        )
+
+
+        services[
+            "scoped_workflow_planner"
+        ] = scoped_workflow_planner
+
+
 
         #
         # Workflow Engine
@@ -1120,7 +1173,7 @@ class AIOSServiceRegistry:
 
         services["mcp_client"] = InProcessMCPClient(
             mcp_registry,
-            allowed_servers={"internet", "ipinfo", "tavily"},
+            allowed_servers={"internet", "ipinfo", "tavily", "firecrawl"},
         )
 
 

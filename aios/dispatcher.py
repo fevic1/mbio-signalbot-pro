@@ -1,10 +1,14 @@
 import logging
+import re
 from typing import Any, Dict, Tuple
 
 from aios.capabilities.executor import CapabilityExecutor
 from aios.capabilities.request import CapabilityRequest
 from aios.intelligence.compact_context import CompactContextBuilder
+from aios.intelligence.super_context import SuperContextBuilder
+from aios.intelligence.attachment_context import AttachmentContextBuilder
 from aios.events.models import AIOSDomainEvent
+from aios.policy.project_scope import resolve_project_scope
 
 
 logger = logging.getLogger(__name__)
@@ -31,15 +35,25 @@ class AIOSDispatcher:
             max_items=8,
             max_chars=5000,
         )
+        self.super_context_builder = SuperContextBuilder()
+
+        self.attachment_builder = AttachmentContextBuilder(
+            max_context_chars=60000,
+        )
 
     async def dispatch(
         self,
         payload: Dict[str, Any],
     ) -> Dict[str, Any]:
 
+        attachments = payload.get("attachments") or []
+
         message = str(
             payload.get("message", "")
         ).strip()
+
+        if not message and attachments:
+            message = "Review and summarize the attached text."
 
         if not message:
             return self._build_result(
@@ -53,9 +67,110 @@ class AIOSDispatcher:
                 message
             )
 
+        if self._needs_intent_clarification(message):
+            return self._build_result(
+                capability="reasoning",
+                content=(
+                    "What would you like me to do with that—recommend "
+                    "something, find current information, explain it, or "
+                    "help you play it?"
+                ),
+                success=True,
+            )
+
         agent, capability = self._classify_task(
             message
         )
+
+        project_scope = resolve_project_scope(
+            message,
+            payload,
+        )
+
+        history_items = (
+            payload.get("history", [])
+            if isinstance(
+                payload.get("history"),
+                list,
+            )
+            else []
+        )
+
+        follow_up_markers = (
+            "what about",
+            "how about",
+            "how does that",
+            "is there",
+            "compare",
+            "those",
+            "them",
+            "that one",
+            "more detail",
+            "continue",
+            "still on",
+            "regarding the first",
+            "previous question",
+        )
+
+        is_follow_up = bool(
+            history_items
+            and any(
+                marker in message.lower()
+                for marker in follow_up_markers
+            )
+        )
+
+        resolved_query = message
+
+        if is_follow_up:
+            recent_context = []
+
+            for item in history_items[-8:]:
+                if not isinstance(item, dict):
+                    continue
+
+                role = str(
+                    item.get("role")
+                    or item.get("type")
+                    or ""
+                ).lower()
+
+                # Assistant output is continuity context, never factual
+                # evidence and never part of a retrieval query.
+                if role not in {"user", "human"}:
+                    continue
+
+                content = str(
+                    item.get("content") or ""
+                ).strip()
+
+                if content:
+                    recent_context.append(
+                        content[:1200]
+                    )
+
+            if recent_context:
+                resolved_query = (
+                    "\n".join(recent_context)
+                    + "\nCURRENT FOLLOW-UP: "
+                    + message
+                )
+
+                contextual_agent, contextual_capability = (
+                    self._classify_task(
+                        resolved_query
+                    )
+                )
+
+                if (
+                    capability == "reasoning"
+                    or any(
+                        marker in message.lower()
+                        for marker in follow_up_markers
+                    )
+                ):
+                    agent = contextual_agent
+                    capability = contextual_capability
 
         lowered_message = message.lower()
         research_overrides = (
@@ -79,7 +194,43 @@ class AIOSDispatcher:
             message,
             agent,
             payload.get("history", []),
+            capability,
+            project_scope.describe(),
         )
+
+        context["resolved_query"] = resolved_query
+        context["is_follow_up"] = is_follow_up
+
+        if attachments:
+            attachment_context = self.attachment_builder.build(
+                query=message,
+                attachments=attachments,
+            )
+            context["attachment_context"] = attachment_context
+
+            event_bus = (
+                getattr(self.system, "services", {}) or {}
+            ).get("event_bus")
+
+            if event_bus:
+                event_bus.publish(
+                    AIOSDomainEvent(
+                        "attachment.context.created",
+                        source="aios_dispatcher",
+                        payload={
+                            "attachment_count": attachment_context[
+                                "attachment_count"
+                            ],
+                            "source_characters": attachment_context[
+                                "source_characters"
+                            ],
+                            "context_characters": attachment_context[
+                                "context_characters"
+                            ],
+                            "truncated": attachment_context["truncated"],
+                        },
+                    )
+                )
 
         request = CapabilityRequest(
             capability=capability,
@@ -90,10 +241,76 @@ class AIOSDispatcher:
             request
         )
 
-        return self._format_response(
+        formatted = self._format_response(
             result,
             agent,
         )
+
+        services = getattr(
+            self.system,
+            "services",
+            {},
+        ) or {}
+
+        response_learning = services.get(
+            "response_learning"
+        )
+
+        if response_learning is not None:
+            try:
+                learning_result = (
+                    response_learning.capture(
+                        request={
+                            "message": message,
+                            "project_id": project_scope.project_id,
+                            "conversation_context":
+                                context.get(
+                                    "conversation_history",
+                                    [],
+                                ),
+                        },
+                        capability=capability,
+                        agent=agent,
+                        result=formatted,
+                        evidence=(
+                            result.get(
+                                "execution_evidence",
+                                {},
+                            )
+                            if isinstance(result, dict)
+                            else {}
+                        ),
+                    )
+                )
+
+                formatted["learning"] = {
+                    "record_id":
+                        learning_result.get(
+                            "record_id"
+                        ),
+                    "quality":
+                        learning_result.get(
+                            "evaluation",
+                            {},
+                        ).get(
+                            "overall_score"
+                        ),
+                    "issues":
+                        learning_result.get(
+                            "evaluation",
+                            {},
+                        ).get(
+                            "issues",
+                            [],
+                        ),
+                }
+
+            except Exception:
+                logger.exception(
+                    "AIOS response learning capture failed"
+                )
+
+        return formatted
 
     async def _handle_command(
         self,
@@ -188,12 +405,43 @@ class AIOSDispatcher:
             "reasoning",
         )
 
+    @staticmethod
+    def _needs_intent_clarification(message: str) -> bool:
+        words = str(message or "").lower().split()
+
+        if not words or len(words) > 10:
+            return False
+
+        subjective = {
+            "real", "best", "good", "better", "proper", "actual",
+        }
+        explicit_actions = {
+            "search", "find", "research", "recommend", "suggest", "play",
+            "explain", "compare", "list", "news", "latest", "current",
+            "where", "who", "what", "how", "why",
+        }
+
+        return bool(
+            subjective.intersection(words)
+            and not explicit_actions.intersection(words)
+        )
+
     def _classify_task(
         self,
         message: str,
     ) -> Tuple[str, str]:
 
         text = message.lower()
+
+        alpha_hunter_terms = (
+            "undervalued", "underrated", "silent build", "silently building",
+            "alpha hunter", "asymmetric opportunity", "investment opportunity",
+            "tokenomics", "fully diluted valuation", "fdv", "token unlock",
+            "vesting schedule", "treasury runway", "smart money",
+            "venture due diligence", "startup due diligence",
+        )
+        if any(term in text for term in alpha_hunter_terms):
+            return ("research", "research")
 
         if any(
             key in text
@@ -230,6 +478,12 @@ class AIOSDispatcher:
                 "website",
                 "web",
                 "investigate",
+                "situation",
+                "relations",
+                "tensions",
+                "conflict",
+                "ceasefire",
+                "sanctions",
             ]
         ):
             return (
@@ -294,12 +548,14 @@ class AIOSDispatcher:
         message: str,
         agent: str,
         history: Any = None,
+        capability: str = "",
+        project_scope: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
 
         conversation_history = []
 
         if isinstance(history, list):
-            for item in history[-20:]:
+            for item in history[-10:]:
                 if not isinstance(item, dict):
                     continue
 
@@ -329,6 +585,10 @@ class AIOSDispatcher:
             "conversation_history": conversation_history,
             "target_agent": agent,
             "aios_mode": "dispatcher",
+            "project_id": (
+                project_scope or {}
+            ).get("project_id", "aios-core"),
+            "project_scope": project_scope or {},
         }
 
         services = getattr(
@@ -336,6 +596,65 @@ class AIOSDispatcher:
             "services",
             {},
         ) or {}
+
+        # SuperContext runs only on the first conversational turn.
+        # It is bounded, read-only, provider-independent, and optional.
+        if not conversation_history:
+            super_context = await self.super_context_builder.build(
+                query=message,
+                services=services,
+            )
+
+            if super_context.get("entries"):
+                context["super_context"] = super_context
+
+            super_context_event_bus = services.get("event_bus")
+
+            if super_context_event_bus:
+                super_context_event_bus.publish(
+                    AIOSDomainEvent(
+                        "context.super_context.prepared",
+                        source="aios_dispatcher",
+                        payload={
+                            "agent": agent,
+                            "status": super_context.get("status"),
+                            "selected_count": super_context.get(
+                                "selected_count",
+                                0,
+                            ),
+                            "characters_used": super_context.get(
+                                "characters_used",
+                                0,
+                            ),
+                            "latency_ms": super_context.get(
+                                "latency_ms",
+                                0.0,
+                            ),
+                        },
+                    )
+                )
+
+        response_learning = services.get(
+            "response_learning"
+        )
+
+        if response_learning is not None:
+            try:
+                learned_lessons = response_learning.retrieve(
+                    query=message,
+                    capability=capability or agent,
+                    limit=5,
+                )
+
+                if learned_lessons:
+                    context["learned_lessons"] = (
+                        learned_lessons
+                    )
+
+            except Exception:
+                logger.exception(
+                    "AIOS lesson retrieval failed"
+                )
 
         mcp_registry = services.get("mcp_registry")
         mcp_client = services.get("mcp_client")
@@ -403,6 +722,22 @@ class AIOSDispatcher:
             if entry["kind"] == "tool"
         ]
 
+        scoped_planner = services.get(
+            "scoped_workflow_planner"
+        )
+
+        workflow_plan = None
+
+        if scoped_planner:
+            workflow_plan = scoped_planner.plan(
+                query=message,
+                category=agent,
+                catalog=compact_context["entries"],
+            )
+
+        if workflow_plan:
+            context["workflow_plan"] = workflow_plan
+
         event_bus = services.get("event_bus")
 
         if event_bus:
@@ -419,22 +754,36 @@ class AIOSDispatcher:
                 )
             )
 
-        diagnostic_terms = (
-            "status",
-            "health",
-            "operational",
-            "telemetry",
-            "learning",
-            "event",
-            "council",
-            "provider",
-            "runtime",
-            "system diagnostic",
+            if workflow_plan:
+                event_bus.publish(
+                    AIOSDomainEvent(
+                        "workflow.plan.created",
+                        source="scoped_workflow_planner",
+                        payload={
+                            "plan_id": workflow_plan["plan_id"],
+                            "category": workflow_plan["category"],
+                            "mode": workflow_plan["mode"],
+                            "status": workflow_plan["status"],
+                            "step_count": len(workflow_plan["steps"]),
+                            "council_required": workflow_plan[
+                                "council_gate"
+                            ]["required"],
+                        },
+                    )
+                )
+
+        diagnostic_patterns = (
+            r"\baios\s+(?:status|health|runtime|telemetry|diagnostic)s?\b",
+            r"\b(?:system|runtime)\s+(?:status|health|diagnostic)s?\b",
+            r"\b(?:learning|event)\s+telemetry\b",
+            r"\bprovider\s+(?:status|health|availability)\b",
+            r"\bcouncil\s+(?:status|health|availability)\b",
+            r"\bis\s+aios\s+(?:operational|healthy|online)\b",
         )
 
         if any(
-            term in message.lower()
-            for term in diagnostic_terms
+            re.search(pattern, message.lower())
+            for pattern in diagnostic_patterns
         ):
             services = getattr(
                 self.system,
@@ -566,6 +915,10 @@ class AIOSDispatcher:
             "attempt": result.get(
                 "attempt",
                 0,
+            ),
+            "execution_evidence": result.get(
+                "execution_evidence",
+                {},
             ),
         }
 

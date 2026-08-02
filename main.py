@@ -13,6 +13,7 @@ from routes.aios_agents import router as aios_agents_router
 from routes.aios_memory import router as aios_memory_router
 from routes.aios_voice import router as aios_voice_router
 from routes.aios_governance import router as aios_governance_router
+from routes.aios_council import router as aios_council_router
 from routes.aios_settings import router as aios_settings_router
 
 from core.mcp_tools import init_mcp_tools
@@ -181,6 +182,7 @@ api.include_router(aios_agents_router)
 api.include_router(aios_memory_router)
 api.include_router(aios_voice_router)
 api.include_router(aios_governance_router)
+api.include_router(aios_council_router)
 api.include_router(aios_settings_router)
 
 api.mount(
@@ -651,8 +653,89 @@ async def run_trade(asset_name: str, data: dict, signal: str, conf: int,
 
 
 
+def build_signal_trade_plan(
+    entry_price,
+    atr,
+    signal,
+):
+    """Build the five-value directional plan required by send_signal."""
+    entry = float(entry_price or 0)
+    atr_value = float(atr or 0)
+    normalized_signal = str(signal or "HOLD").upper()
+
+    if (
+        entry <= 0
+        or atr_value < 0
+        or normalized_signal == "HOLD"
+    ):
+        return (0.0, 0.0, 0.0, 0.0, 0.0)
+
+    cfg = get_config()
+    trade_config = cfg.get("trade_plan", {})
+
+    sl_multiplier = float(
+        trade_config.get("sl_atr_multiplier", 1.5)
+    )
+    min_atr_pct = float(
+        trade_config.get("min_atr_pct", 0.02)
+    )
+
+    # Match the existing run_trade risk-distance calculation.
+    sl_distance = entry * min_atr_pct * sl_multiplier
+
+    if sl_distance <= 0:
+        sl_distance = atr_value * sl_multiplier
+
+    tp1_multiplier = float(
+        trade_config.get("tp1_atr_multiplier", 1.0)
+    )
+    tp2_multiplier = float(
+        trade_config.get("tp2_atr_multiplier", 2.0)
+    )
+    tp3_multiplier = float(
+        trade_config.get("tp3_atr_multiplier", 3.0)
+    )
+
+    direction = 1.0 if "BUY" in normalized_signal else -1.0
+
+    stop_loss = entry - (direction * sl_distance)
+    tp1 = entry + (direction * sl_distance * tp1_multiplier)
+    tp2 = entry + (direction * sl_distance * tp2_multiplier)
+    tp3 = entry + (direction * sl_distance * tp3_multiplier)
+
+    return (
+        entry,
+        stop_loss,
+        tp1,
+        tp2,
+        tp3,
+    )
+
+
 async def analyze_tier(tier_name: str, tier_assets: dict) -> None:
     cfg = get_config()
+
+    # Bound discovery scans to the global volume-ranked universe. This does not
+    # affect check_and_close_positions(), which monitors every open position.
+    scan_assets = set(get_universe().signal_scanner_coins())
+    original_count = len(tier_assets)
+    tier_assets = {
+        asset_name: ticker
+        for asset_name, ticker in tier_assets.items()
+        if str(asset_name).upper() in scan_assets
+    }
+
+    logger.info(
+        "SCAN LIMIT: %s reduced from %d to %d assets",
+        tier_name,
+        original_count,
+        len(tier_assets),
+    )
+
+    if not tier_assets:
+        logger.info("SCAN LIMIT: no ranked assets selected for %s", tier_name)
+        return
+
     max_pos = __import__("config_loader").get_config().get("execution", {}).get("max_positions", 3)
     batch_sz = cfg.get("ai", {}).get("batch_size", 2)
     cache_t = cfg.get("intervals", {}).get("cache_price_threshold", 0.02)
@@ -661,7 +744,24 @@ async def analyze_tier(tier_name: str, tier_assets: dict) -> None:
     for asset_name, ticker in tier_assets.items():
         if isinstance(ticker, dict): ticker['asset_name'] = str(asset_name)
         try:
-            data = get_mtf_data(ticker)
+            data = await asyncio.to_thread(
+                get_mtf_data,
+                ticker,
+            )
+
+            # Yield between assets so chat, Council, Agent Workforce,
+            # health checks, and voice routes remain immediately responsive.
+            await asyncio.sleep(
+                max(
+                    0.0,
+                    float(
+                        os.getenv(
+                            "SCAN_ASSET_PAUSE_SECONDS",
+                            "0.25",
+                        )
+                    ),
+                )
+            )
             if not data or "1h" not in data: continue
             cached = state.SIGNAL_CACHE.get(asset_name)
             if cached and abs(data["1h"]["price"] - cached["price"]) / cached["price"] < cache_t:
@@ -671,12 +771,35 @@ async def analyze_tier(tier_name: str, tier_assets: dict) -> None:
         
     for asset_name, data in cached_assets:
         cache = state.SIGNAL_CACHE[asset_name]
-        _tp_c = calculate_trade_plan(data["1h"]["price"], data["1h"]["atr"], cache["signal"])
-        trade_plan = _tp_c if _tp_c and len(_tp_c) >= 5 else (data["1h"]["price"], data["1h"]["price"]*0.97, data["1h"]["price"]*1.03, data["1h"]["price"]*1.05, data["1h"]["price"]*1.08)
+        trade_plan = build_signal_trade_plan(
+            data["1h"]["price"],
+            data["1h"]["atr"],
+            cache["signal"],
+        )
         await send_signal(asset_name, data, cache["signal"], cache["confidence"], cache["reasoning"], trade_plan, "Cached", TELEGRAM_CHAT_ID)
         
     if not needs_analysis: return
-    items = list(needs_analysis.items())
+    # Indicators are calculated for the full ranked universe, but only
+    # the highest-volume candidates are sent to LLM providers. This
+    # bounds provider latency, token usage, and rate-limit exposure.
+    candidate_limit = max(
+        1,
+        int(
+            os.getenv(
+                "AI_ANALYSIS_CANDIDATE_LIMIT",
+                "10",
+            )
+        ),
+    )
+
+    items = list(needs_analysis.items())[:candidate_limit]
+
+    logger.info(
+        "AI ANALYSIS LIMIT: evaluating %d of %d scanned assets",
+        len(items),
+        len(needs_analysis),
+    )
+
     for i in range(0, len(items), batch_sz):
         batch = dict(items[i:i + batch_sz])
         results, provider = await analyze_batch(batch, cfg)
@@ -691,17 +814,69 @@ async def analyze_tier(tier_name: str, tier_assets: dict) -> None:
             except Exception as e: logger.warning(f"StrategyManager failed: {e}")
                 
             if signal != "HOLD" and conf >= cfg.get("trading", {}).get("entry_min_confidence", 75):
-                _tp_s = calculate_trade_plan(data["1h"]["price"], data["1h"]["atr"], signal)
-                trade_plan = _tp_s if _tp_s and len(_tp_s) >= 5 else (data["1h"]["price"], data["1h"]["price"]*0.97, data["1h"]["price"]*1.03, data["1h"]["price"]*1.05, data["1h"]["price"]*1.08)
+                trade_plan = build_signal_trade_plan(
+                    data["1h"]["price"],
+                    data["1h"]["atr"],
+                    signal,
+                )
                 await send_signal(asset_name, data, signal, conf, reason, trade_plan, provider, TELEGRAM_CHAT_ID)
-                if asset_name not in state.OPEN_POSITIONS and len(state.OPEN_POSITIONS) < max_pos:
-                    await run_trade(asset_name, data, signal, conf, reason, provider)
+                scanner_execution_enabled = (
+                    os.getenv(
+                        "FULL_ANALYSIS_EXECUTE_TRADES",
+                        "false",
+                    ).lower()
+                    == "true"
+                )
+
+                if (
+                    scanner_execution_enabled
+                    and asset_name not in state.OPEN_POSITIONS
+                    and len(state.OPEN_POSITIONS) < max_pos
+                ):
+                    await run_trade(
+                        asset_name,
+                        data,
+                        signal,
+                        conf,
+                        reason,
+                        provider,
+                    )
 
 async def run_cycle() -> None:
-    """Safe wrapper for full analysis cycle."""
-    import logging, asyncio
-    logging.getLogger(__name__).info("♻️ Run cycle executed.")
-    await asyncio.sleep(10)
+    """Run the bounded, volume-ranked full market analysis cycle."""
+    universe = get_universe()
+    ranked_coins = list(
+        universe.signal_scanner_coins()
+    )
+
+    if not ranked_coins:
+        logger.warning(
+            "Full analysis skipped: ranked scanner universe is empty"
+        )
+        return
+
+    tier_assets = {
+        str(coin).upper(): str(coin).upper()
+        for coin in ranked_coins
+    }
+
+    logger.info(
+        "FULL SCAN: starting analysis for %d ranked assets",
+        len(tier_assets),
+    )
+
+    started_at = time.monotonic()
+
+    await analyze_tier(
+        "top_volume",
+        tier_assets,
+    )
+
+    logger.info(
+        "FULL SCAN: completed %d ranked assets in %.1fs",
+        len(tier_assets),
+        time.monotonic() - started_at,
+    )
 
 async def autonomous_slot_hunter(chat_id: str) -> None:
     """Alias to wire the modern hunter protocol."""
@@ -865,7 +1040,6 @@ async def main() -> None:
         ("quick_scanner", quick_signal_scanner(TELEGRAM_CHAT_ID)),
         ("entry_scanner", entry_scanner_loop(run_trade, TELEGRAM_CHAT_ID)),
         ("full_analysis", full_analysis_loop(run_cycle)),
-        ("slot_hunter", autonomous_slot_hunter(TELEGRAM_CHAT_ID)),
         ("trailing_dca", update_trailing_dca()),
         ("profit_target_monitor", monitor_dca_profit_targets()),
     ]
@@ -1005,7 +1179,29 @@ if __name__ == "__main__":
             )
         )
 
-        logger.info("Multi-MCP Registry initialized with 5 servers.")
+        await mcp_registry.register_server(
+            MCPServerConfig(
+                server_id="firecrawl",
+                name="Firecrawl Source Inspection",
+                description=(
+                    "Read-only scraping and extraction of exact public "
+                    "source URLs selected by AIOS research"
+                ),
+                endpoint=os.getenv(
+                    "FIRECRAWL_API_URL",
+                    "https://api.firecrawl.dev",
+                ),
+                rate_limit_per_min=int(
+                    os.getenv("MCP_FIRECRAWL_RATE_LIMIT", "10")
+                ),
+                metadata={
+                    "read_only": True,
+                    "max_urls": 3,
+                },
+            )
+        )
+
+        logger.info("Multi-MCP Registry initialized with 6 servers.")
         await init_mcp_tools()
     async def main_with_mcp():
         # 1. Run your existing main() logic (state sync, executor init, etc.)

@@ -1,5 +1,6 @@
 import json
 import re
+from pathlib import Path
 from time import perf_counter
 
 from aios.intelligence.llm_adapter import LLMAdapter
@@ -13,6 +14,19 @@ from aios.events.models import AIOSDomainEvent
 from .request import CapabilityRequest
 
 class CapabilityExecutor:
+
+    _ALPHA_HUNTER_TRIGGERS = (
+        "undervalued", "underrated", "silent build", "silently building",
+        "alpha hunter", "asymmetric opportunity", "investment opportunity",
+        "tokenomics", "fully diluted valuation", "fdv", "token unlock",
+        "vesting schedule", "treasury runway", "smart money",
+        "venture due diligence", "startup due diligence",
+    )
+
+    @classmethod
+    def _is_alpha_hunter_request(cls, message):
+        text = str(message or "").lower()
+        return any(trigger in text for trigger in cls._ALPHA_HUNTER_TRIGGERS)
 
     def __init__(
         self,
@@ -243,22 +257,41 @@ class CapabilityExecutor:
             else {}
         )
         current_query = str(
-            context_data.get("message")
+            context_data.get("resolved_query")
+            or context_data.get("message")
             or context_data.get("query")
             or ""
         ).strip()
 
+        alpha_hunter_mode = (
+            request.capability == "research"
+            and self._is_alpha_hunter_request(current_query)
+        )
+
+        # Capability prompt construction can receive a normalized request
+        # whose metadata omits the original message. Enforce this high-risk
+        # investment policy again at the execution boundary using the resolved
+        # query that actually drives retrieval.
+        if alpha_hunter_mode:
+            policy_path = (
+                Path(__file__).resolve().parents[1]
+                / "intelligence"
+                / "templates"
+                / "capabilities"
+                / "alpha_hunter.system.txt"
+            )
+            alpha_policy = policy_path.read_text()
+            if alpha_policy not in prompt["system"]:
+                prompt["system"] += "\n\n" + alpha_policy
+
         market_patterns = (
-            r"\bbtc\b",
-            r"\bbitcoin\b",
-            r"\beth\b",
-            r"\bethereum\b",
-            r"\bsol\b",
-            r"\bsolana\b",
             r"\bcrypto price\b",
             r"\bmarket price\b",
             r"\bmarket data\b",
             r"\bcurrent price\b",
+            r"\blive price\b",
+            r"\bprice of\b",
+            r"\bquote for\b",
             r"\bticker\b",
         )
 
@@ -268,7 +301,8 @@ class CapabilityExecutor:
         }
 
         if (
-            current_query
+            request.capability == "market_analysis"
+            and current_query
             and any(
                 re.search(pattern, current_query.lower())
                 for pattern in market_patterns
@@ -328,7 +362,8 @@ class CapabilityExecutor:
                     metadata = {}
 
                 query = str(
-                    request.context.get("message")
+                    request.context.get("resolved_query")
+                    or request.context.get("message")
                     or metadata.get("message")
                     or request.context.get("query")
                     or metadata.get("query")
@@ -342,23 +377,8 @@ class CapabilityExecutor:
                 ).strip()
             tool_names = {tool.get("name") for tool in tools}
 
-            research_terms = (
-                "search",
-                "look up",
-                "look for",
-                "latest",
-                "current",
-                "today",
-                "news",
-                "website",
-                "web",
-                "internet",
-                "research",
-            )
-
             if (
                 query
-                and any(term in query.lower() for term in research_terms)
                 and "tavily__search_web" in tool_names
             ):
                 try:
@@ -385,6 +405,22 @@ class CapabilityExecutor:
 
                         if focused_query:
                             search_query = focused_query
+
+                    # Negative scope constraints belong to synthesis, not
+                    # retrieval. Forwarding a named excluded venue makes the
+                    # search engine rank that venue more highly.
+                    search_query = re.sub(
+                        r"(?i)\bdo not (?:limit|restrict)(?: the analysis)? "
+                        r"to hyperliquid\.?",
+                        "",
+                        search_query,
+                    ).strip()
+
+                    if "most traded" in search_query.lower():
+                        search_query += (
+                            " spot trading volume rankings across multiple "
+                            "major exchanges"
+                        )
 
                     if "news" in search_query.lower():
                         from datetime import datetime, timezone
@@ -457,10 +493,69 @@ class CapabilityExecutor:
                             }
                         )
 
+                    selected_results = compact_results[:2]
+
+                    # Tavily discovers sources; Firecrawl reads the exact
+                    # selected article pages before grounded synthesis.
+                    if (
+                        selected_results
+                        and "firecrawl__extract_urls" in tool_names
+                    ):
+                        try:
+                            logger.info(
+                                "AIOS RESEARCH: inspecting %s exact URLs "
+                                "with Firecrawl",
+                                len(selected_results),
+                            )
+
+                            inspected = await mcp_client.call_tool(
+                                "firecrawl__extract_urls",
+                                {
+                                    "urls": [
+                                        item["url"]
+                                        for item in selected_results
+                                    ],
+                                },
+                            )
+
+                            inspected_by_url = {
+                                str(item.get("source_url", "")).rstrip("/"):
+                                    item
+                                for item in inspected.get("results", [])
+                                if item.get("success")
+                            }
+
+                            for item in selected_results:
+                                inspected_item = inspected_by_url.get(
+                                    item["url"].rstrip("/")
+                                )
+
+                                if inspected_item:
+                                    content = str(
+                                        inspected_item.get("content", "")
+                                    ).strip()
+
+                                    # Keep final research context bounded.
+                                    item["content"] = content[:5000]
+                                    item["verified_by"] = "firecrawl"
+                                    item["content_truncated"] = (
+                                        inspected_item.get("truncated", False)
+                                        or len(content) > 5000
+                                    )
+                                else:
+                                    item["verified_by"] = "tavily_snippet"
+
+                        except Exception as error:
+                            logger.warning(
+                                "AIOS RESEARCH: Firecrawl inspection "
+                                "failed; retaining Tavily snippets: %s",
+                                error,
+                            )
+
                     research_context = {
                         "success": raw_research_context.get("success", True),
                         "query": search_query,
-                        "results": compact_results[:3],
+                        "results": selected_results,
                     }
 
                     if not research_context["results"]:
@@ -540,9 +635,9 @@ class CapabilityExecutor:
             constraints={
                 "temperature": 0.2,
                 "max_tokens": (
-                    768
+                    1400
                     if request.capability == "research"
-                    else 384
+                    else 700
                 ),
                 "allowed_models": (
                     self._get_capability_definition(
@@ -627,7 +722,17 @@ class CapabilityExecutor:
                     "tool_call_id": tool_call.get("id"),
                     "name": tool_name,
                     "content": json.dumps(
-                        tool_result,
+                        (
+                            mcp_client.prepare_tool_result(
+                                tool_name,
+                                tool_result,
+                            )
+                            if hasattr(
+                                mcp_client,
+                                "prepare_tool_result",
+                            )
+                            else tool_result
+                        ),
                         default=str,
                     ),
                 })
@@ -684,6 +789,163 @@ class CapabilityExecutor:
                 elif confidence > 1:
                     final_content["confidence"] = confidence / 100
 
+        evidence_tools = []
+
+        resolved_market_context = locals().get(
+            "market_context"
+        )
+
+        resolved_research_context = locals().get(
+            "research_context"
+        )
+
+        if resolved_market_context:
+            evidence_tools.append(
+                "internet__get_crypto_prices"
+            )
+
+        research_results = []
+
+        if isinstance(
+            resolved_research_context,
+            dict,
+        ):
+            research_results = (
+                resolved_research_context.get(
+                    "results",
+                    [],
+                )
+                or []
+            )
+
+            if research_results:
+                evidence_tools.append(
+                    "tavily__search_web"
+                )
+
+            if any(
+                item.get("verified_by")
+                == "firecrawl"
+                for item in research_results
+                if isinstance(item, dict)
+            ):
+                evidence_tools.append(
+                    "firecrawl__scrape_url"
+                )
+
+        fallback_used = bool(
+            research_results
+            and any(
+                item.get("verified_by")
+                != "firecrawl"
+                for item in research_results
+                if isinstance(item, dict)
+            )
+        )
+
+        verified_research_results = [
+            item
+            for item in research_results
+            if isinstance(item, dict)
+            and item.get("verified_by")
+            == "firecrawl"
+        ]
+
+        weak_investment_source_terms = (
+            "/ai/",
+            "macroaxis.com",
+            "price-prediction",
+            "priceprediction",
+            "coinstats.app/ai/",
+        )
+
+        strong_investment_results = [
+            item
+            for item in verified_research_results
+            if not any(
+                term in str(item.get("url") or "").lower()
+                for term in weak_investment_source_terms
+            )
+        ]
+
+        # Hard grounding boundary: model instructions are insufficient.
+        # Never allow a research response to claim source inspection when
+        # the deterministic retrieval pipeline verified no source.
+        if (
+            request.capability == "research"
+            and not verified_research_results
+        ):
+            discovered_urls = [
+                str(item.get("url") or "").strip()
+                for item in research_results
+                if isinstance(item, dict)
+                and item.get("url")
+            ]
+
+            if discovered_urls:
+                final_content = (
+                    "I found potentially relevant search results, but AIOS "
+                    "could not inspect any source successfully. I therefore "
+                    "cannot present their claims as verified.\n\n"
+                    "Discovery-only URLs:\n"
+                    + "\n".join(
+                        f"- {url}"
+                        for url in discovered_urls[:5]
+                    )
+                )
+            else:
+                final_content = (
+                    "AIOS could not retrieve and inspect current external "
+                    "evidence for this research request. No factual market "
+                    "ranking or current claim can be provided safely."
+                )
+
+        # Inspection proves that a page was read; it does not make an
+        # aggregator, prediction page, or AI-generated investment page a
+        # primary source. Such pages cannot independently justify Medium or
+        # High Alpha Hunter conviction.
+        if (
+            alpha_hunter_mode
+            and verified_research_results
+            and not strong_investment_results
+            and isinstance(final_content, str)
+        ):
+            disclaimer = (
+                "This is structural analysis, not financial advice. Conduct "
+                "independent verification of on-chain data and smart contracts."
+            )
+            low_conviction = (
+                "**Conviction Rating: Low**\n"
+                "The inspected material consists only of weak secondary "
+                "sources, so it can identify hypotheses but cannot establish "
+                "undervaluation. Primary token, treasury, repository, "
+                "governance, audit, and on-chain evidence is required before "
+                "raising conviction.\n\n"
+                + disclaimer
+            )
+            marker = re.search(
+                r"(?is)\*{0,2}Conviction Rating[^\n]*\*{0,2}.*$",
+                final_content,
+            )
+            if marker:
+                final_content = (
+                    final_content[:marker.start()].rstrip()
+                    + "\n\n"
+                    + low_conviction
+                )
+            else:
+                final_content = final_content.rstrip() + "\n\n" + low_conviction
+
+        execution_evidence = {
+            "tools_called": evidence_tools,
+            "market_context":
+                resolved_market_context,
+            "research_context":
+                resolved_research_context,
+            "fallback_used":
+                fallback_used,
+        }
+
         return {
             "success": True,
             "capability": request.capability,
@@ -698,4 +960,6 @@ class CapabilityExecutor:
             "latency": latency,
             "cost": 0.0,
             "attempt": attempt,
+            "execution_evidence":
+                execution_evidence,
         }

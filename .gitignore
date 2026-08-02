@@ -100,3 +100,7 @@ research/
 
 # AIOS generated audit reports
 .aios/audits/
+
+# AIOS runtime context cache
+.aios/context/tool_results/
+.aios/context/**/*.json
