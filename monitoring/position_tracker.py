@@ -120,7 +120,7 @@ async def check_and_close_positions(chat_id: str) -> None:
                     await send_tp_hit(asset, "TP2", current_price, entry, chat_id)
                 elif current_price >= pos.get("tp1", float("inf")) and pos.get("sl", 0) < entry and not pos.get("tp1_hit"):
                     # 🏹 PHASE 1: Partial Close 30% at TP1
-                    close_size = size * float(config.get("smart_exit", {}).get("tp2_partial_pct", 0.35))
+                    close_size = size * float(cfg.get("smart_exit", {}).get("tp2_partial_pct", 0.35))
                     remaining_size = size - close_size
                     notional = close_size * current_price
                     
@@ -213,7 +213,7 @@ async def check_and_close_positions(chat_id: str) -> None:
                     await send_tp_hit(asset, "TP2", current_price, entry, chat_id)
                 elif current_price <= pos.get("tp1", float("inf")) and pos.get("sl", float("inf")) > entry and not pos.get("tp1_hit"):
                     # 🏹 PHASE 1: Partial Close 30% at TP1
-                    close_size = size * float(config.get("smart_exit", {}).get("tp2_partial_pct", 0.35))
+                    close_size = size * float(cfg.get("smart_exit", {}).get("tp2_partial_pct", 0.35))
                     remaining_size = size - close_size
                     notional = close_size * current_price
                     
@@ -510,6 +510,8 @@ async def update_trailing_dca():
             from core.state import OPEN_POSITIONS
             # HLExecutor now from app_context
             executor = app_context.executor
+            from core.dca_manager import DCAManager
+            dca = DCAManager(executor)
             for asset, pos in OPEN_POSITIONS.items():
                 dca_config = pos.get("dca")
                 if dca_config and dca_config.get("trailing") and dca_config.get("enabled"):

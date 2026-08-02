@@ -6,6 +6,7 @@ All config from strategy_config.yaml. Manual reload after save.
 import time
 import json
 import math
+import os
 import shutil
 import logging
 import yaml
@@ -19,7 +20,7 @@ from routes.dashboard_auth import (
 )
 from routes.dashboard_sse import dashboard_sse_stream
 from core.app_context import app_context
-from core.mcp_registry import MCPServerConfig
+from core.mcp_registry import MCPServerConfig, mcp_registry
 from core.executor_utils import run_executor_method
 from core.exchange_limits import get_exchange_limits, can_trade
 

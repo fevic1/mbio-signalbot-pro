@@ -232,7 +232,7 @@ class DCAManager:
         # 🎯 CALCULATE FROM LAST FILL, not shifting average entry, to prevent compounding drift
         last_fill_price = config.get("last_fill_price", config.get("avg_entry", 0))
         base_size = config.get("base_size", 0.00018)
-        new_levels = self.calculate_trailing_levels(entry_price, current_price, base_size, config)
+        new_levels = self.calculate_trailing_levels(last_fill_price, current_price, base_size, config)
         for order in config.get("active_orders", []):
             if order.get("status") == "active" and order.get("order_id"):
                 try:

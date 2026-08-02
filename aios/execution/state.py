@@ -1,17 +1,20 @@
-ExecutionState
+from enum import Enum
 
-READY
 
-RUNNING
+class ExecutionState(str, Enum):
 
-WAITING
+    READY = "ready"
 
-BLOCKED
+    RUNNING = "running"
 
-FAILED
+    WAITING = "waiting"
 
-COMPLETED
+    BLOCKED = "blocked"
 
-PAUSED
+    FAILED = "failed"
 
-CANCELLED
+    COMPLETED = "completed"
+
+    PAUSED = "paused"
+
+    CANCELLED = "cancelled"
