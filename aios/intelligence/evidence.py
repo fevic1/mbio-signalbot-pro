@@ -185,3 +185,47 @@ class EvidenceCollection:
     ):
 
         return self.ranked()[:limit]
+
+
+    def consensus(self):
+
+        self.normalize()
+
+        total = len(self._items)
+
+        if total == 0:
+            return {
+                "score": 0.0,
+                "agreement": 0,
+                "conflicts": 0,
+            }
+
+        conflicts = self.conflicts()
+
+        agreement = total - len(conflicts)
+
+        score = round(
+            agreement / total,
+            3,
+        )
+
+        return {
+            "score": score,
+            "agreement": agreement,
+            "conflicts": len(conflicts),
+        }
+
+
+    def confidence_breakdown(self):
+
+        return {
+            "overall": self.confidence(),
+            "consensus": self.consensus(),
+            "verified": len(self.verified()),
+            "sources": sorted(
+                {
+                    e.source
+                    for e in self._items
+                }
+            ),
+        }

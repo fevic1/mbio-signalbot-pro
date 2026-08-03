@@ -52,6 +52,11 @@ class ContextAssembler:
 
             evidence_summary = {
                 "summary": evidence.summary(),
+                "confidence": evidence.confidence_breakdown(),
+                "top": [
+                    vars(e)
+                    for e in evidence.top(10)
+                ],
                 "evidence": evidence.as_prompt(),
             }
 
