@@ -50,15 +50,13 @@ class ContextAssembler:
         ):
             evidence.normalize()
 
-            evidence_summary = {
-                "summary": evidence.summary(),
-                "confidence": evidence.confidence_breakdown(),
-                "top": [
-                    vars(e)
-                    for e in evidence.top(10)
-                ],
-                "evidence": evidence.as_prompt(),
-            }
+            report = evidence.intelligence_report()
+
+            report["evidence"] = (
+                evidence.as_prompt()
+            )
+
+            evidence_summary = report
 
         else:
             evidence_summary = {}

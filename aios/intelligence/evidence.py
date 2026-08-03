@@ -229,3 +229,59 @@ class EvidenceCollection:
                 }
             ),
         }
+
+
+    def source_rankings(self):
+
+        rankings = {}
+
+        for item in self._items:
+
+            entry = rankings.setdefault(
+                item.source,
+                {
+                    "count": 0,
+                    "confidence": [],
+                    "verified": 0,
+                },
+            )
+
+            entry["count"] += 1
+            entry["confidence"].append(item.confidence)
+
+            if item.verified:
+                entry["verified"] += 1
+
+        for source, entry in rankings.items():
+
+            scores = entry.pop("confidence")
+
+            entry["average_confidence"] = round(
+                sum(scores) / len(scores),
+                3,
+            )
+
+        return dict(
+            sorted(
+                rankings.items(),
+                key=lambda kv: (
+                    kv[1]["average_confidence"],
+                    kv[1]["verified"],
+                    kv[1]["count"],
+                ),
+                reverse=True,
+            )
+        )
+
+
+    def intelligence_report(self):
+
+        return {
+            "summary": self.summary(),
+            "confidence": self.confidence_breakdown(),
+            "sources": self.source_rankings(),
+            "top": [
+                vars(item)
+                for item in self.top(10)
+            ],
+        }
