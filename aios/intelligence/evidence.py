@@ -681,3 +681,44 @@ class IntelligenceSnapshot:
             "verification": governor["verification"],
             "governance": governor,
         }
+
+
+class IntelligenceExecutor:
+
+    def execute(
+        self,
+        evidence,
+    ):
+
+        runtime = IntelligenceRuntime().execute(
+            evidence
+        )
+
+        snapshot = IntelligenceSnapshot().build(
+            runtime
+        )
+
+        return {
+            "runtime": runtime,
+            "snapshot": snapshot,
+            "approved": snapshot["governance"]["approved"],
+            "blocked": snapshot["governance"]["blocked"],
+            "confidence": snapshot["state"]["confidence"],
+            "consensus": snapshot["state"]["consensus"],
+        }
+
+
+class IntelligenceAudit:
+
+    def record(
+        self,
+        execution,
+    ):
+
+        return {
+            "approved": execution["approved"],
+            "blocked": execution["blocked"],
+            "confidence": execution["confidence"],
+            "consensus": execution["consensus"],
+            "timestamp": execution["runtime"]["timestamp"],
+        }
