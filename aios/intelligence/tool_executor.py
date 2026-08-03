@@ -9,35 +9,65 @@ class ToolExecutor:
         capability_plan,
     ):
 
-        results = []
+        tool_results = []
 
-        for item in capability_plan:
+        for step in capability_plan:
+
+            server = step["server"]
+            tool = step["tool"]
 
             try:
 
-                output = await registry.call_tool(
-                    item["server"],
-                    item["tool"],
-                    {},
+                result = await registry.call_tool(
+                    server,
+                    tool,
+                    step.get(
+                        "arguments",
+                        {},
+                    ),
                 )
 
-                results.append({
-                    "server": item["server"],
-                    "tool": item["tool"],
-                    "success": True,
-                    "content": output,
-                })
+                tool_results.append(
+                    {
+                        "server": server,
+                        "tool": tool,
+                        "arguments": step.get(
+                            "arguments",
+                            {},
+                        ),
+                        "success": True,
+                        "content": result,
+                    }
+                )
 
             except Exception as exc:
 
-                results.append({
-                    "server": item["server"],
-                    "tool": item["tool"],
-                    "success": False,
-                    "error": str(exc),
-                })
+                tool_results.append(
+                    {
+                        "server": server,
+                        "tool": tool,
+                        "arguments": step.get(
+                            "arguments",
+                            {},
+                        ),
+                        "success": False,
+                        "error": str(exc),
+                    }
+                )
+
+        fused = EvidenceFusion().fuse(
+            tool_results
+        )
 
         return {
-            "tool_results": results,
-            "tool_evidence": EvidenceFusion().fuse(results),
+            "tool_results": tool_results,
+            "tool_evidence": fused,
+            "verified_sources": fused.get(
+                "sources",
+                {},
+            ),
+            "verified_count": fused.get(
+                "verified_count",
+                0,
+            ),
         }

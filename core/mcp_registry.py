@@ -363,6 +363,26 @@ class MCPRegistry:
         except RuntimeError:
             return asyncio.run(self.runtime_tools())
 
+
+    async def call_tool(
+        self,
+        server,
+        tool,
+        arguments=None,
+    ):
+
+        arguments = arguments or {}
+
+        runtime = self._runtime_servers[
+            server
+        ]
+
+        return await runtime.call_tool(
+            tool,
+            arguments,
+        )
+
+
         raise RuntimeError(
             "runtime_tools_sync() cannot be called from an active event loop. "
             "Use: await runtime_tools()."
