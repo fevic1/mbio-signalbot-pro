@@ -6,6 +6,7 @@ from aios.intelligence.evidence import (
     ReasoningEngine,
     IntelligencePlanner,
     ExplanationEngine,
+    IntelligenceCoordinator,
 )
 
 class ContextAssembler:
@@ -96,6 +97,12 @@ class ContextAssembler:
 
             report["plan"] = (
                 IntelligencePlanner().plan(
+                    evidence
+                )
+            )
+
+            report["coordinator"] = (
+                IntelligenceCoordinator().execute(
                     evidence
                 )
             )

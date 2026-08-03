@@ -523,3 +523,32 @@ class ExplanationEngine:
             "confidence": state["confidence"],
             "consensus": state["consensus"],
         }
+
+
+class IntelligenceCoordinator:
+
+    def execute(
+        self,
+        evidence,
+    ):
+
+        return {
+            "state": IntelligenceEngine().build_state(
+                evidence
+            ),
+            "reasoning": ReasoningEngine().analyze(
+                evidence
+            ),
+            "plan": IntelligencePlanner().plan(
+                evidence
+            ),
+            "decision": DecisionEngine().evaluate(
+                evidence
+            ),
+            "learning": EvidenceLearner().learn(
+                evidence
+            ),
+            "explanation": ExplanationEngine().explain(
+                evidence
+            ),
+        }
