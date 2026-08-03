@@ -1,4 +1,7 @@
-from aios.intelligence.evidence import EvidenceCollection
+from aios.intelligence.evidence import (
+    EvidenceCollection,
+    DecisionEngine,
+)
 
 class ContextAssembler:
 
@@ -55,6 +58,18 @@ class ContextAssembler:
             report["decision"] = (
                 evidence.decision_context()
             )
+
+            candidate = DecisionEngine().evaluate(
+                evidence
+            )
+
+            report["candidate"] = {
+                "action": candidate.action,
+                "confidence": candidate.confidence,
+                "rationale": candidate.rationale,
+                "evidence": candidate.evidence,
+                "constraints": candidate.constraints,
+            }
 
             report["evidence"] = (
                 evidence.as_prompt()

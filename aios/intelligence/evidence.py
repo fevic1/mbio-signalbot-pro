@@ -303,3 +303,48 @@ class EvidenceCollection:
             "overall_confidence": report["confidence"]["overall"],
             "consensus_score": report["confidence"]["consensus"]["score"],
         }
+
+
+from dataclasses import dataclass
+
+
+@dataclass(slots=True)
+class DecisionCandidate:
+
+    action: str
+    confidence: float
+    rationale: str
+    evidence: list
+    constraints: list
+
+
+class DecisionEngine:
+
+    def evaluate(
+        self,
+        evidence,
+    ):
+
+        ctx = evidence.decision_context()
+
+        confidence = ctx["overall_confidence"]
+
+        if confidence >= 0.90:
+            level = "high"
+
+        elif confidence >= 0.70:
+            level = "medium"
+
+        else:
+            level = "low"
+
+        return DecisionCandidate(
+            action="reason",
+            confidence=confidence,
+            rationale=f"{level} evidence confidence",
+            evidence=ctx["top_evidence"],
+            constraints=[
+                "verify_conflicts",
+                "respect_risk_policy",
+            ],
+        )
