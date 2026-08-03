@@ -162,3 +162,26 @@ class EvidenceCollection:
                 }
             ),
         }
+
+
+    def ranked(self):
+
+        self.normalize()
+
+        return sorted(
+            self._items,
+            key=lambda e: (
+                e.verified,
+                e.confidence,
+                e.freshness,
+            ),
+            reverse=True,
+        )
+
+
+    def top(
+        self,
+        limit=10,
+    ):
+
+        return self.ranked()[:limit]
