@@ -1,6 +1,7 @@
 from aios.intelligence.evidence import (
     EvidenceCollection,
     DecisionEngine,
+    EvidenceLearner,
 )
 
 class ContextAssembler:
@@ -70,6 +71,12 @@ class ContextAssembler:
                 "evidence": candidate.evidence,
                 "constraints": candidate.constraints,
             }
+
+            report["learning"] = (
+                EvidenceLearner().learn(
+                    evidence
+                )
+            )
 
             report["evidence"] = (
                 evidence.as_prompt()

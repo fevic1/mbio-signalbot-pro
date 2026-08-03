@@ -348,3 +348,49 @@ class DecisionEngine:
                 "respect_risk_policy",
             ],
         )
+
+
+from dataclasses import dataclass
+
+
+@dataclass(slots=True)
+class LearningSignal:
+
+    source: str
+    confidence: float
+    successful: bool
+    verified: bool
+
+
+class EvidenceLearner:
+
+    def learn(self, evidence):
+
+        report = evidence.intelligence_report()
+
+        signals = []
+
+        for item in evidence.top(100):
+
+            signals.append(
+                LearningSignal(
+                    source=item.source,
+                    confidence=item.confidence,
+                    successful=item.verified,
+                    verified=item.verified,
+                )
+            )
+
+        return {
+            "signals": [
+                {
+                    "source": s.source,
+                    "confidence": s.confidence,
+                    "successful": s.successful,
+                    "verified": s.verified,
+                }
+                for s in signals
+            ],
+            "sources": report["sources"],
+            "confidence": report["confidence"],
+        }
