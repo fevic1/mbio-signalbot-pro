@@ -394,3 +394,47 @@ class EvidenceLearner:
             "sources": report["sources"],
             "confidence": report["confidence"],
         }
+
+
+from dataclasses import dataclass, field
+
+
+@dataclass(slots=True)
+class IntelligenceState:
+
+    evidence_count: int = 0
+    verified_count: int = 0
+    confidence: float = 0.0
+    consensus: float = 0.0
+    sources: dict = field(default_factory=dict)
+    learning: dict = field(default_factory=dict)
+
+
+class IntelligenceEngine:
+
+    def build_state(
+        self,
+        evidence,
+    ):
+
+        report = evidence.intelligence_report()
+
+        state = IntelligenceState(
+            evidence_count=report["summary"]["count"],
+            verified_count=report["confidence"]["verified"],
+            confidence=report["confidence"]["overall"],
+            consensus=report["confidence"]["consensus"]["score"],
+            sources=report["sources"],
+            learning=EvidenceLearner().learn(
+                evidence
+            ),
+        )
+
+        return {
+            "evidence_count": state.evidence_count,
+            "verified_count": state.verified_count,
+            "confidence": state.confidence,
+            "consensus": state.consensus,
+            "sources": state.sources,
+            "learning": state.learning,
+        }

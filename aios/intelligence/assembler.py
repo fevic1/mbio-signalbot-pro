@@ -2,6 +2,7 @@ from aios.intelligence.evidence import (
     EvidenceCollection,
     DecisionEngine,
     EvidenceLearner,
+    IntelligenceEngine,
 )
 
 class ContextAssembler:
@@ -74,6 +75,12 @@ class ContextAssembler:
 
             report["learning"] = (
                 EvidenceLearner().learn(
+                    evidence
+                )
+            )
+
+            report["state"] = (
+                IntelligenceEngine().build_state(
                     evidence
                 )
             )
