@@ -601,3 +601,33 @@ class IntelligenceMemory:
             },
             "learning": runtime["learning"],
         }
+
+
+class IntelligenceVerifier:
+
+    def verify(
+        self,
+        runtime,
+    ):
+
+        state = runtime["state"]
+
+        passed = (
+            state["confidence"] >= 0.70
+            and state["consensus"] >= 0.60
+        )
+
+        return {
+            "passed": passed,
+            "confidence": state["confidence"],
+            "consensus": state["consensus"],
+            "verified": state["verified_count"],
+            "reasons": (
+                []
+                if passed
+                else [
+                    "low_confidence",
+                    "low_consensus",
+                ]
+            ),
+        }

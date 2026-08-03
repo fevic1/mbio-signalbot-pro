@@ -9,6 +9,7 @@ from aios.intelligence.evidence import (
     IntelligenceCoordinator,
     IntelligenceRuntime,
     IntelligenceMemory,
+    IntelligenceVerifier,
 )
 
 class ContextAssembler:
@@ -110,6 +111,12 @@ class ContextAssembler:
             report["runtime"] = runtime
             report["memory"] = (
                 IntelligenceMemory().snapshot(
+                    runtime
+                )
+            )
+
+            report["verification"] = (
+                IntelligenceVerifier().verify(
                     runtime
                 )
             )
