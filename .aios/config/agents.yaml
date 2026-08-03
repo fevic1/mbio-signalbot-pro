@@ -27,6 +27,9 @@ agents:
   devops:
     enabled: true
 
+  coder:
+    enabled: true
+
   qa:
     enabled: true
 

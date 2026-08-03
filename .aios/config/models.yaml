@@ -36,5 +36,9 @@ routing:
   research:
     provider: openrouter
 
+  coder:
+    provider: openrouter
+    model: moonshotai/kimi-k2:free
+
   fallback:
     provider: groq

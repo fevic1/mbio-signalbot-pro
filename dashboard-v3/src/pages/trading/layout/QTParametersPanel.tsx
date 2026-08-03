@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronDown, Search, Save, Play, BarChart3, TrendingUp } from 'lucide-react';
+import { ChevronDown, Search, Save, BarChart3, TrendingUp } from 'lucide-react';
 import { fetchWithAuth } from '@/lib/apiClient';
+import { QuickTicket } from '@/modules/trading/QuickTicket';
 
 interface QTParametersPanelProps {
   onDeploy?: () => void;
@@ -52,11 +53,7 @@ function FormField({ label, value, type = "text" }: { label: string; value: stri
   );
 }
 
-export function QTParametersPanel({ 
-  onDeploy, 
-  selectedAsset, 
-  onAssetSelect 
-}: QTParametersPanelProps) {
+export function QTParametersPanel({ selectedAsset, onAssetSelect }: QTParametersPanelProps) {
   const [availableAssets, setAvailableAssets] = useState<string[]>([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState(false);
 
@@ -175,13 +172,9 @@ export function QTParametersPanel({
             <BarChart3 className="h-3 w-3" />
             Backtest
           </button>
-          <button 
-            onClick={onDeploy}
-            className="flex-1 flex items-center justify-center gap-2 h-9 rounded bg-emerald-600 text-white hover:bg-emerald-700 transition-colors text-xs"
-          >
-            <Play className="h-3 w-3" />
-            Deploy
-          </button>
+          <div className="flex-1">
+            <QuickTicket initialAsset={selectedAsset} />
+          </div>
         </div>
       </div>
     </div>

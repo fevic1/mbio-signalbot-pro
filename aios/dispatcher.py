@@ -2,6 +2,47 @@ import logging
 import re
 from typing import Any, Dict, Tuple
 
+
+
+FAST_AGENT_RULES = {
+    "coder": (
+        "code","python","typescript","javascript","react","vue","fastapi",
+        "bug","fix","debug","refactor","compile","build","docker",
+        "sql","database","api","endpoint","ui","frontend","backend",
+        "dashboard","qt","grid","dca","trade","execution","patch"
+    ),
+    "research": (
+        "research","market","macro","bitcoin","btc","eth","sol",
+        "analysis","news","report","paper","whitepaper"
+    ),
+    "documentation": (
+        "document","docs","readme","markdown","wiki"
+    ),
+    "security": (
+        "security","cve","vulnerability","exploit","audit"
+    ),
+    "devops": (
+        "deploy","kubernetes","docker-compose","nginx","systemd","ci","cd"
+    ),
+    "reviewer": (
+        "review","pr","merge","approve"
+    ),
+}
+
+def fast_route(message: str):
+    msg = (message or "").lower()
+
+    best = "conversation"
+    score = 0
+
+    for agent, words in FAST_AGENT_RULES.items():
+        s = sum(1 for w in words if w in msg)
+        if s > score:
+            best = agent
+            score = s
+
+    return best
+
 from aios.capabilities.executor import CapabilityExecutor
 from aios.capabilities.request import CapabilityRequest
 from aios.intelligence.compact_context import CompactContextBuilder
@@ -173,23 +214,6 @@ class AIOSDispatcher:
                     capability = contextual_capability
 
         lowered_message = message.lower()
-        research_overrides = (
-            "look into",
-            "research",
-            "search",
-            "latest",
-            "news",
-            "etf",
-            "fund",
-        )
-
-        if any(
-            term in lowered_message
-            for term in research_overrides
-        ):
-            agent = "research"
-            capability = "research"
-
         context = await self._build_context(
             message,
             agent,
@@ -231,6 +255,8 @@ class AIOSDispatcher:
                         },
                     )
                 )
+
+        context.update(dispatch_context)
 
         request = CapabilityRequest(
             capability=capability,
@@ -387,9 +413,11 @@ class AIOSDispatcher:
                 ),
             )
 
+        context.update(dispatch_context)
+
         request = CapabilityRequest(
             capability="reasoning",
-            context={
+            context = {
                 "message": (
                     f"Interpret command: {command}"
                 )

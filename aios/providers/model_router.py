@@ -4,7 +4,7 @@ from .manager import provider_manager
 DEFAULT_MODELS = {
     "groq": "llama-3.1-8b-instant",
     "cerebras": "llama-4-scout-17b-16e-instruct",
-    "openrouter": "openai/gpt-oss-20b:free",
+    "openrouter": "moonshotai/kimi-k2:free",
     "anthropic": "claude-3-5-sonnet-latest",
 }
 

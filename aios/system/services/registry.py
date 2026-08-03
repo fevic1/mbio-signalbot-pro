@@ -16,6 +16,8 @@ from aios.audit.logger import (
     AuditLogger,
 )
 
+from aios.tools import ToolPlanner, ToolExecutor
+
 
 class AIOSServiceRegistry:
 
@@ -444,6 +446,23 @@ class AIOSServiceRegistry:
         )
 
 
+        model_registry.register(
+            LLMModel(
+                name="moonshotai/kimi-k2:free",
+                provider="openrouter",
+                capabilities=[
+                    "coding",
+                    "code_review",
+                    "refactoring",
+                    "debugging",
+                    "architecture",
+                ],
+                cost_level="low",
+                speed="fast",
+            )
+        )
+
+
         llm_router = LLMRouter(
             model_registry
         )
@@ -463,11 +482,9 @@ class AIOSServiceRegistry:
         #
         # AIOS Capability Bootstrap
         #
-
         from aios.capabilities.models import (
             Capability,
         )
-
 
         def bootstrap_capabilities(
             registry,
@@ -1165,6 +1182,14 @@ class AIOSServiceRegistry:
             mcp_registry,
         )
 
+
+        #
+        # Initialize runtime MCP registry
+        #
+        mcp_registry.load_yaml_registry()
+        mcp_registry.discover_servers()
+
+
         services[
             "mcp_registry"
         ] = mcp_registry
@@ -1174,6 +1199,13 @@ class AIOSServiceRegistry:
         services["mcp_client"] = InProcessMCPClient(
             mcp_registry,
             allowed_servers={"internet", "ipinfo", "tavily", "firecrawl"},
+        )
+
+
+        services["tool_planner"] = ToolPlanner()
+
+        services["tool_executor"] = ToolExecutor(
+            services["mcp_client"]
         )
 
 

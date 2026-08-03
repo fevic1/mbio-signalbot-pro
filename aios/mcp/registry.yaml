@@ -1,0 +1,127 @@
+servers:
+
+  knowledge_reader:
+    status: locked
+    version: "1.0.0"
+    category: knowledge
+
+
+  wikipedia:
+    status: locked
+    version: "1.0.0"
+    category: knowledge
+
+
+  dexscreener:
+    status: locked
+    version: "1.0.0"
+    category: market
+    capabilities:
+      - market_data
+      - liquidity
+      - pairs
+      - tokens
+      - trending
+
+
+  hyperliquid:
+    status: testing
+    version: "1.0.0"
+    category: exchange
+
+    capabilities:
+      - market_data
+      - execution
+      - account
+      - analytics
+
+    tools:
+      - hl_market_info
+      - hl_all_mids
+      - hl_orderbook
+      - hl_candles
+      - hl_funding
+      - hl_open_orders
+      - hl_positions
+      - hl_balances
+      - hl_place_order
+      - hl_cancel_order
+
+
+  coingecko:
+    status: locked
+    version: "1.0.0"
+    category: market
+
+    capabilities:
+      - market_data
+      - prices
+      - trending
+      - search
+      - global_market
+      - metadata
+
+    tools:
+      - cg_ping
+      - cg_trending
+      - cg_search
+      - cg_coin
+      - cg_markets
+      - cg_global
+
+
+  defillama:
+    status: locked
+    version: "1.0.0"
+    category: defi
+
+    capabilities:
+      - protocols
+      - tvl
+      - chains
+      - yields
+      - stablecoins
+      - analytics
+
+    tools:
+      - dl_protocols
+      - dl_protocol
+      - dl_chains
+      - dl_tvl
+      - dl_yields
+      - dl_stablecoins
+
+
+  firecrawl:
+    status: testing
+    version: "1.0.0"
+    category: research
+
+    capabilities:
+      - scrape
+      - crawl
+      - extract
+      - website_mapping
+
+    tools:
+      - fc_scrape
+      - fc_crawl
+      - fc_map
+      - fc_extract
+
+
+  tavily:
+    status: testing
+    version: "1.0.0"
+    category: research
+
+    capabilities:
+      - search
+      - web_search
+      - extraction
+      - citations
+      - research
+
+    tools:
+      - tv_search
+      - tv_extract

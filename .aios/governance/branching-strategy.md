@@ -1,14 +1,1 @@
-# branching strategy
-
-Status: Active
-
-## Purpose
-
-## Responsibilities
-
-## Policies
-
-## Required Validation
-
-## Audit Requirements
-
+PASTE_THE_MARKDOWN_HERE_EXACTLY
