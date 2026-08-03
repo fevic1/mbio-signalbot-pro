@@ -285,3 +285,21 @@ class EvidenceCollection:
                 for item in self.top(10)
             ],
         }
+
+
+    def decision_context(self):
+
+        report = self.intelligence_report()
+
+        return {
+            "confidence": report["confidence"],
+            "sources": report["sources"],
+            "summary": report["summary"],
+            "top_evidence": report["top"],
+            "recommended_sources": [
+                source
+                for source in report["sources"]
+            ][:5],
+            "overall_confidence": report["confidence"]["overall"],
+            "consensus_score": report["confidence"]["consensus"]["score"],
+        }

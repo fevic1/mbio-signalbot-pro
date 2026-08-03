@@ -52,6 +52,10 @@ class ContextAssembler:
 
             report = evidence.intelligence_report()
 
+            report["decision"] = (
+                evidence.decision_context()
+            )
+
             report["evidence"] = (
                 evidence.as_prompt()
             )
