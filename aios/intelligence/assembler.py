@@ -3,6 +3,7 @@ from aios.intelligence.evidence import (
     DecisionEngine,
     EvidenceLearner,
     IntelligenceEngine,
+    ReasoningEngine,
 )
 
 class ContextAssembler:
@@ -81,6 +82,12 @@ class ContextAssembler:
 
             report["state"] = (
                 IntelligenceEngine().build_state(
+                    evidence
+                )
+            )
+
+            report["reasoning"] = (
+                ReasoningEngine().analyze(
                     evidence
                 )
             )

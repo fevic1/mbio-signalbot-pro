@@ -438,3 +438,31 @@ class IntelligenceEngine:
             "sources": state.sources,
             "learning": state.learning,
         }
+
+
+class ReasoningEngine:
+
+    def analyze(
+        self,
+        evidence,
+    ):
+
+        state = IntelligenceEngine().build_state(
+            evidence
+        )
+
+        decision = DecisionEngine().evaluate(
+            evidence
+        )
+
+        return {
+            "confidence": state["confidence"],
+            "consensus": state["consensus"],
+            "decision": {
+                "action": decision.action,
+                "confidence": decision.confidence,
+                "rationale": decision.rationale,
+            },
+            "learning": state["learning"],
+            "sources": state["sources"],
+        }
