@@ -722,3 +722,48 @@ class IntelligenceAudit:
             "consensus": execution["consensus"],
             "timestamp": execution["runtime"]["timestamp"],
         }
+
+
+class IntelligenceOrchestrator:
+
+    def run(
+        self,
+        evidence,
+    ):
+
+        execution = IntelligenceExecutor().execute(
+            evidence
+        )
+
+        audit = IntelligenceAudit().record(
+            execution
+        )
+
+        return {
+            "execution": execution,
+            "audit": audit,
+            "approved": execution["approved"],
+            "blocked": execution["blocked"],
+            "snapshot": execution["snapshot"],
+            "runtime": execution["runtime"],
+        }
+
+
+class IntelligenceMetrics:
+
+    def collect(
+        self,
+        orchestrator,
+    ):
+
+        runtime = orchestrator["runtime"]
+        state = runtime["state"]
+
+        return {
+            "confidence": state["confidence"],
+            "consensus": state["consensus"],
+            "verified": state["verified_count"],
+            "sources": len(state["sources"]),
+            "approved": orchestrator["approved"],
+            "blocked": orchestrator["blocked"],
+        }

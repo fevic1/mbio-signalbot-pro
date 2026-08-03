@@ -14,6 +14,8 @@ from aios.intelligence.evidence import (
     IntelligenceSnapshot,
     IntelligenceExecutor,
     IntelligenceAudit,
+    IntelligenceOrchestrator,
+    IntelligenceMetrics,
 )
 
 class ContextAssembler:
@@ -148,6 +150,20 @@ class ContextAssembler:
             report["audit"] = (
                 IntelligenceAudit().record(
                     execution
+                )
+            )
+
+            orchestrator = (
+                IntelligenceOrchestrator().run(
+                    evidence
+                )
+            )
+
+            report["orchestrator"] = orchestrator
+
+            report["metrics"] = (
+                IntelligenceMetrics().collect(
+                    orchestrator
                 )
             )
             report["coordinator"] = runtime["pipeline"]
