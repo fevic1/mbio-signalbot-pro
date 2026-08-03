@@ -1,4 +1,5 @@
 from aios.intelligence.capability_planner import CapabilityPlanner
+from aios.intelligence.tool_executor import ToolExecutor
 
 from aios.intelligence.evidence import (
     EvidenceCollection,
@@ -234,4 +235,5 @@ class ContextAssembler:
             "skill_registry": getattr(system, "skill_registry", None),
             "capability_registry": getattr(system, "capability_registry", None),
             "capability_plan": capability_plan,
+            "tool_executor": ToolExecutor(),
         }

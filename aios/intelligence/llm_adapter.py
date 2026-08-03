@@ -19,7 +19,9 @@ class LLMAdapter:
         capability,
         request,
     ):
+        
         context = self.assembler.assemble(
+
             self.system,
             capability,
             request,
