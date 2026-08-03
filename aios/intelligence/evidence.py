@@ -466,3 +466,60 @@ class ReasoningEngine:
             "learning": state["learning"],
             "sources": state["sources"],
         }
+
+
+class IntelligencePlanner:
+
+    def plan(
+        self,
+        evidence,
+    ):
+
+        reasoning = ReasoningEngine().analyze(
+            evidence
+        )
+
+        decision = reasoning["decision"]
+
+        return {
+            "goal": decision["action"],
+            "priority": (
+                "high"
+                if decision["confidence"] >= 0.90
+                else "medium"
+                if decision["confidence"] >= 0.70
+                else "low"
+            ),
+            "confidence": decision["confidence"],
+            "steps": [
+                "collect_evidence",
+                "verify_sources",
+                "evaluate_consensus",
+                "generate_decision",
+            ],
+        }
+
+
+class ExplanationEngine:
+
+    def explain(
+        self,
+        evidence,
+    ):
+
+        planner = IntelligencePlanner().plan(
+            evidence
+        )
+
+        state = IntelligenceEngine().build_state(
+            evidence
+        )
+
+        return {
+            "summary":
+                f"{state['verified_count']} verified evidence "
+                f"from {len(state['sources'])} sources.",
+            "planner": planner,
+            "confidence": state["confidence"],
+            "consensus": state["consensus"],
+        }
