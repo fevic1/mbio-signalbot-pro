@@ -88,6 +88,23 @@ class PromptBuilder:
             or ""
         ).strip()
 
+
+        evidence_summary = context.get(
+            "evidence_summary",
+            [],
+        )
+
+        if evidence_summary:
+            message += (
+                "\n\nVERIFIED EVIDENCE\n"
+                + json.dumps(
+                    evidence_summary,
+                    ensure_ascii=False,
+                    indent=2,
+                    default=str,
+                )
+            )
+
         if metadata.get("aios_mode") in {
             "council_deliberation",
             "council_synthesis",

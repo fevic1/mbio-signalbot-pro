@@ -25,6 +25,18 @@ class LLMAdapter:
             request,
         )
 
+        if (
+            context.get("evidence_summary")
+            and isinstance(
+                context.get("context"),
+                dict,
+            )
+        ):
+            context["context"].setdefault(
+                "evidence_summary",
+                context["evidence_summary"],
+            )
+
         return self.prompt_builder.build(
             capability,
             context,

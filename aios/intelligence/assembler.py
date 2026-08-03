@@ -1,3 +1,5 @@
+from aios.intelligence.evidence import EvidenceCollection
+
 class ContextAssembler:
 
     def assemble(
@@ -37,8 +39,29 @@ class ContextAssembler:
                 )
             ) if execution else {}
 
+        evidence = metadata.get("evidence")
+
+        if evidence is None:
+            evidence = EvidenceCollection()
+
+        if isinstance(
+            evidence,
+            EvidenceCollection,
+        ):
+            evidence.normalize()
+
+            evidence_summary = {
+                "summary": evidence.summary(),
+                "evidence": evidence.as_prompt(),
+            }
+
+        else:
+            evidence_summary = {}
+
         return {
             "capability": capability,
+            "evidence": evidence,
+            "evidence_summary": evidence_summary,
             "permission": request.permission,
             "retry_limit": request.retry_limit,
             "execution": execution,
