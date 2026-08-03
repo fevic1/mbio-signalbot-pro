@@ -250,30 +250,65 @@ class MCPRegistry:
 
         self._runtime_servers = discovered
 
-        #
-        # Register runtime tools
-        #
+        return discovered
+
+
+    async def register_runtime_tools_async(self):
+
         self._tools = {}
+
+        for server_name, server in self._runtime_servers.items():
+
+            self._tools[server_name] = {}
+
+            try:
+
+                server_tools = await server.list_tools()
+
+                for tool in server_tools:
+
+                    tool_name = tool["name"]
+
+                    async def _call(
+                        arguments=None,
+                        *,
+                        _server=server,
+                        _tool=tool_name,
+                    ):
+                        return await _server.call_tool(
+                            _tool,
+                            arguments or {},
+                        )
+
+                    self._tools[server_name][tool_name] = _call
+
+            except Exception as exc:
+
+                print(
+                    f"[MCP] Failed registering tools for "
+                    f"{server_name}: {exc}"
+                )
+
+
+    def register_runtime_tools(self):
 
         import asyncio
 
-        for server_name, server in discovered.items():
+        try:
+            asyncio.get_running_loop()
 
-            try:
-                tools = asyncio.run(server.list_tools())
+        except RuntimeError:
 
-                self._tools[server_name] = {}
+            return asyncio.run(
+                self.register_runtime_tools_async()
+            )
 
-                for tool in tools:
-                    self._tools[server_name][tool["name"]] = (
-                        lambda _tool=tool, _server=server:
-                            _server.call_tool
-                    )
+        raise RuntimeError(
+            "register_runtime_tools() called from an active event loop. "
+            "Use await register_runtime_tools_async()."
+        )
 
-            except Exception as exc:
-                print(f"[MCP] Failed registering tools for {server_name}: {exc}")
 
-        return discovered
 
 
     def register_runtime_server(
@@ -296,11 +331,6 @@ class MCPRegistry:
         )
 
 
-    def runtime_tools(self):
-
-        import asyncio
-
-        
     async def runtime_tools(self):
 
         tools = []
@@ -328,9 +358,16 @@ class MCPRegistry:
 
         import asyncio
 
-        return asyncio.run(
-            self.runtime_tools()
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.runtime_tools())
+
+        raise RuntimeError(
+            "runtime_tools_sync() cannot be called from an active event loop. "
+            "Use: await runtime_tools()."
         )
+
 
 
 mcp_registry = MCPRegistry()

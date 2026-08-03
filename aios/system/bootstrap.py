@@ -9,6 +9,9 @@ from aios.integrity.memory import MemoryGuard
 
 
 
+from core.mcp_registry import mcp_registry
+
+
 class AIOSBootstrap:
 
 
@@ -22,7 +25,23 @@ class AIOSBootstrap:
         return self.initialize()
 
 
-    def initialize(self):
+
+    async def initialize_async(self):
+
+        from core.mcp_registry import mcp_registry
+
+        mcp_registry.discover_servers()
+        await mcp_registry.register_runtime_tools_async()
+
+        self.container.register(
+            "mcp_registry",
+            mcp_registry,
+        )
+
+        return self.initialize(skip_mcp=True)
+
+
+    def initialize(self, skip_mcp=False):
 
         integrity = IntegrityHealth(
             [
@@ -53,6 +72,15 @@ class AIOSBootstrap:
 
         registry = AIOSServiceRegistry()
 
+        if not skip_mcp:
+
+            mcp_registry.discover_servers()
+            mcp_registry.register_runtime_tools()
+
+            self.container.register(
+                "mcp_registry",
+                mcp_registry,
+            )
 
         services = registry.build_core(self.container)
 
