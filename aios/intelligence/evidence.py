@@ -552,3 +552,28 @@ class IntelligenceCoordinator:
                 evidence
             ),
         }
+
+
+class IntelligenceRuntime:
+
+    def execute(
+        self,
+        evidence,
+    ):
+
+        coordinator = IntelligenceCoordinator().execute(
+            evidence
+        )
+
+        return {
+            "timestamp": __import__("datetime").datetime.now(
+                __import__("datetime").UTC
+            ).isoformat(),
+            "pipeline": coordinator,
+            "decision": coordinator["decision"],
+            "reasoning": coordinator["reasoning"],
+            "plan": coordinator["plan"],
+            "learning": coordinator["learning"],
+            "state": coordinator["state"],
+            "explanation": coordinator["explanation"],
+        }

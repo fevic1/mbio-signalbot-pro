@@ -7,6 +7,7 @@ from aios.intelligence.evidence import (
     IntelligencePlanner,
     ExplanationEngine,
     IntelligenceCoordinator,
+    IntelligenceRuntime,
 )
 
 class ContextAssembler:
@@ -101,17 +102,18 @@ class ContextAssembler:
                 )
             )
 
-            report["coordinator"] = (
-                IntelligenceCoordinator().execute(
-                    evidence
-                )
+            runtime = IntelligenceRuntime().execute(
+                evidence
             )
 
-            report["explanation"] = (
-                ExplanationEngine().explain(
-                    evidence
-                )
-            )
+            report["runtime"] = runtime
+            report["coordinator"] = runtime["pipeline"]
+            report["decision"] = runtime["decision"]
+            report["reasoning"] = runtime["reasoning"]
+            report["plan"] = runtime["plan"]
+            report["learning"] = runtime["learning"]
+            report["state"] = runtime["state"]
+            report["explanation"] = runtime["explanation"]
 
             report["evidence"] = (
                 evidence.as_prompt()
