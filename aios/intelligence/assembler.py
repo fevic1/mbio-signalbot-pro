@@ -1,3 +1,5 @@
+from aios.intelligence.capability_planner import CapabilityPlanner
+
 from aios.intelligence.evidence import (
     EvidenceCollection,
     DecisionEngine,
@@ -183,6 +185,39 @@ class ContextAssembler:
         else:
             evidence_summary = {}
 
+
+        capability_plan = []
+
+        registry = getattr(
+            system,
+            "mcp_registry",
+            None,
+        )
+
+        if registry:
+
+            try:
+
+                capability_plan = [
+                    vars(x)
+                    for x in CapabilityPlanner().select(
+                        registry,
+                        getattr(
+                            request,
+                            "prompt",
+                            getattr(
+                                request,
+                                "input",
+                                "",
+                            ),
+                        ),
+                    )
+                ]
+
+            except Exception:
+
+                capability_plan = []
+
         return {
             "capability": capability,
             "evidence": evidence,
@@ -198,4 +233,5 @@ class ContextAssembler:
             "decision_policy": getattr(system, "decision_policy", None),
             "skill_registry": getattr(system, "skill_registry", None),
             "capability_registry": getattr(system, "capability_registry", None),
+            "capability_plan": capability_plan,
         }
