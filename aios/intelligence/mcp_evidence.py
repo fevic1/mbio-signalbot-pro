@@ -1,43 +1,40 @@
-from aios.intelligence.evidence_fusion import EvidenceFusion
+import asyncio
 
 
-class ToolExecutor:
+class MCPEvidenceCollector:
 
-    async def execute(
+    async def collect(
         self,
         registry,
         capability_plan,
     ):
 
-        results = []
+        evidence = []
 
         for item in capability_plan:
 
             try:
 
-                output = await registry.call_tool(
+                result = await registry.call_tool(
                     item["server"],
                     item["tool"],
                     {},
                 )
 
-                results.append({
+                evidence.append({
                     "server": item["server"],
                     "tool": item["tool"],
                     "success": True,
-                    "content": output,
+                    "content": result,
                 })
 
             except Exception as exc:
 
-                results.append({
+                evidence.append({
                     "server": item["server"],
                     "tool": item["tool"],
                     "success": False,
                     "error": str(exc),
                 })
 
-        return {
-            "tool_results": results,
-            "tool_evidence": EvidenceFusion().fuse(results),
-        }
+        return evidence

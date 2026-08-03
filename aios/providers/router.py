@@ -96,7 +96,7 @@ async def chat(
             last_error = exc
 
     if last_error:
-        return {'success': False, 'reason': str(
+        raise RuntimeError(
             f"Provider failures: {last_error}"
         ) from last_error
 
