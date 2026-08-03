@@ -631,3 +631,53 @@ class IntelligenceVerifier:
                 ]
             ),
         }
+
+
+class IntelligenceGovernor:
+
+    def evaluate(
+        self,
+        runtime,
+    ):
+
+        verification = IntelligenceVerifier().verify(
+            runtime
+        )
+
+        decision = runtime["decision"]
+
+        return {
+            "approved": verification["passed"],
+            "blocked": not verification["passed"],
+            "decision": {
+                "action": decision.action,
+                "confidence": decision.confidence,
+                "rationale": decision.rationale,
+            },
+            "verification": verification,
+        }
+
+
+class IntelligenceSnapshot:
+
+    def build(
+        self,
+        runtime,
+    ):
+
+        governor = IntelligenceGovernor().evaluate(
+            runtime
+        )
+
+        return {
+            "timestamp": runtime["timestamp"],
+            "state": runtime["state"],
+            "reasoning": runtime["reasoning"],
+            "plan": runtime["plan"],
+            "learning": runtime["learning"],
+            "memory": IntelligenceMemory().snapshot(
+                runtime
+            ),
+            "verification": governor["verification"],
+            "governance": governor,
+        }

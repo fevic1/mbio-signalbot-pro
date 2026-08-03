@@ -10,6 +10,8 @@ from aios.intelligence.evidence import (
     IntelligenceRuntime,
     IntelligenceMemory,
     IntelligenceVerifier,
+    IntelligenceGovernor,
+    IntelligenceSnapshot,
 )
 
 class ContextAssembler:
@@ -117,6 +119,18 @@ class ContextAssembler:
 
             report["verification"] = (
                 IntelligenceVerifier().verify(
+                    runtime
+                )
+            )
+
+            report["governance"] = (
+                IntelligenceGovernor().evaluate(
+                    runtime
+                )
+            )
+
+            report["snapshot"] = (
+                IntelligenceSnapshot().build(
                     runtime
                 )
             )
