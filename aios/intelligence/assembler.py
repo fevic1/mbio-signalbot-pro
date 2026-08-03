@@ -8,6 +8,7 @@ from aios.intelligence.evidence import (
     ExplanationEngine,
     IntelligenceCoordinator,
     IntelligenceRuntime,
+    IntelligenceMemory,
 )
 
 class ContextAssembler:
@@ -107,6 +108,11 @@ class ContextAssembler:
             )
 
             report["runtime"] = runtime
+            report["memory"] = (
+                IntelligenceMemory().snapshot(
+                    runtime
+                )
+            )
             report["coordinator"] = runtime["pipeline"]
             report["decision"] = runtime["decision"]
             report["reasoning"] = runtime["reasoning"]

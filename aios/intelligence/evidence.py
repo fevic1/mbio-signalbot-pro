@@ -577,3 +577,27 @@ class IntelligenceRuntime:
             "state": coordinator["state"],
             "explanation": coordinator["explanation"],
         }
+
+
+class IntelligenceMemory:
+
+    def snapshot(
+        self,
+        runtime,
+    ):
+
+        pipeline = runtime["pipeline"]
+
+        return {
+            "timestamp": runtime["timestamp"],
+            "confidence": runtime["state"]["confidence"],
+            "consensus": runtime["state"]["consensus"],
+            "verified": runtime["state"]["verified_count"],
+            "sources": runtime["state"]["sources"],
+            "decision": {
+                "action": pipeline["decision"].action,
+                "confidence": pipeline["decision"].confidence,
+                "rationale": pipeline["decision"].rationale,
+            },
+            "learning": runtime["learning"],
+        }
