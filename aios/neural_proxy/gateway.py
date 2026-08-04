@@ -186,6 +186,13 @@ class NeuralProxyGateway:
 
         verification = VerificationEngine().verify(response)
 
+        health = ProviderHealthEngine().update(
+            provider=response.provider,
+            success=verification.passed,
+            latency=timer.latency.provider,
+            cost=estimated_cost,
+        )
+
         learning_record = LearningEngine().record(
             AIOSResponse(
                 provider=response.provider,
@@ -208,6 +215,7 @@ class NeuralProxyGateway:
                 verification_report=verification.report,
                 metadata={
                 "learning_record": learning_record,
+                "provider_health": health,
                     "capability":request.capability,
                 },
             )
@@ -243,6 +251,7 @@ class NeuralProxyGateway:
             },
             metadata={
                 "learning_record": learning_record,
+                "provider_health": health,
                 "capability": request.capability,
                 "raw": response.raw,
             },
