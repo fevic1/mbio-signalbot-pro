@@ -121,6 +121,10 @@ class ContextCompiler:
             self._compiler_manifest(plan)
         )
 
+        plan.metadata["provider_selection"] = (
+            self._provider_selection(plan)
+        )
+
         return plan
 
         return plan
@@ -261,6 +265,42 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _provider_selection(
+        self,
+        plan,
+    ):
+        hints = plan.provider_hints
+
+        if hints.preferred_provider:
+            return {
+                "provider": hints.preferred_provider,
+                "model": hints.preferred_model,
+                "reason": "compiler_hint",
+            }
+
+        if hints.prefers_reasoning:
+            return {
+                "provider": "anthropic",
+                "model": hints.preferred_model,
+                "reason": "reasoning",
+            }
+
+        if hints.prefers_speed:
+            return {
+                "provider": "groq",
+                "model": hints.preferred_model,
+                "reason": "speed",
+            }
+
+        return {
+            "provider": "deepseek",
+            "model": hints.preferred_model,
+            "reason": "balanced",
+        }
 
 
     def _compiler_manifest(
