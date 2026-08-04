@@ -186,6 +186,33 @@ class NeuralProxyGateway:
 
         verification = VerificationEngine().verify(response)
 
+        learning_record = LearningEngine().record(
+            AIOSResponse(
+                provider=response.provider,
+                model=response.model,
+                content=response.content,
+                prompt_tokens=getattr(response,"prompt_tokens",0),
+                completion_tokens=getattr(response,"completion_tokens",0),
+                total_tokens=getattr(response,"total_tokens",0),
+                latency=getattr(response,"latency",timer.latency.provider),
+                compiler_latency=0.0,
+                provider_latency=timer.latency.provider,
+                tool_latency=0.0,
+                verification_latency=0.0,
+                total_latency=timer.latency.provider,
+                estimated_cost=estimated_cost,
+                prompt_cost=prompt_cost,
+                completion_cost=completion_cost,
+                verification_score=verification.score,
+                verification_passed=verification.passed,
+                verification_report=verification.report,
+                metadata={
+                "learning_record": learning_record,
+                    "capability":request.capability,
+                },
+            )
+        )
+
         return AIOSResponse(
             provider=response.provider,
             model=response.model,
@@ -215,6 +242,7 @@ class NeuralProxyGateway:
                 "selected_model": response.model,
             },
             metadata={
+                "learning_record": learning_record,
                 "capability": request.capability,
                 "raw": response.raw,
             },
