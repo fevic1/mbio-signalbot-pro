@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -28,10 +29,27 @@ class Priority(str, Enum):
     CRITICAL = "critical"
 
 
+class SourceType(str, Enum):
+    MCP = "mcp"
+    EXCHANGE = "exchange"
+    NEWS = "news"
+    ONCHAIN = "onchain"
+    INTERNAL = "internal"
+
+
+class RiskLevel(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    EXTREME = "extreme"
+
+
 # Layer 1: Data Collection Output
 @dataclass(slots=True, frozen=True)
 class RawEvidence:
+    evidence_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     source: str
+    source_type: SourceType
     asset: str
     category: EvidenceCategory
     data: Dict[str, Any]
@@ -41,11 +59,14 @@ class RawEvidence:
 # Layer 2: Verification Output
 @dataclass(slots=True, frozen=True)
 class VerifiedEvidence:
+    evidence_id: str
     source: str
+    source_type: SourceType
     asset: str
     category: EvidenceCategory
     data: Dict[str, Any]
     timestamp: datetime
+    verified_at: datetime
     freshness_score: float  # 0.0 to 1.0
     source_confidence: float  # 0.0 to 1.0
     is_duplicate: bool = False
@@ -88,6 +109,7 @@ class IntelligenceReport:
     what_changed: str
     evidence: List[IntelligenceEvidence]
     score: IntelligenceScore
-    risk_profile: str
+    risk_level: RiskLevel
     suggested_actions: List[str]
     generated_at: datetime
+    evidence_count: int = 0
