@@ -79,7 +79,7 @@ class DataIngestor:
     def _infer_memory_type(source: Any) -> DataType:
         """Infers DataType from Python object type."""
         if isinstance(source, list):
-            return DataType.CSV # Treat list of dicts as tabular data
+            return DataType.MEMORY
         if isinstance(source, dict):
             return DataType.JSON
         if isinstance(source, str):

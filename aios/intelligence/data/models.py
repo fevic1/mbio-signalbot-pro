@@ -16,6 +16,7 @@ class DataType(str, Enum):
     MARKET_DATA = "market_data"
     PORTFOLIO = "portfolio"
     PERFORMANCE = "performance"
+    MEMORY = "memory"
 
 
 class AnalysisType(str, Enum):
