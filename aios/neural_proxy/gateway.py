@@ -193,6 +193,36 @@ class NeuralProxyGateway:
             cost=estimated_cost,
         )
 
+        route_decision = AdaptiveProviderRouter().choose(
+            execution_plan=getattr(
+                request,
+                "execution_plan",
+                type(
+                    "Plan",
+                    (),
+                    {
+                        "metadata":{
+                            "provider_fallback_chain":
+                            response.route_metadata.get(
+                                "provider_order",
+                                [],
+                            )
+                        }
+                    },
+                )(),
+            ),
+            provider_health={
+                response.provider: health,
+            },
+        )
+
+        health = ProviderHealthEngine().update(
+            provider=response.provider,
+            success=verification.passed,
+            latency=timer.latency.provider,
+            cost=estimated_cost,
+        )
+
         learning_record = LearningEngine().record(
             AIOSResponse(
                 provider=response.provider,
@@ -216,6 +246,10 @@ class NeuralProxyGateway:
                 metadata={
                 "learning_record": learning_record,
                 "provider_health": health,
+                "adaptive_route": {
+                    "provider": route_decision.provider,
+                    "score": route_decision.score,
+                },
                     "capability":request.capability,
                 },
             )
@@ -252,6 +286,10 @@ class NeuralProxyGateway:
             metadata={
                 "learning_record": learning_record,
                 "provider_health": health,
+                "adaptive_route": {
+                    "provider": route_decision.provider,
+                    "score": route_decision.score,
+                },
                 "capability": request.capability,
                 "raw": response.raw,
             },
