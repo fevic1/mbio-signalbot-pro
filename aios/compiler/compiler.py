@@ -109,6 +109,10 @@ class ContextCompiler:
             self._runtime_contract(plan)
         )
 
+        plan.metadata["compiler_health"] = (
+            self._compiler_health(plan)
+        )
+
         return plan
 
         return plan
@@ -243,6 +247,45 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _compiler_health(
+        self,
+        plan,
+    ):
+        diagnostics = plan.metadata.get(
+            "compiler_diagnostics",
+            {},
+        )
+
+        readiness = plan.metadata.get(
+            "execution_readiness",
+            0,
+        )
+
+        quality = plan.metadata.get(
+            "execution_quality",
+            0,
+        )
+
+        route = plan.metadata.get(
+            "route_score",
+            0,
+        )
+
+        return {
+            "healthy": (
+                readiness >= 90 and
+                quality >= 90 and
+                route >= 80
+            ),
+            "readiness": readiness,
+            "quality": quality,
+            "route_score": route,
+            "diagnostics": diagnostics,
+        }
 
 
     def _runtime_contract(
