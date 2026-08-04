@@ -79,6 +79,9 @@ class NeuralProxyGateway:
                 adapter = NativeProviderAdapter()
 
 
+        timer = ExecutionTimer()
+        timer.start("provider")
+
         provider_request = (
             adapter
             .translate_request(
@@ -173,6 +176,8 @@ class NeuralProxyGateway:
                 )
             )
 
+        timer.stop("provider")
+
         return AIOSResponse(
             provider=response.provider,
             model=response.model,
@@ -180,7 +185,7 @@ class NeuralProxyGateway:
             prompt_tokens=getattr(response, "prompt_tokens", 0),
             completion_tokens=getattr(response, "completion_tokens", 0),
             total_tokens=getattr(response, "total_tokens", 0),
-            latency=getattr(response, "latency", 0.0),
+            latency=getattr(response, "latency", timer.latency.provider),
             cost=getattr(response, "cost", 0.0),
             route_metadata={
                 "provider_order": __import__("os").getenv(
