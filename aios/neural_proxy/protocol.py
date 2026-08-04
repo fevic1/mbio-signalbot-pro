@@ -33,6 +33,20 @@ class AIOSResponse:
 
     content: Any
 
+    prompt_tokens: int = 0
+
+    completion_tokens: int = 0
+
+    total_tokens: int = 0
+
+    latency: float = 0.0
+
+    cost: float = 0.0
+
+    route_metadata: dict[str, Any] = field(
+        default_factory=dict
+    )
+
     metadata: dict[str, Any] = field(
         default_factory=dict
     )
