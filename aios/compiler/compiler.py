@@ -17,6 +17,37 @@ class ContextCompiler:
 
 
 
+
+
+    def _build_route_metadata(
+        self,
+        capability,
+        provider_hints,
+        token_budget,
+    ):
+        return {
+            "compiler": "ContextCompiler",
+            "compiler_version": "2.0",
+            "capability": capability,
+            "estimated_prompt_tokens":
+                token_budget.estimated_prompt_tokens,
+            "max_prompt_tokens":
+                token_budget.max_prompt_tokens,
+            "max_completion_tokens":
+                token_budget.max_completion_tokens,
+            "reserve_tokens":
+                token_budget.reserve_tokens,
+            "prefers_speed":
+                provider_hints.prefers_speed,
+            "prefers_reasoning":
+                provider_hints.prefers_reasoning,
+            "preferred_provider":
+                provider_hints.preferred_provider,
+            "preferred_model":
+                provider_hints.preferred_model,
+        }
+
+
     def _build_evidence_bundle(
         self,
         metadata,
