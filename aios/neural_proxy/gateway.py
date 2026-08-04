@@ -184,6 +184,8 @@ class NeuralProxyGateway:
             getattr(response, "completion_tokens", 0),
         )
 
+        verification = VerificationEngine().verify(response)
+
         return AIOSResponse(
             provider=response.provider,
             model=response.model,
@@ -201,6 +203,9 @@ class NeuralProxyGateway:
             estimated_cost=estimated_cost,
             prompt_cost=prompt_cost,
             completion_cost=completion_cost,
+            verification_score=verification.score,
+            verification_passed=verification.passed,
+            verification_report=verification.report,
             route_metadata={
                 "provider_order": __import__("os").getenv(
                     "AIOS_PROVIDER_ORDER",
