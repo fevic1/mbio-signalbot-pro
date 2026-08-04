@@ -15,6 +15,24 @@ class ContextCompiler:
 
 
 
+
+
+    def _build_evidence_bundle(
+        self,
+        metadata,
+    ):
+        metadata = metadata or {}
+
+        return EvidenceBundle(
+            tools_called=tuple(
+                metadata.get("tool_plan", ())
+            ),
+            sources=tuple(
+                metadata.get("tool_results", ())
+            ),
+        )
+
+
     def _build_provider_hints(
         self,
         capability,
