@@ -2,6 +2,7 @@ import logging
 
 from aios.intelligence.capability_planner import CapabilityPlanner
 from aios.intelligence.tool_executor import ToolExecutor
+from aios.capabilities.errors import CapabilityExecutionError
 
 from aios.intelligence.evidence import (
     EvidenceCollection,
@@ -248,12 +249,16 @@ class ContextAssembler:
                             evidence.intelligence_report()
                         )
 
-            except Exception as exc:
+            except CapabilityExecutionError as exc:
 
                 logger.warning(
-                    "Capability planner failed; degrading to llm_only: %s",
+                    "Capability planner unavailable; falling back to llm_only: %s",
                     exc,
                 )
+
+            except Exception:
+
+                raise
 
         return {
             "capability": capability,

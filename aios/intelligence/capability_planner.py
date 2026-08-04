@@ -102,12 +102,12 @@ class ParameterPlanner:
         schema = await registry.get_tool_schema_async(server, tool)
         
         if not schema:
-            return {"query": str(request)}
+            return {}
 
         properties = schema.get("inputSchema", {}).get("properties", {})
         
         if not properties:
-            return {"query": str(request)}
+            return {}
 
         request = str(request)
 
@@ -141,4 +141,4 @@ class ParameterPlanner:
                 if words:
                     args[name] = words[-1].upper()
 
-        return args or {"query": request}
+        return args
