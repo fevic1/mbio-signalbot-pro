@@ -193,6 +193,7 @@ class NeuralProxyGateway:
 
         verification = VerificationEngine().verify(response)
 
+        
         health = ProviderHealthEngine().update(
             provider=response.provider,
             success=verification.passed,
@@ -208,12 +209,12 @@ class NeuralProxyGateway:
                     "Plan",
                     (),
                     {
-                        "metadata":{
-                            "provider_fallback_chain":
-                            response.route_metadata.get(
+                        "metadata": {
+                            "provider_fallback_chain": response.route_metadata.get(
                                 "provider_order",
-                                [],
-                            )
+                                []
+                            ),
+                            "selected_provider": response.provider,
                         }
                     },
                 )(),
@@ -223,22 +224,15 @@ class NeuralProxyGateway:
             },
         )
 
-        health = ProviderHealthEngine().update(
-            provider=response.provider,
-            success=verification.passed,
-            latency=timer.latency.provider,
-            cost=estimated_cost,
-        )
-
         learning_record = LearningEngine().record(
             AIOSResponse(
                 provider=response.provider,
                 model=response.model,
                 content=response.content,
-                prompt_tokens=getattr(response,"prompt_tokens",0),
-                completion_tokens=getattr(response,"completion_tokens",0),
-                total_tokens=getattr(response,"total_tokens",0),
-                latency=getattr(response,"latency",timer.latency.provider),
+                prompt_tokens=getattr(response, "prompt_tokens", 0),
+                completion_tokens=getattr(response, "completion_tokens", 0),
+                total_tokens=getattr(response, "total_tokens", 0),
+                latency=getattr(response, "latency", timer.latency.provider),
                 compiler_latency=0.0,
                 provider_latency=timer.latency.provider,
                 tool_latency=0.0,
@@ -250,14 +244,9 @@ class NeuralProxyGateway:
                 verification_score=verification.score,
                 verification_passed=verification.passed,
                 verification_report=verification.report,
+                route_metadata=response.route_metadata,
                 metadata={
-                "learning_record": learning_record,
-                "provider_health": health,
-                "adaptive_route": {
-                    "provider": route_decision.provider,
-                    "score": route_decision.score,
-                },
-                    "capability":request.capability,
+                    "capability": request.capability,
                 },
             )
         )
