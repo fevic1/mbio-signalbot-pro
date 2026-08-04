@@ -183,6 +183,31 @@ class ContextCompiler:
         )
 
 
+
+
+    def _optimize_token_budget(
+        self,
+        token_budget,
+        provider_hints,
+    ):
+        prompt = token_budget.max_prompt_tokens
+        completion = token_budget.max_completion_tokens
+        reserve = token_budget.reserve_tokens
+
+        if provider_hints.prefers_reasoning:
+            completion = max(completion, 8192)
+
+        if provider_hints.prefers_speed:
+            completion = min(completion, 2048)
+
+        return TokenBudget(
+            estimated_prompt_tokens=token_budget.estimated_prompt_tokens,
+            max_prompt_tokens=prompt,
+            max_completion_tokens=completion,
+            reserve_tokens=reserve,
+        )
+
+
     def _build_provider_hints(
         self,
         capability,
