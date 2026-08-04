@@ -27,6 +27,20 @@ class ContextCompiler:
 
 
 
+
+
+    def _cache_key(
+        self,
+        plan,
+    ):
+        return (
+            plan.metadata.get(
+                "execution_fingerprint"
+            ),
+            plan.capability,
+        )
+
+
     def _fingerprint_plan(
         self,
         plan,
@@ -80,6 +94,8 @@ class ContextCompiler:
             )
 
         plan = self._validate_plan(plan)
+
+        plan.metadata["cache_key"] = self._cache_key(plan)
 
         plan.metadata["execution_fingerprint"] = (
             self._fingerprint_plan(plan)
