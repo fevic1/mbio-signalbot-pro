@@ -14,13 +14,13 @@ class LLMAdapter:
         self.assembler = ContextAssembler()
         self.prompt_builder = PromptBuilder()
 
-    def build(
+    async def build(
         self,
         capability,
         request,
     ):
         
-        context = self.assembler.assemble(
+        context = await self.assembler.assemble(
 
             self.system,
             capability,
