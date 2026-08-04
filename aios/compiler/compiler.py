@@ -101,6 +101,10 @@ class ContextCompiler:
             self._fingerprint_plan(plan)
         )
 
+        plan.metadata["execution_signature"] = (
+            self._execution_signature(plan)
+        )
+
         return plan
 
         return plan
@@ -231,6 +235,36 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _execution_signature(
+        self,
+        plan,
+    ):
+        return {
+            "fingerprint":
+                plan.metadata.get(
+                    "execution_fingerprint"
+                ),
+            "cache_key":
+                plan.metadata.get(
+                    "cache_key"
+                ),
+            "route_score":
+                plan.metadata.get(
+                    "route_score"
+                ),
+            "execution_quality":
+                plan.metadata.get(
+                    "execution_quality"
+                ),
+            "execution_readiness":
+                plan.metadata.get(
+                    "execution_readiness"
+                ),
+        }
 
 
     def _execution_readiness(
