@@ -217,6 +217,35 @@ class ContextCompiler:
         )
 
 
+
+
+    def _normalize_messages(
+        self,
+        messages,
+    ):
+        normalized = []
+
+        for message in messages:
+            normalized.append(
+                {
+                    "role": str(
+                        message.get(
+                            "role",
+                            "user",
+                        )
+                    ),
+                    "content": str(
+                        message.get(
+                            "content",
+                            "",
+                        )
+                    ).strip(),
+                }
+            )
+
+        return normalized
+
+
     def _compress_messages(
         self,
         messages,
@@ -292,13 +321,13 @@ class ContextCompiler:
 
         plan = ExecutionPlan(
             capability=capability,
-            messages=self._freeze_messages(self._trim_messages(
+            messages=self._freeze_messages(self._normalize_messages(self._trim_messages(
                 self._compress_messages(
                     messages,
                     token_budget,
                 ),
                 token_budget,
-            )),
+            ))),
             token_budget=token_budget,
             provider_hints=provider_hints,
             evidence=evidence,
