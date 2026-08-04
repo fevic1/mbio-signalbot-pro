@@ -47,13 +47,14 @@ class RiskLevel(str, Enum):
 # Layer 1: Data Collection Output
 @dataclass(slots=True, frozen=True)
 class RawEvidence:
-    evidence_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     source: str
     source_type: SourceType
     asset: str
     category: EvidenceCategory
     data: Dict[str, Any]
     collected_at: datetime
+    # Moved to the end to satisfy dataclass default-argument rules
+    evidence_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
 
 # Layer 2: Verification Output
