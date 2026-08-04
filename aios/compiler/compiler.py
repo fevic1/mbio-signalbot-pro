@@ -1,4 +1,5 @@
 from .execution_plan import ExecutionPlan
+from aios.runtime.telemetry.timer import ExecutionTimer
 
 try:
     import tiktoken
@@ -33,6 +34,9 @@ class ContextCompiler:
         self,
         plan,
     ):
+        timer = ExecutionTimer()
+        timer.start("compiler")
+
         return (
             plan.metadata.get(
                 "execution_fingerprint"
