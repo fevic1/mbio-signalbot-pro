@@ -129,6 +129,10 @@ class ContextCompiler:
             self._provider_fallback_chain(plan)
         )
 
+        plan.metadata["execution_route"] = (
+            self._execution_route(plan)
+        )
+
         return plan
 
         return plan
@@ -273,6 +277,48 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _execution_route(
+        self,
+        plan,
+    ):
+        selection = plan.metadata[
+            "provider_selection"
+        ]
+
+        return {
+            "provider":
+                selection["provider"],
+            "model":
+                selection["model"],
+            "fallback_chain":
+                plan.metadata[
+                    "provider_fallback_chain"
+                ],
+            "cache_key":
+                plan.metadata.get(
+                    "cache_key"
+                ),
+            "fingerprint":
+                plan.metadata.get(
+                    "execution_fingerprint"
+                ),
+            "route_score":
+                plan.metadata.get(
+                    "route_score"
+                ),
+            "estimated_cost":
+                plan.metadata.get(
+                    "estimated_cost"
+                ),
+            "estimated_latency":
+                plan.metadata.get(
+                    "estimated_latency"
+                ),
+        }
 
 
     def _provider_fallback_chain(
