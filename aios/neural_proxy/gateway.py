@@ -178,6 +178,12 @@ class NeuralProxyGateway:
 
         timer.stop("provider")
 
+        prompt_cost, completion_cost, estimated_cost = calculate_cost(
+            response.model,
+            getattr(response, "prompt_tokens", 0),
+            getattr(response, "completion_tokens", 0),
+        )
+
         return AIOSResponse(
             provider=response.provider,
             model=response.model,
@@ -191,7 +197,10 @@ class NeuralProxyGateway:
             tool_latency=getattr(response, "tool_latency", 0.0),
             verification_latency=getattr(response, "verification_latency", 0.0),
             total_latency=getattr(response, "total_latency", timer.latency.provider),
-            cost=getattr(response, "cost", 0.0),
+            cost=getattr(response, "cost", estimated_cost),
+            estimated_cost=estimated_cost,
+            prompt_cost=prompt_cost,
+            completion_cost=completion_cost,
             route_metadata={
                 "provider_order": __import__("os").getenv(
                     "AIOS_PROVIDER_ORDER",
