@@ -174,6 +174,11 @@ class ContextCompiler:
                     provider_hints,
                     token_budget,
                 ),
+            "execution_readiness":
+                self._execution_readiness(
+                    token_budget,
+                    provider_hints,
+                ),
             "route_score":
                 self._score_route(
                     provider_hints,
@@ -193,6 +198,11 @@ class ContextCompiler:
                 self._execution_quality(
                     provider_hints,
                     token_budget,
+                ),
+            "execution_readiness":
+                self._execution_readiness(
+                    token_budget,
+                    provider_hints,
                 ),
         }
 
@@ -219,6 +229,27 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _execution_readiness(
+        self,
+        token_budget,
+        provider_hints,
+    ):
+        score = 100
+
+        if token_budget.estimated_prompt_tokens > token_budget.max_prompt_tokens:
+            score -= 50
+
+        if provider_hints.prefers_reasoning:
+            score += 3
+
+        if provider_hints.prefers_speed:
+            score += 2
+
+        return max(0, min(score, 100))
 
 
     def _execution_quality(
