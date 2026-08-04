@@ -74,6 +74,11 @@ class ContextCompiler:
                     provider_hints,
                     token_budget,
                 ),
+            "route_score":
+                self._score_route(
+                    provider_hints,
+                    token_budget,
+                ),
         }
 
 
