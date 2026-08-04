@@ -169,6 +169,11 @@ class ContextCompiler:
                     provider_hints,
                     token_budget,
                 ),
+            "execution_quality":
+                self._execution_quality(
+                    provider_hints,
+                    token_budget,
+                ),
             "route_score":
                 self._score_route(
                     provider_hints,
@@ -181,6 +186,11 @@ class ContextCompiler:
                 ),
             "estimated_latency":
                 self._estimate_latency(
+                    provider_hints,
+                    token_budget,
+                ),
+            "execution_quality":
+                self._execution_quality(
                     provider_hints,
                     token_budget,
                 ),
@@ -207,6 +217,30 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _execution_quality(
+        self,
+        provider_hints,
+        token_budget,
+    ):
+        quality = 100
+
+        if token_budget.estimated_prompt_tokens > 12000:
+            quality -= 5
+
+        if token_budget.estimated_prompt_tokens > 20000:
+            quality -= 5
+
+        if provider_hints.prefers_speed:
+            quality -= 2
+
+        if provider_hints.prefers_reasoning:
+            quality += 2
+
+        return max(0, min(100, quality))
 
 
     def _estimate_latency(
