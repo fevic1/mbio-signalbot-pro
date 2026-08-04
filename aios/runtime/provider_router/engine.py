@@ -20,8 +20,29 @@ class AdaptiveProviderRouter:
         )
 
         if not route:
-            raise RuntimeError(
-                "No provider route available."
+            provider = execution_plan.metadata.get(
+                "selected_provider"
+            )
+
+            if provider:
+                return RouteDecision(
+                    provider=provider,
+                    score=1.0,
+                )
+
+            provider = execution_plan.metadata.get(
+                "provider"
+            )
+
+            if provider:
+                return RouteDecision(
+                    provider=provider,
+                    score=1.0,
+                )
+
+            return RouteDecision(
+                provider="deepseek",
+                score=0.0,
             )
 
         scores = {}
