@@ -23,6 +23,21 @@ class ContextCompiler:
 
 
 
+
+
+    def _freeze_messages(
+        self,
+        messages,
+    ):
+        return tuple(
+            {
+                k: v
+                for k, v in message.items()
+            }
+            for message in messages
+        )
+
+
     def _validate_plan(
         self,
         plan,
@@ -226,13 +241,13 @@ class ContextCompiler:
 
         plan = ExecutionPlan(
             capability=capability,
-            messages=self._trim_messages(
+            messages=self._freeze_messages(self._trim_messages(
                 self._compress_messages(
                     messages,
                     token_budget,
                 ),
                 token_budget,
-            ),
+            )),
             token_budget=token_budget,
             provider_hints=provider_hints,
             evidence=evidence,
