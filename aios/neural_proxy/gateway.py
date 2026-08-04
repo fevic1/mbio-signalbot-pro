@@ -112,17 +112,18 @@ class NeuralProxyGateway:
                 )
             )
 
-            last_error = None
-
-            for provider in (
-                route if route else (
+            if not route:
+                route = (
                     getattr(
                         provider_request,
                         "selected_provider",
                         None,
                     ),
                 )
-            ):
+
+            last_error = None
+
+            for provider in route:
 
                 if provider:
                     provider_request.provider = provider
@@ -159,20 +160,6 @@ class NeuralProxyGateway:
             raise
 
         if self.event_bus:
-                self.event_bus.publish(
-                    AIOSDomainEvent(
-                        "model_execution.failed",
-                        source="neural_proxy",
-                        payload={
-                            "capability": request.capability,
-                            "error": str(error),
-                            "success": False,
-                        },
-                    )
-                )
-            raise
-
-        if self.event_bus:
             self.event_bus.publish(
                 AIOSDomainEvent(
                     "model_execution.completed",
@@ -185,7 +172,6 @@ class NeuralProxyGateway:
                     },
                 )
             )
-
 
         return AIOSResponse(
             provider=response.provider,
