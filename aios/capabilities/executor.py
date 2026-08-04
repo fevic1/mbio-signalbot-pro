@@ -269,10 +269,12 @@ class CapabilityExecutor:
             "cost": 0.0,
             "attempt": attempt,
             "execution_evidence": {
-                "tools_called": context_data.get("tool_plan", []),
-                "tool_results": context_data.get("tool_results", []),
-                "market_context": market_context,
-                "research_context": context_data.get("research_context"),
+                "tools_called": list(plan.evidence.tools_called),
+                "tool_results": list(plan.evidence.sources),
+                "market_context": plan.metadata.get("market_context"),
+                "research_context": plan.metadata.get("research_context"),
                 "fallback_used": False,
+                "token_budget": plan.token_budget,
+                "provider_hints": plan.provider_hints,
             },
         }
