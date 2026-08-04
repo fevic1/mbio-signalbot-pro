@@ -159,8 +159,18 @@ class ContextCompiler:
                     provider_hints,
                     token_budget,
                 ),
+            "estimated_cost":
+                self._estimate_cost(
+                    provider_hints,
+                    token_budget,
+                ),
             "route_score":
                 self._score_route(
+                    provider_hints,
+                    token_budget,
+                ),
+            "estimated_cost":
+                self._estimate_cost(
                     provider_hints,
                     token_budget,
                 ),
@@ -183,6 +193,26 @@ class ContextCompiler:
         )
 
 
+
+
+
+
+    def _estimate_cost(
+        self,
+        provider_hints,
+        token_budget,
+    ):
+        rate = 0.000002
+
+        if provider_hints.prefers_reasoning:
+            rate *= 2.5
+
+        estimated = (
+            token_budget.estimated_prompt_tokens +
+            token_budget.max_completion_tokens
+        ) * rate
+
+        return round(estimated, 6)
 
 
     def _optimize_token_budget(
