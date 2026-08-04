@@ -113,6 +113,10 @@ class ContextCompiler:
             self._compiler_health(plan)
         )
 
+        plan.metadata["compile_summary"] = (
+            self._compile_summary(plan)
+        )
+
         return plan
 
         return plan
@@ -249,6 +253,54 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _compile_summary(
+        self,
+        plan,
+    ):
+        return {
+            "provider":
+                plan.provider_hints.preferred_provider,
+            "model":
+                plan.provider_hints.preferred_model,
+            "prompt_tokens":
+                plan.token_budget.estimated_prompt_tokens,
+            "max_prompt_tokens":
+                plan.token_budget.max_prompt_tokens,
+            "max_completion_tokens":
+                plan.token_budget.max_completion_tokens,
+            "estimated_cost":
+                plan.metadata.get(
+                    "estimated_cost"
+                ),
+            "estimated_latency":
+                plan.metadata.get(
+                    "estimated_latency"
+                ),
+            "route_score":
+                plan.metadata.get(
+                    "route_score"
+                ),
+            "execution_quality":
+                plan.metadata.get(
+                    "execution_quality"
+                ),
+            "execution_readiness":
+                plan.metadata.get(
+                    "execution_readiness"
+                ),
+            "fingerprint":
+                plan.metadata.get(
+                    "execution_fingerprint"
+                ),
+            "cache_key":
+                plan.metadata.get(
+                    "cache_key"
+                ),
+        }
 
 
     def _compiler_health(
