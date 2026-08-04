@@ -241,9 +241,9 @@ class ContextAssembler:
                         evidence,
                         EvidenceCollection,
                     ):
-                        evidence.merge(
-                            tool_evidence
-                        )
+                        merge_fn = getattr(evidence, "merge", None)
+                        if callable(merge_fn):
+                            merge_fn(tool_evidence)
 
                         evidence_summary = (
                             evidence.intelligence_report()
