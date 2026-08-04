@@ -117,6 +117,10 @@ class ContextCompiler:
             self._compile_summary(plan)
         )
 
+        plan.metadata["compiler_manifest"] = (
+            self._compiler_manifest(plan)
+        )
+
         return plan
 
         return plan
@@ -255,6 +259,43 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _compiler_manifest(
+        self,
+        plan,
+    ):
+        return {
+            "version": "1.0",
+            "immutable": True,
+            "validated": True,
+            "compiler_health":
+                plan.metadata.get(
+                    "compiler_health"
+                ),
+            "runtime_contract":
+                plan.metadata.get(
+                    "runtime_contract"
+                ),
+            "execution_signature":
+                plan.metadata.get(
+                    "execution_signature"
+                ),
+            "compile_summary":
+                plan.metadata.get(
+                    "compile_summary"
+                ),
+            "fingerprint":
+                plan.metadata.get(
+                    "execution_fingerprint"
+                ),
+            "cache_key":
+                plan.metadata.get(
+                    "cache_key"
+                ),
+        }
 
 
     def _compile_summary(
