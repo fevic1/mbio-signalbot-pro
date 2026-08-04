@@ -105,6 +105,9 @@ class AnthropicProvider(BaseProvider):
             prompt_tokens=data.get("usage", {}).get("prompt_tokens", 0),
             completion_tokens=data.get("usage", {}).get("completion_tokens", 0),
             total_tokens=data.get("usage", {}).get("total_tokens", 0),
+            latency=perf_counter() - start_time,
+            provider_latency=perf_counter() - start_time,
+            total_latency=perf_counter() - start_time,
         )
 
     def health(self):

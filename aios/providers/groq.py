@@ -62,6 +62,7 @@ class GroqProvider(BaseProvider):
             payload["tools"] = request.tools
             payload["tool_choice"] = "auto"
 
+        start_time = perf_counter()
         response = await http.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
@@ -89,6 +90,9 @@ class GroqProvider(BaseProvider):
             prompt_tokens=data.get("usage", {}).get("prompt_tokens", 0),
             completion_tokens=data.get("usage", {}).get("completion_tokens", 0),
             total_tokens=data.get("usage", {}).get("total_tokens", 0),
+            latency=perf_counter() - start_time,
+            provider_latency=perf_counter() - start_time,
+            total_latency=perf_counter() - start_time,
         )
 
     def health(self):

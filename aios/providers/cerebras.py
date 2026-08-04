@@ -29,6 +29,7 @@ class CerebrasProvider(BaseProvider):
                 "CEREBRAS_API_KEY not configured"
             )
 
+        start_time = perf_counter()
         response = await http.post(
             "https://api.cerebras.ai/v1/chat/completions",
             headers={
@@ -55,6 +56,9 @@ class CerebrasProvider(BaseProvider):
             prompt_tokens=data.get("usage", {}).get("prompt_tokens", 0),
             completion_tokens=data.get("usage", {}).get("completion_tokens", 0),
             total_tokens=data.get("usage", {}).get("total_tokens", 0),
+            latency=perf_counter() - start_time,
+            provider_latency=perf_counter() - start_time,
+            total_latency=perf_counter() - start_time,
         )
 
     def health(self):
