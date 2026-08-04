@@ -51,6 +51,9 @@ class CerebrasProvider(BaseProvider):
             model=request.model or self.model,
             content=data["choices"][0]["message"]["content"],
             raw=data,
+            prompt_tokens=data.get("usage", {}).get("prompt_tokens", 0),
+            completion_tokens=data.get("usage", {}).get("completion_tokens", 0),
+            total_tokens=data.get("usage", {}).get("total_tokens", 0),
         )
 
     def health(self):

@@ -10,6 +10,10 @@ class ProviderRequest:
     temperature: float = 0.2
     max_tokens: int = 2048
     tools: list[dict[str, Any]] = field(default_factory=list)
+    compiler: dict[str, Any] = field(default_factory=dict)
+    provider_hints: dict[str, Any] = field(default_factory=dict)
+    token_budget: dict[str, Any] = field(default_factory=dict)
+    execution_evidence: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -18,6 +22,13 @@ class ProviderResponse:
     model: str
     content: str
     raw: dict[str, Any]
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+    latency: float = 0.0
+    cost: float = 0.0
 
 
 @dataclass(slots=True)
