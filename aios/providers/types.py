@@ -10,6 +10,9 @@ class ProviderRequest:
     temperature: float = 0.2
     max_tokens: int = 2048
     tools: list[dict[str, Any]] = field(default_factory=list)
+    route: tuple[str, ...] = ()
+    selected_provider: str | None = None
+    selected_model: str | None = None
     compiler: dict[str, Any] = field(default_factory=dict)
     provider_hints: dict[str, Any] = field(default_factory=dict)
     token_budget: dict[str, Any] = field(default_factory=dict)

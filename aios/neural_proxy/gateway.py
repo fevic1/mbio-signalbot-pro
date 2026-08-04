@@ -102,12 +102,43 @@ class NeuralProxyGateway:
 
         from aios.events.models import AIOSDomainEvent
 
-        try:
-            response = await self.provider_chat(
+        route = tuple(
+            getattr(
                 provider_request,
-                event_bus=self.event_bus,
-                capability=request.capability,
+                "route",
+                (),
             )
+        )
+
+        last_error = None
+
+        for provider in (
+            route if route else (
+                getattr(
+                    provider_request,
+                    "selected_provider",
+                    None,
+                ),
+            )
+        ):
+
+            if provider:
+                provider_request.provider = provider
+
+            try:
+                response = await self.provider_chat(
+                    provider_request,
+                    event_bus=self.event_bus,
+                    capability=request.capability,
+                )
+
+                break
+
+            except Exception as error:
+                last_error = error
+
+        else:
+            raise last_error
         except Exception as error:
             if self.event_bus:
                 self.event_bus.publish(
