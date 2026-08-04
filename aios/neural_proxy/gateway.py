@@ -86,6 +86,19 @@ class NeuralProxyGateway:
             )
         )
 
+        provider_request.route = request.constraints.get(
+            "provider_fallback_chain",
+            ()
+        )
+
+        provider_request.selected_provider = request.constraints.get(
+            "provider"
+        )
+
+        provider_request.selected_model = request.constraints.get(
+            "model"
+        )
+
 
         from aios.events.models import AIOSDomainEvent
 
