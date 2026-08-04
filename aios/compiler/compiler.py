@@ -125,6 +125,10 @@ class ContextCompiler:
             self._provider_selection(plan)
         )
 
+        plan.metadata["provider_fallback_chain"] = (
+            self._provider_fallback_chain(plan)
+        )
+
         return plan
 
         return plan
@@ -267,6 +271,32 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _provider_fallback_chain(
+        self,
+        plan,
+    ):
+        primary = plan.metadata["provider_selection"]["provider"]
+
+        order = [
+            "deepseek",
+            "groq",
+            "anthropic",
+            "openrouter",
+            "qwen",
+            "cerebras",
+        ]
+
+        chain = [primary]
+
+        for provider in order:
+            if provider not in chain:
+                chain.append(provider)
+
+        return tuple(chain)
 
 
     def _provider_selection(
