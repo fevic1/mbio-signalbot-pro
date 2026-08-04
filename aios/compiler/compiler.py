@@ -19,6 +19,30 @@ class ContextCompiler:
 
 
 
+
+
+    def _score_route(
+        self,
+        provider_hints,
+        token_budget,
+    ):
+        score = 0
+
+        if provider_hints.prefers_reasoning:
+            score += 40
+
+        if provider_hints.prefers_speed:
+            score += 20
+
+        if token_budget.estimated_prompt_tokens > 8000:
+            score += 20
+
+        if token_budget.estimated_prompt_tokens > 16000:
+            score += 20
+
+        return min(score, 100)
+
+
     def _build_route_metadata(
         self,
         capability,
@@ -45,6 +69,11 @@ class ContextCompiler:
                 provider_hints.preferred_provider,
             "preferred_model":
                 provider_hints.preferred_model,
+            "route_score":
+                self._score_route(
+                    provider_hints,
+                    token_budget,
+                ),
         }
 
 
