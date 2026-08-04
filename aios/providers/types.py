@@ -39,6 +39,9 @@ class ProviderResponse:
     estimated_cost: float = 0.0
     prompt_cost: float = 0.0
     completion_cost: float = 0.0
+    verification_score: float = 0.0
+    verification_passed: bool = False
+    verification_report: dict[str, Any] = field(default_factory=dict)
     cost: float = 0.0
 
     route_metadata: dict[str, Any] = field(default_factory=dict)
