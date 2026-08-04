@@ -1,3 +1,4 @@
+from time import perf_counter
 import os
 
 from .base import BaseProvider
@@ -33,6 +34,8 @@ class OpenRouterProvider(BaseProvider):
             raise AuthenticationError(
                 "OPENROUTER_API_KEY not configured"
             )
+
+        start_time = perf_counter()
 
         try:
             r = await http.post(

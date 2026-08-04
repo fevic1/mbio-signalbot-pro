@@ -1,3 +1,4 @@
+from time import perf_counter
 import os
 
 from .base import BaseProvider
@@ -59,6 +60,8 @@ class AnthropicProvider(BaseProvider):
 
         if system:
             payload["system"] = system
+
+        start_time = perf_counter()
 
         try:
             r = await http.post(
