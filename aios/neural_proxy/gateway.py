@@ -186,6 +186,11 @@ class NeuralProxyGateway:
             completion_tokens=getattr(response, "completion_tokens", 0),
             total_tokens=getattr(response, "total_tokens", 0),
             latency=getattr(response, "latency", timer.latency.provider),
+            compiler_latency=getattr(response, "compiler_latency", 0.0),
+            provider_latency=getattr(response, "provider_latency", timer.latency.provider),
+            tool_latency=getattr(response, "tool_latency", 0.0),
+            verification_latency=getattr(response, "verification_latency", 0.0),
+            total_latency=getattr(response, "total_latency", timer.latency.provider),
             cost=getattr(response, "cost", 0.0),
             route_metadata={
                 "provider_order": __import__("os").getenv(
