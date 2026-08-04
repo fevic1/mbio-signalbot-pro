@@ -36,6 +36,9 @@ class ProviderResponse:
     tool_latency: float = 0.0
     verification_latency: float = 0.0
     total_latency: float = 0.0
+    estimated_cost: float = 0.0
+    prompt_cost: float = 0.0
+    completion_cost: float = 0.0
     cost: float = 0.0
 
     route_metadata: dict[str, Any] = field(default_factory=dict)
