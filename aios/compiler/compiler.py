@@ -1,5 +1,6 @@
 import hashlib
 import json
+from dataclasses import asdict
 
 from .execution_plan import ExecutionPlan
 from .models import (
@@ -36,8 +37,8 @@ class ContextCompiler:
         payload = {
             "capability": plan.capability,
             "messages": plan.messages,
-            "token_budget": plan.token_budget.__dict__,
-            "provider_hints": plan.provider_hints.__dict__,
+            "token_budget": asdict(plan.token_budget),
+            "provider_hints": asdict(plan.provider_hints),
             "evidence": {
                 "tools_called": list(plan.evidence.tools_called),
                 "sources": list(plan.evidence.sources),
