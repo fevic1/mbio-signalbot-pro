@@ -23,6 +23,23 @@ STOP_WORDS = {
     "maker", "creator", "price", "current", "btc"
 }
 
+LEADING_PHRASES = (
+    "search wikipedia for ",
+    "search wikipedia ",
+    "search for ",
+    "find ",
+    "look up ",
+    "lookup ",
+    "search ",
+    "tell me about ",
+    "show me ",
+    "summarize ",
+    "summarize wikipedia article about ",
+    "summarize article about ",
+    "article about ",
+    "about ",
+)
+
 
 @dataclass(slots=True)
 class ParameterValidationResult:
@@ -51,7 +68,6 @@ class ParameterPlanner:
         properties = input_schema.get("properties", {})
         required = input_schema.get("required", [])
 
-        # If schema is present but properties are empty (minimal schema), infer from tool name
         if not properties:
             return self._infer_and_extract(tool, request)
 
@@ -71,7 +87,6 @@ class ParameterPlanner:
         )
 
     def _infer_and_extract(self, tool: str, request: str) -> ParameterValidationResult:
-        """Handles minimal schemas by inferring parameter name from tool name."""
         tool_lower = tool.lower()
         
         if any(k in tool_lower for k in ("search", "find", "lookup", "query")):
@@ -85,7 +100,6 @@ class ParameterPlanner:
                 success=False, arguments={}, error="Cannot infer parameter for minimal schema"
             )
 
-        # Create a dummy definition to pass to _extract
         dummy_def = {"description": param_name}
         value = self._extract(param_name, dummy_def, request)
 
@@ -97,7 +111,6 @@ class ParameterPlanner:
         )
 
     def _extract(self, name: str, definition: dict, request: str) -> str | None:
-        """Pure heuristic extractor with entity normalization."""
         text = request.strip()
         if not text:
             return None
@@ -106,36 +119,35 @@ class ParameterPlanner:
         desc = definition.get("description", "").lower()
         key = f"{lname} {desc}"
 
-        # Path Extraction: regex for file paths
         if any(x in key for x in ("path", "file", "filename", "filepath")):
             m = re.search(r'[\w/\-.]+\.[A-Za-z0-9]+', text)
             return m.group(0) if m else None
 
-        # Symbol/Ticker Extraction: uppercase words
         if any(x in key for x in ("symbol", "ticker", "coin", "asset", "token")):
             m = re.search(r"\b[A-Z]{2,10}\b", text)
             return m.group(0) if m else None
 
-        # Title/Topic Extraction: strip stop words and intent verbs
         if any(x in key for x in ("title", "article", "page", "topic", "subject", "name")):
             return self._extract_title(text)
 
-        # Query/Search Extraction: return cleaned text
         if any(x in key for x in ("query", "search", "keyword", "text", "prompt", "input")):
             return self._extract_query(text)
 
         return None
 
     def _extract_title(self, text: str) -> str:
-        """Extracts the core entity by removing stop words and intent verbs."""
         words = [w.strip(".,!?;:\"'()[]{}") for w in text.split() if w.lower() not in STOP_WORDS]
         if not words:
             return text
-        # Take the last 1-2 words as the likely title/entity
         return " ".join(words[-2:]) if len(words) >= 2 else words[-1]
 
     def _extract_query(self, text: str) -> str:
-        """Returns the query, stripping common leading intent phrases."""
-        # Simple cleanup: remove "search for ", "find ", etc. if they exist at the start
-        cleaned = re.sub(r'^(search\s+for|find|lookup|look\s+up)\s+', '', text, flags=re.IGNORECASE)
-        return cleaned.strip() if cleaned.strip() else text
+        query = text.strip()
+        query_lower = query.lower()
+        
+        for phrase in LEADING_PHRASES:
+            if query_lower.startswith(phrase):
+                query = query[len(phrase):].strip()
+                break
+                
+        return query if query else text
