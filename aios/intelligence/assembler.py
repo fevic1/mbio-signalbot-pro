@@ -2,7 +2,6 @@ import logging
 
 from aios.intelligence.capability_planner import CapabilityPlanner
 from aios.intelligence.tool_executor import ToolExecutor
-from aios.capabilities.errors import CapabilityExecutionError
 
 from aios.intelligence.evidence import (
     EvidenceCollection,
