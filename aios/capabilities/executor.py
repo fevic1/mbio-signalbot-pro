@@ -1,6 +1,15 @@
 import json
 import re
 from time import perf_counter
+from aios.compiler.compiler import ContextCompiler
+from aios.compiler.validator import ExecutionPlanValidator
+from aios.compiler.diagnostics import CompilerDiagnostics
+from aios.compiler.models import (
+    TokenBudget,
+    ProviderHints,
+    EvidenceBundle,
+)
+
 
 from aios.intelligence.llm_adapter import LLMAdapter
 from aios.providers.router import chat
@@ -96,7 +105,7 @@ class CapabilityExecutor:
         attempt: int,
     ):
 
-        prompt = self.adapter.build(
+        prompt = await self.adapter.build(
             request.capability,
             request,
         )
@@ -117,29 +126,51 @@ class CapabilityExecutor:
             ]
         )
 
-        aios_request = AIOSRequest(
-            capability=request.capability,
-            messages=[
-                {
-                    "role": "system",
-                    "content": prompt["system"],
-                },
+        messages = [
+            {
+                "role": "system",
+                "content": prompt["system"],
+            }
+        ]
+
+        context = prompt["context"]
+
+        if isinstance(context, list):
+            messages.extend(context)
+        else:
+            messages.append(
                 {
                     "role": "user",
-                    "content": str(prompt["context"]),
-                },
-            ],
+                    "content": str(context),
+                }
+            )
+
+
+        plan = ContextCompiler().compile(
+            capability=request.capability,
+            messages=messages,
+            token_budget=TokenBudget(),
+            provider_hints=ProviderHints(),
+            evidence=EvidenceBundle(),
+            metadata={"capability": request.capability},
+        )
+
+        ExecutionPlanValidator().validate(plan)
+
+        diagnostics = CompilerDiagnostics().report(plan)
+
+        aios_request = AIOSRequest(
+            capability=plan.capability,
+            messages=list(plan.messages),
             constraints={
                 "allowed_models": (
                     self._get_capability_definition(
                         request.capability
-                    )
-                    .metadata
-                    .get("allowed_models")
+                    ).metadata.get("allowed_models")
                 ),
+                "compiler": diagnostics,
             },
         )
-
         start = perf_counter()
 
         allowed_models = (
@@ -237,4 +268,11 @@ class CapabilityExecutor:
             "latency": latency,
             "cost": 0.0,
             "attempt": attempt,
+            "execution_evidence": {
+                "tools_called": context_data.get("tool_plan", []),
+                "tool_results": context_data.get("tool_results", []),
+                "market_context": market_context,
+                "research_context": context_data.get("research_context"),
+                "fallback_used": False,
+            },
         }
