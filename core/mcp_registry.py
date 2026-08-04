@@ -243,6 +243,7 @@ class MCPRegistry:
         for server_name, server in self._runtime_servers.items():
 
             self._tools[server_name] = {}
+            self._tool_schemas[server_name] = {}  # Initialize nested dict
 
             try:
 
