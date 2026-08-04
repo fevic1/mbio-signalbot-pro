@@ -21,6 +21,25 @@ class ContextCompiler:
 
 
 
+
+
+    def _validate_plan(
+        self,
+        plan,
+    ):
+        if (
+            plan.token_budget.estimated_prompt_tokens
+            > plan.token_budget.max_prompt_tokens
+        ):
+            raise ValueError(
+                "ExecutionPlan exceeds prompt budget."
+            )
+
+        return self._validate_plan(plan)
+
+        return plan
+
+
     def _score_route(
         self,
         provider_hints,
@@ -205,7 +224,7 @@ class ContextCompiler:
         metadata=None,
     ):
 
-        return ExecutionPlan(
+        plan = ExecutionPlan(
             capability=capability,
             messages=self._trim_messages(
                 self._compress_messages(
