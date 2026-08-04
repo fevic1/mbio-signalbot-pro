@@ -9,6 +9,24 @@ except Exception:
 
 class ContextCompiler:
 
+
+
+    def _trim_messages(
+        self,
+        messages,
+        budget,
+    ):
+        trimmed = list(messages)
+
+        while (
+            self._estimate_tokens(trimmed)
+            > budget.max_prompt_tokens
+            and len(trimmed) > 2
+        ):
+            trimmed.pop(1)
+
+        return tuple(trimmed)
+
     def _estimate_tokens(self, messages):
         if tiktoken:
             try:
@@ -39,7 +57,7 @@ class ContextCompiler:
 
         return ExecutionPlan(
             capability=capability,
-            messages=tuple(messages),
+            messages=self._trim_messages(messages, token_budget),
             token_budget=token_budget,
             provider_hints=provider_hints,
             evidence=evidence,
