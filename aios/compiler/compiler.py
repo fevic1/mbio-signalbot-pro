@@ -105,6 +105,10 @@ class ContextCompiler:
             self._execution_signature(plan)
         )
 
+        plan.metadata["runtime_contract"] = (
+            self._runtime_contract(plan)
+        )
+
         return plan
 
         return plan
@@ -237,6 +241,46 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _runtime_contract(
+        self,
+        plan,
+    ):
+        return {
+            "immutable": True,
+            "validated": True,
+            "fingerprint":
+                plan.metadata.get(
+                    "execution_fingerprint"
+                ),
+            "cache_key":
+                plan.metadata.get(
+                    "cache_key"
+                ),
+            "route_score":
+                plan.metadata.get(
+                    "route_score"
+                ),
+            "estimated_cost":
+                plan.metadata.get(
+                    "estimated_cost"
+                ),
+            "estimated_latency":
+                plan.metadata.get(
+                    "estimated_latency"
+                ),
+            "execution_quality":
+                plan.metadata.get(
+                    "execution_quality"
+                ),
+            "execution_readiness":
+                plan.metadata.get(
+                    "execution_readiness"
+                ),
+        }
 
 
     def _execution_signature(
