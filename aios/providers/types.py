@@ -31,6 +31,11 @@ class ProviderResponse:
     total_tokens: int = 0
 
     latency: float = 0.0
+    compiler_latency: float = 0.0
+    provider_latency: float = 0.0
+    tool_latency: float = 0.0
+    verification_latency: float = 0.0
+    total_latency: float = 0.0
     cost: float = 0.0
 
     route_metadata: dict[str, Any] = field(default_factory=dict)
