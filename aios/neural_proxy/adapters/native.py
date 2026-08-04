@@ -33,6 +33,22 @@ class NativeProviderAdapter:
                 2048,
             ),
             tools=request.tools,
+            compiler=request.constraints.get(
+                "compiler",
+                {},
+            ),
+            provider_hints=request.constraints.get(
+                "provider_hints",
+                {},
+            ),
+            token_budget=request.constraints.get(
+                "token_budget",
+                {},
+            ),
+            execution_evidence=request.constraints.get(
+                "execution_evidence",
+                {},
+            ),
         )
 
 

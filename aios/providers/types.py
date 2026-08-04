@@ -30,6 +30,8 @@ class ProviderResponse:
     latency: float = 0.0
     cost: float = 0.0
 
+    route_metadata: dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass(slots=True)
 class ProviderHealth:

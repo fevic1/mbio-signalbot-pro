@@ -264,6 +264,7 @@ class CapabilityExecutor:
             "total_tokens": response.total_tokens,
             "provider_latency": response.latency,
             "provider_cost": response.cost,
+            "route_metadata": response.route_metadata,
             "selected_model": (
                 selected_model.name
                 if selected_model

@@ -948,6 +948,10 @@ class AIOSDispatcher:
                 "provider_cost",
                 0.0,
             ),
+            "route_metadata": result.get(
+                "route_metadata",
+                {},
+            ),
             "provider_latency": result.get(
                 "provider_latency",
                 0.0,

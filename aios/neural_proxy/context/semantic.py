@@ -22,12 +22,17 @@ class SemanticContextProcessor:
             request.messages = []
 
 
+        import json
+
         request.messages.append(
             {
                 "role": "system",
-                "content": {
-                    "aios_context": context,
-                },
+                "content": json.dumps(
+                    {
+                        "aios_context": context,
+                    },
+                    ensure_ascii=False,
+                ),
             }
         )
 

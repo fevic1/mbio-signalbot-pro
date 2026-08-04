@@ -129,6 +129,19 @@ class NeuralProxyGateway:
             provider=response.provider,
             model=response.model,
             content=response.content,
+            prompt_tokens=getattr(response, "prompt_tokens", 0),
+            completion_tokens=getattr(response, "completion_tokens", 0),
+            total_tokens=getattr(response, "total_tokens", 0),
+            latency=getattr(response, "latency", 0.0),
+            cost=getattr(response, "cost", 0.0),
+            route_metadata={
+                "provider_order": __import__("os").getenv(
+                    "AIOS_PROVIDER_ORDER",
+                    "",
+                ).split(","),
+                "selected_provider": response.provider,
+                "selected_model": response.model,
+            },
             metadata={
                 "capability": request.capability,
                 "raw": response.raw,
