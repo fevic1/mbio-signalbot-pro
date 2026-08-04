@@ -1,4 +1,5 @@
 import json
+from dataclasses import asdict
 import re
 from time import perf_counter
 
@@ -280,7 +281,7 @@ class CapabilityExecutor:
                 "market_context": plan.metadata.get("market_context"),
                 "research_context": plan.metadata.get("research_context"),
                 "fallback_used": False,
-                "token_budget": plan.token_budget,
-                "provider_hints": plan.provider_hints,
+                "token_budget": asdict(plan.token_budget),
+                "provider_hints": asdict(plan.provider_hints),
             },
         }
