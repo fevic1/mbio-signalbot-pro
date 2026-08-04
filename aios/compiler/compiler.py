@@ -1,4 +1,12 @@
+import hashlib
+import json
+
 from .execution_plan import ExecutionPlan
+from .models import (
+    TokenBudget,
+    ProviderHints,
+    EvidenceBundle,
+)
 from aios.runtime.telemetry.timer import ExecutionTimer
 
 try:
@@ -7,36 +15,13 @@ except Exception:
     tiktoken = None
 
 
-
 class ContextCompiler:
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     def _cache_key(
         self,
         plan,
     ):
-        timer = ExecutionTimer()
-        timer.start("compiler")
-
+        # Pure: no instrumentation here. Timing lives in compile().
         return (
             plan.metadata.get(
                 "execution_fingerprint"
@@ -44,14 +29,10 @@ class ContextCompiler:
             plan.capability,
         )
 
-
     def _fingerprint_plan(
         self,
         plan,
     ):
-        import hashlib
-        import json
-
         payload = {
             "capability": plan.capability,
             "messages": plan.messages,
@@ -71,7 +52,6 @@ class ContextCompiler:
             ).encode()
         ).hexdigest()
 
-
     def _freeze_messages(
         self,
         messages,
@@ -84,11 +64,11 @@ class ContextCompiler:
             for message in messages
         )
 
-
     def _validate_plan(
         self,
         plan,
     ):
+        # Validation only. No recursion, no enrichment.
         if (
             plan.token_budget.estimated_prompt_tokens
             > plan.token_budget.max_prompt_tokens
@@ -97,12 +77,33 @@ class ContextCompiler:
                 "ExecutionPlan exceeds prompt budget."
             )
 
-        plan = self._validate_plan(plan)
+        return plan
 
-        plan.metadata["cache_key"] = self._cache_key(plan)
+    def _enrich_plan(
+        self,
+        plan,
+    ):
+        # Order matters: every reader runs after its dependencies exist.
+        plan.metadata.update(
+            self._build_route_metadata(
+                plan.capability,
+                plan.provider_hints,
+                plan.token_budget,
+            )
+        )
 
         plan.metadata["execution_fingerprint"] = (
             self._fingerprint_plan(plan)
+        )
+
+        plan.metadata["cache_key"] = self._cache_key(plan)
+
+        plan.metadata["provider_selection"] = (
+            self._provider_selection(plan)
+        )
+
+        plan.metadata["provider_fallback_chain"] = (
+            self._provider_fallback_chain(plan)
         )
 
         plan.metadata["execution_signature"] = (
@@ -113,24 +114,16 @@ class ContextCompiler:
             self._runtime_contract(plan)
         )
 
-        plan.metadata["compiler_health"] = (
-            self._compiler_health(plan)
-        )
-
         plan.metadata["compile_summary"] = (
             self._compile_summary(plan)
         )
 
+        plan.metadata["compiler_health"] = (
+            self._compiler_health(plan)
+        )
+
         plan.metadata["compiler_manifest"] = (
             self._compiler_manifest(plan)
-        )
-
-        plan.metadata["provider_selection"] = (
-            self._provider_selection(plan)
-        )
-
-        plan.metadata["provider_fallback_chain"] = (
-            self._provider_fallback_chain(plan)
         )
 
         plan.metadata["execution_route"] = (
@@ -138,9 +131,6 @@ class ContextCompiler:
         )
 
         return plan
-
-        return plan
-
 
     def _score_route(
         self,
@@ -162,7 +152,6 @@ class ContextCompiler:
             score += 20
 
         return min(score, 100)
-
 
     def _build_route_metadata(
         self,
@@ -215,33 +204,7 @@ class ContextCompiler:
                     token_budget,
                     provider_hints,
                 ),
-            "route_score":
-                self._score_route(
-                    provider_hints,
-                    token_budget,
-                ),
-            "estimated_cost":
-                self._estimate_cost(
-                    provider_hints,
-                    token_budget,
-                ),
-            "estimated_latency":
-                self._estimate_latency(
-                    provider_hints,
-                    token_budget,
-                ),
-            "execution_quality":
-                self._execution_quality(
-                    provider_hints,
-                    token_budget,
-                ),
-            "execution_readiness":
-                self._execution_readiness(
-                    token_budget,
-                    provider_hints,
-                ),
         }
-
 
     def _build_evidence_bundle(
         self,
@@ -257,33 +220,6 @@ class ContextCompiler:
                 metadata.get("tool_results", ())
             ),
         )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     def _execution_route(
         self,
@@ -324,7 +260,6 @@ class ContextCompiler:
                 ),
         }
 
-
     def _provider_fallback_chain(
         self,
         plan,
@@ -347,7 +282,6 @@ class ContextCompiler:
                 chain.append(provider)
 
         return tuple(chain)
-
 
     def _provider_selection(
         self,
@@ -382,7 +316,6 @@ class ContextCompiler:
             "reason": "balanced",
         }
 
-
     def _compiler_manifest(
         self,
         plan,
@@ -416,7 +349,6 @@ class ContextCompiler:
                     "cache_key"
                 ),
         }
-
 
     def _compile_summary(
         self,
@@ -463,7 +395,6 @@ class ContextCompiler:
                 ),
         }
 
-
     def _compiler_health(
         self,
         plan,
@@ -499,7 +430,6 @@ class ContextCompiler:
             "route_score": route,
             "diagnostics": diagnostics,
         }
-
 
     def _runtime_contract(
         self,
@@ -538,7 +468,6 @@ class ContextCompiler:
                 ),
         }
 
-
     def _execution_signature(
         self,
         plan,
@@ -566,7 +495,6 @@ class ContextCompiler:
                 ),
         }
 
-
     def _execution_readiness(
         self,
         token_budget,
@@ -584,7 +512,6 @@ class ContextCompiler:
             score += 2
 
         return max(0, min(score, 100))
-
 
     def _execution_quality(
         self,
@@ -607,7 +534,6 @@ class ContextCompiler:
 
         return max(0, min(100, quality))
 
-
     def _estimate_latency(
         self,
         provider_hints,
@@ -628,7 +554,6 @@ class ContextCompiler:
 
         return round(max(latency, 0.05), 3)
 
-
     def _estimate_cost(
         self,
         provider_hints,
@@ -645,7 +570,6 @@ class ContextCompiler:
         ) * rate
 
         return round(estimated, 6)
-
 
     def _optimize_token_budget(
         self,
@@ -668,7 +592,6 @@ class ContextCompiler:
             max_completion_tokens=completion,
             reserve_tokens=reserve,
         )
-
 
     def _build_provider_hints(
         self,
@@ -703,9 +626,6 @@ class ContextCompiler:
             prefers_speed=speed,
         )
 
-
-
-
     def _normalize_messages(
         self,
         messages,
@@ -731,7 +651,6 @@ class ContextCompiler:
             )
 
         return normalized
-
 
     def _compress_messages(
         self,
@@ -760,7 +679,6 @@ class ContextCompiler:
         compressed.append(messages[-1])
 
         return compressed
-
 
     def _trim_messages(
         self,
@@ -794,7 +712,6 @@ class ContextCompiler:
             for m in messages
         ))
 
-
     def compile(
         self,
         capability,
@@ -805,18 +722,40 @@ class ContextCompiler:
         evidence,
         metadata=None,
     ):
+        # Compiler timing lives here, not in _cache_key().
+        timer = ExecutionTimer()
+        timer.start("compiler")
+
+        compressed = self._compress_messages(
+            messages,
+            token_budget,
+        )
+
+        trimmed = self._trim_messages(
+            compressed,
+            token_budget,
+        )
+
+        normalized = self._normalize_messages(trimmed)
+
+        frozen = self._freeze_messages(normalized)
 
         plan = ExecutionPlan(
             capability=capability,
-            messages=self._freeze_messages(self._normalize_messages(self._trim_messages(
-                self._compress_messages(
-                    messages,
-                    token_budget,
-                ),
-                token_budget,
-            ))),
+            messages=frozen,
             token_budget=token_budget,
             provider_hints=provider_hints,
             evidence=evidence,
-            metadata=metadata or {},
+            metadata=dict(metadata or {}),
         )
+
+        plan = self._validate_plan(plan)
+
+        plan = self._enrich_plan(plan)
+
+        # Single exit: timing is attached on every path.
+        plan.metadata["compiler_latency"] = (
+            timer.stop("compiler")
+        )
+
+        return plan

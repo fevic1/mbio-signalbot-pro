@@ -1,6 +1,7 @@
 import json
 import re
 from time import perf_counter
+
 from aios.runtime.telemetry.timer import ExecutionTimer
 from aios.compiler.compiler import ContextCompiler
 from aios.compiler.validator import ExecutionPlanValidator
@@ -11,15 +12,14 @@ from aios.compiler.models import (
     EvidenceBundle,
 )
 
-
 from aios.intelligence.llm_adapter import LLMAdapter
-from aios.providers.router import chat
 from aios.providers.router import provider_pool
 from aios.neural_proxy.protocol import AIOSRequest
 from aios.capabilities.policy import CapabilityPolicyEngine
 from aios.capabilities.errors import CapabilityExecutionError
 
 from .request import CapabilityRequest
+
 
 class CapabilityExecutor:
 
@@ -56,17 +56,13 @@ class CapabilityExecutor:
 
         return capability
 
-
-
     def _validate_capability_policy(
         self,
         capability,
     ):
-
         return self.policy.validate(
             capability
         )
-
 
     async def execute(
         self,
@@ -111,22 +107,6 @@ class CapabilityExecutor:
             request,
         )
 
-
-
-        provider_request = AIOSRequest(
-            capability=request.capability,
-            messages=[
-                {
-                    "role": "system",
-                    "content": prompt["system"],
-                },
-                {
-                    "role": "user",
-                    "content": str(prompt["context"]),
-                },
-            ]
-        )
-
         messages = [
             {
                 "role": "system",
@@ -146,6 +126,11 @@ class CapabilityExecutor:
                 }
             )
 
+        # Timer is created BEFORE any stage uses it.
+        timer = ExecutionTimer()
+        timer.begin()
+
+        timer.start("compiler")
 
         plan = ContextCompiler().compile(
             capability=request.capability,
@@ -161,24 +146,6 @@ class CapabilityExecutor:
         timer.stop("compiler")
 
         diagnostics = CompilerDiagnostics().report(plan)
-
-        aios_request = AIOSRequest(
-            capability=plan.capability,
-            messages=list(plan.messages),
-            constraints={
-                "allowed_models": (
-                    self._get_capability_definition(
-                        request.capability
-                    ).metadata.get("allowed_models")
-                ),
-                "compiler": diagnostics,
-            },
-        )
-        timer = ExecutionTimer()
-        timer.begin()
-
-        timer.start("compiler")
-        start = perf_counter()
 
         allowed_models = (
             self._get_capability_definition(
@@ -205,16 +172,31 @@ class CapabilityExecutor:
                     allowed_models=allowed_models,
                 )
 
+        aios_request = AIOSRequest(
+            capability=plan.capability,
+            messages=list(plan.messages),
+            constraints={
+                "allowed_models": allowed_models,
+                "compiler": diagnostics,
+            },
+        )
+
         if selected_model:
-            provider_request.model = selected_model.name
+            aios_request.model = selected_model.name
+
+        start = perf_counter()
+
+        # Verification window starts immediately before execution.
+        timer.start("verification")
 
         response = await self.system.neural_proxy.execute(
             aios_request
         )
 
-
         timer.stop("verification")
+
         timer.finish()
+
         latency = perf_counter() - start
 
         content = response.content
@@ -223,29 +205,27 @@ class CapabilityExecutor:
 
         if isinstance(content, str):
             cleaned = re.sub(
-                r"```json\\s*|```",
+                r"```json\s*|```",
                 "",
                 content,
             )
 
-            start = cleaned.find("{")
-            end = cleaned.rfind("}")
+            brace_start = cleaned.find("{")
+            brace_end = cleaned.rfind("}")
 
-            if start != -1 and end > start:
+            if brace_start != -1 and brace_end > brace_start:
                 try:
                     parsed = json.loads(
-                        cleaned[start:end + 1]
+                        cleaned[brace_start:brace_end + 1]
                     )
                 except Exception:
                     parsed = {}
 
-        content = response.content
-
-        if isinstance(content, str):
-            try:
-                content = json.loads(content)
-            except Exception:
-                pass
+            if not parsed:
+                try:
+                    parsed = json.loads(content)
+                except Exception:
+                    parsed = {}
 
         final_content = parsed or content
 
@@ -281,9 +261,12 @@ class CapabilityExecutor:
             ),
             "content": final_content,
             "latency": latency,
-            "compiler_latency": plan.metadata.get("compiler_latency", timer.latency.compiler),
-            "provider_latency": timer.latency.provider,
+            "compiler_latency": plan.metadata.get(
+                "compiler_latency",
+                timer.latency.compiler,
+            ),
             "verification_latency": timer.latency.verification,
+            "stage_latencies": timer.snapshot(),
             "total_latency": timer.latency.total,
             "cost": 0.0,
             "attempt": attempt,
