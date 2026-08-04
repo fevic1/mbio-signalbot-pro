@@ -11,6 +11,37 @@ class ContextCompiler:
 
 
 
+
+
+    def _compress_messages(
+        self,
+        messages,
+        budget,
+    ):
+        if self._estimate_tokens(messages) <= budget.max_prompt_tokens:
+            return messages
+
+        compressed = [messages[0]]
+
+        if len(messages) > 2:
+            summary = "\n".join(
+                str(m.get("content", ""))[:160]
+                for m in messages[1:-1]
+            )
+
+            compressed.append(
+                {
+                    "role": "system",
+                    "content":
+                        "Conversation Summary:\n" + summary,
+                }
+            )
+
+        compressed.append(messages[-1])
+
+        return compressed
+
+
     def _trim_messages(
         self,
         messages,
@@ -57,7 +88,13 @@ class ContextCompiler:
 
         return ExecutionPlan(
             capability=capability,
-            messages=self._trim_messages(messages, token_budget),
+            messages=self._trim_messages(
+                self._compress_messages(
+                    messages,
+                    token_budget,
+                ),
+                token_budget,
+            ),
             token_budget=token_budget,
             provider_hints=provider_hints,
             evidence=evidence,
