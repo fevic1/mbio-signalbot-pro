@@ -944,6 +944,26 @@ class AIOSDispatcher:
                 "attempt",
                 0,
             ),
+            "provider_cost": result.get(
+                "provider_cost",
+                0.0,
+            ),
+            "provider_latency": result.get(
+                "provider_latency",
+                0.0,
+            ),
+            "total_tokens": result.get(
+                "total_tokens",
+                0,
+            ),
+            "completion_tokens": result.get(
+                "completion_tokens",
+                0,
+            ),
+            "prompt_tokens": result.get(
+                "prompt_tokens",
+                0,
+            ),
             "execution_evidence": result.get(
                 "execution_evidence",
                 {},

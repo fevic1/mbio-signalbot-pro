@@ -259,6 +259,11 @@ class CapabilityExecutor:
             "capability": request.capability,
             "provider": response.provider,
             "model": response.model,
+            "prompt_tokens": response.prompt_tokens,
+            "completion_tokens": response.completion_tokens,
+            "total_tokens": response.total_tokens,
+            "provider_latency": response.latency,
+            "provider_cost": response.cost,
             "selected_model": (
                 selected_model.name
                 if selected_model
