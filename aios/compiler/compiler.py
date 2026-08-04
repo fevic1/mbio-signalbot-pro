@@ -164,6 +164,11 @@ class ContextCompiler:
                     provider_hints,
                     token_budget,
                 ),
+            "estimated_latency":
+                self._estimate_latency(
+                    provider_hints,
+                    token_budget,
+                ),
             "route_score":
                 self._score_route(
                     provider_hints,
@@ -171,6 +176,11 @@ class ContextCompiler:
                 ),
             "estimated_cost":
                 self._estimate_cost(
+                    provider_hints,
+                    token_budget,
+                ),
+            "estimated_latency":
+                self._estimate_latency(
                     provider_hints,
                     token_budget,
                 ),
@@ -195,6 +205,29 @@ class ContextCompiler:
 
 
 
+
+
+
+
+    def _estimate_latency(
+        self,
+        provider_hints,
+        token_budget,
+    ):
+        latency = 0.20
+
+        latency += (
+            token_budget.estimated_prompt_tokens
+            / 10000
+        ) * 0.30
+
+        if provider_hints.prefers_reasoning:
+            latency += 0.80
+
+        if provider_hints.prefers_speed:
+            latency -= 0.10
+
+        return round(max(latency, 0.05), 3)
 
 
     def _estimate_cost(
