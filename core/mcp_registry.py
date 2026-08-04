@@ -33,6 +33,7 @@ class MCPRegistry:
         
         self._runtime_servers = {}
         self._runtime_registry = {}
+        self._tool_schemas = {}
         
         logger.info("[INIT] MCP Registry initialized")
 
@@ -250,6 +251,9 @@ class MCPRegistry:
                 for tool in server_tools:
 
                     tool_name = tool["name"]
+                    
+                    # Store the actual schema for the ParameterPlanner
+                    self._tool_schemas[server_name][tool_name] = tool
 
                     async def _call(
                         arguments=None,
@@ -338,16 +342,19 @@ class MCPRegistry:
         server,
         tool,
     ):
+        # First, check the explicitly stored schemas
+        if server in getattr(self, "_tool_schemas", {}):
+            schema = self._tool_schemas[server].get(tool)
+            if schema:
+                return schema
+                
+        # Fallback to runtime list_tools if needed
         runtime = self._runtime_servers.get(server)
-
-        if runtime is None:
-            return None
-
-        tools = await runtime.list_tools()
-
-        for item in tools:
-            if item.get("name") == tool:
-                return item
+        if runtime is not None:
+            tools = await runtime.list_tools()
+            for item in tools:
+                if item.get("name") == tool:
+                    return item
 
         return None
 
