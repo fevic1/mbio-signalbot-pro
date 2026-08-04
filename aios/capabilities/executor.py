@@ -1,6 +1,7 @@
 import json
 import re
 from time import perf_counter
+from aios.runtime.telemetry.timer import ExecutionTimer
 from aios.compiler.compiler import ContextCompiler
 from aios.compiler.validator import ExecutionPlanValidator
 from aios.compiler.diagnostics import CompilerDiagnostics
@@ -157,6 +158,8 @@ class CapabilityExecutor:
 
         ExecutionPlanValidator().validate(plan)
 
+        timer.stop("compiler")
+
         diagnostics = CompilerDiagnostics().report(plan)
 
         aios_request = AIOSRequest(
@@ -171,6 +174,10 @@ class CapabilityExecutor:
                 "compiler": diagnostics,
             },
         )
+        timer = ExecutionTimer()
+        timer.begin()
+
+        timer.start("compiler")
         start = perf_counter()
 
         allowed_models = (
@@ -206,6 +213,7 @@ class CapabilityExecutor:
         )
 
 
+        timer.finish()
         latency = perf_counter() - start
 
         content = response.content
@@ -272,6 +280,9 @@ class CapabilityExecutor:
             ),
             "content": final_content,
             "latency": latency,
+            "compiler_latency": timer.latency.compiler,
+            "provider_latency": timer.latency.provider,
+            "total_latency": timer.latency.total,
             "cost": 0.0,
             "attempt": attempt,
             "execution_evidence": {
