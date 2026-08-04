@@ -178,6 +178,10 @@ class CapabilityExecutor:
             constraints={
                 "allowed_models": allowed_models,
                 "compiler": diagnostics,
+                "compiler_latency": plan.metadata.get(
+                    "compiler_latency",
+                    timer.latency.compiler,
+                ),
             },
         )
 
