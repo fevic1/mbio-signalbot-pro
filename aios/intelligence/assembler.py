@@ -1,3 +1,5 @@
+import logging
+
 from aios.intelligence.capability_planner import CapabilityPlanner
 from aios.intelligence.tool_executor import ToolExecutor
 
@@ -8,8 +10,6 @@ from aios.intelligence.evidence import (
     IntelligenceEngine,
     ReasoningEngine,
     IntelligencePlanner,
-    ExplanationEngine,
-    IntelligenceCoordinator,
     IntelligenceRuntime,
     IntelligenceMemory,
     IntelligenceVerifier,
@@ -21,9 +21,12 @@ from aios.intelligence.evidence import (
     IntelligenceMetrics,
 )
 
+logger = logging.getLogger(__name__)
+
+
 class ContextAssembler:
 
-    def assemble(
+    async def assemble(
         self,
         system,
         capability,
@@ -188,6 +191,8 @@ class ContextAssembler:
 
 
         capability_plan = []
+        tool_results = []
+        tool_evidence = {}
 
         registry = getattr(
             system,
@@ -199,9 +204,7 @@ class ContextAssembler:
 
             try:
 
-                capability_plan = [
-                    vars(x)
-                    for x in CapabilityPlanner().select(
+                capability_plan = await CapabilityPlanner().select(
                         registry,
                         getattr(
                             request,
@@ -213,11 +216,44 @@ class ContextAssembler:
                             ),
                         ),
                     )
-                ]
 
-            except Exception:
+                if capability_plan:
 
-                capability_plan = []
+                    execution = (
+                        await ToolExecutor().execute(
+                            registry,
+                            capability_plan,
+                        )
+                    )
+
+                    tool_results = execution.get(
+                        "tool_results",
+                        [],
+                    )
+
+                    tool_evidence = execution.get(
+                        "tool_evidence",
+                        {},
+                    )
+
+                    if isinstance(
+                        evidence,
+                        EvidenceCollection,
+                    ):
+                        evidence.merge(
+                            tool_evidence
+                        )
+
+                        evidence_summary = (
+                            evidence.intelligence_report()
+                        )
+
+            except Exception as exc:
+
+                logger.warning(
+                    "Capability planner failed; degrading to llm_only: %s",
+                    exc,
+                )
 
         return {
             "capability": capability,
@@ -235,5 +271,12 @@ class ContextAssembler:
             "skill_registry": getattr(system, "skill_registry", None),
             "capability_registry": getattr(system, "capability_registry", None),
             "capability_plan": capability_plan,
+            "tool_results": tool_results,
+            "tool_evidence": tool_evidence,
+            "execution_mode": (
+                "mcp_augmented"
+                if tool_results
+                else "llm_only"
+            ),
             "tool_executor": ToolExecutor(),
         }

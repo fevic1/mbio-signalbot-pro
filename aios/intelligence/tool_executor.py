@@ -1,4 +1,7 @@
+import logging
 from aios.intelligence.evidence_fusion import EvidenceFusion
+
+logger = logging.getLogger(__name__)
 
 
 class ToolExecutor:
@@ -41,6 +44,13 @@ class ToolExecutor:
                 )
 
             except Exception as exc:
+
+                logger.warning(
+                    "Tool execution failed: %s/%s - %s",
+                    server,
+                    tool,
+                    exc,
+                )
 
                 tool_results.append(
                     {

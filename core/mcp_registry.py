@@ -30,6 +30,10 @@ class MCPRegistry:
         self._servers: Dict[str, MCPServerConfig] = {}
         self._tools: Dict[str, Dict[str, Any]] = {}
         self._lock = asyncio.Lock()
+        
+        self._runtime_servers = {}
+        self._runtime_registry = {}
+        
         logger.info("[INIT] MCP Registry initialized")
 
     async def register_server(self, config: MCPServerConfig) -> bool:
@@ -165,18 +169,6 @@ class MCPRegistry:
             return elapsed < timeout_seconds
 
 
-# Singleton instance
-
-
-    # ----------------------------------------------------
-    # Runtime Discovery (Non-breaking)
-    # ----------------------------------------------------
-
-        # Runtime MCP discovery
-        self._runtime_servers = {}
-        self._runtime_registry = {}
-
-
     def load_yaml_registry(self):
 
         from pathlib import Path
@@ -202,12 +194,6 @@ class MCPRegistry:
     def discover_servers(self):
 
         from importlib import import_module
-
-        if not hasattr(self, "_runtime_servers"):
-            self._runtime_servers = {}
-
-        if not hasattr(self, "_runtime_registry"):
-            self._runtime_registry = {}
 
         self.load_yaml_registry()
 
@@ -235,18 +221,14 @@ class MCPRegistry:
                         break
 
                 if server_cls is None:
-                    print(
-                        f"[MCP] No Server exported: {name}"
-                    )
+                    logger.warning(f"[MCP] No Server exported: {name}")
                     continue
 
                 discovered[name] = server_cls()
 
             except Exception as exc:
 
-                print(
-                    f"[MCP] Failed loading {name}: {exc}"
-                )
+                logger.warning(f"[MCP] Failed loading {name}: {exc}")
 
         self._runtime_servers = discovered
 
@@ -284,31 +266,9 @@ class MCPRegistry:
 
             except Exception as exc:
 
-                print(
-                    f"[MCP] Failed registering tools for "
-                    f"{server_name}: {exc}"
+                logger.warning(
+                    f"[MCP] Failed registering tools for {server_name}: {exc}"
                 )
-
-
-    def register_runtime_tools(self):
-
-        import asyncio
-
-        try:
-            asyncio.get_running_loop()
-
-        except RuntimeError:
-
-            return asyncio.run(
-                self.register_runtime_tools_async()
-            )
-
-        raise RuntimeError(
-            "register_runtime_tools() called from an active event loop. "
-            "Use await register_runtime_tools_async()."
-        )
-
-
 
 
     def register_runtime_server(
@@ -349,19 +309,9 @@ class MCPRegistry:
 
             except Exception as exc:
 
-                print(f"[MCP] {server_name}: {exc}")
+                logger.warning(f"[MCP] {server_name}: {exc}")
 
         return tools
-
-
-    def runtime_tools_sync(self):
-
-        import asyncio
-
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(self.runtime_tools())
 
 
     async def call_tool(
@@ -383,11 +333,22 @@ class MCPRegistry:
         )
 
 
-        raise RuntimeError(
-            "runtime_tools_sync() cannot be called from an active event loop. "
-            "Use: await runtime_tools()."
-        )
+    async def get_tool_schema_async(
+        self,
+        server,
+        tool,
+    ):
+        runtime = self._runtime_servers.get(server)
 
+        if runtime is None:
+            return None
 
+        tools = await runtime.list_tools()
+
+        for item in tools:
+            if item.get("name") == tool:
+                return item
+
+        return None
 
 mcp_registry = MCPRegistry()
