@@ -13,6 +13,42 @@ class ContextCompiler:
 
 
 
+
+
+    def _build_provider_hints(
+        self,
+        capability,
+        messages,
+    ):
+        text = " ".join(
+            str(m.get("content", "")).lower()
+            for m in messages
+        )
+
+        reasoning = any(
+            x in text
+            for x in (
+                "analyze",
+                "reason",
+                "compare",
+                "research",
+                "verify",
+                "audit",
+            )
+        )
+
+        speed = capability in {
+            "chat",
+            "assistant",
+            "completion",
+        }
+
+        return ProviderHints(
+            prefers_reasoning=reasoning,
+            prefers_speed=speed,
+        )
+
+
     def _compress_messages(
         self,
         messages,
