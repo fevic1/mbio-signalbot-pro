@@ -25,6 +25,35 @@ class ContextCompiler:
 
 
 
+
+
+    def _fingerprint_plan(
+        self,
+        plan,
+    ):
+        import hashlib
+        import json
+
+        payload = {
+            "capability": plan.capability,
+            "messages": plan.messages,
+            "token_budget": plan.token_budget.__dict__,
+            "provider_hints": plan.provider_hints.__dict__,
+            "evidence": {
+                "tools_called": list(plan.evidence.tools_called),
+                "sources": list(plan.evidence.sources),
+            },
+        }
+
+        return hashlib.sha256(
+            json.dumps(
+                payload,
+                sort_keys=True,
+                default=str,
+            ).encode()
+        ).hexdigest()
+
+
     def _freeze_messages(
         self,
         messages,
@@ -50,7 +79,13 @@ class ContextCompiler:
                 "ExecutionPlan exceeds prompt budget."
             )
 
-        return self._validate_plan(plan)
+        plan = self._validate_plan(plan)
+
+        plan.metadata["execution_fingerprint"] = (
+            self._fingerprint_plan(plan)
+        )
+
+        return plan
 
         return plan
 
