@@ -213,6 +213,7 @@ class CapabilityExecutor:
         )
 
 
+        timer.stop("verification")
         timer.finish()
         latency = perf_counter() - start
 
@@ -280,8 +281,9 @@ class CapabilityExecutor:
             ),
             "content": final_content,
             "latency": latency,
-            "compiler_latency": timer.latency.compiler,
+            "compiler_latency": plan.metadata.get("compiler_latency", timer.latency.compiler),
             "provider_latency": timer.latency.provider,
+            "verification_latency": timer.latency.verification,
             "total_latency": timer.latency.total,
             "cost": 0.0,
             "attempt": attempt,
