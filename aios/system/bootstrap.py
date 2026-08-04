@@ -81,7 +81,6 @@ class AIOSBootstrap:
                 "mcp_registry",
                 mcp_registry,
             )
-            self.container.mcp_registry = mcp_registry
 
         services = registry.build_core(self.container)
 

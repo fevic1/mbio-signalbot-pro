@@ -195,10 +195,10 @@ class ContextAssembler:
         tool_results = []
         tool_evidence = {}
 
-        registry = getattr(
-            system,
-            "mcp_registry",
-            None,
+        registry = (
+            system.get("mcp_registry")
+            if hasattr(system, "get")
+            else getattr(system, "mcp_registry", None)
         )
 
         if registry:
