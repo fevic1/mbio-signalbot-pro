@@ -1,0 +1,105 @@
+name: Repair CI Conflicts
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Repair known merge-conflict damage
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          import subprocess
+
+          root = Path('.')
+          paths = [
+              Path('core/auth.py'),
+              Path('core/memory.py'),
+              Path('core/mcp_registry.py'),
+              Path('routes/mcp_server.py'),
+              Path('monitoring/alert_manager.py'),
+              Path('core/asset_universe.py'),
+          ]
+
+          def resolve(text: str, prefer: str) -> str:
+              pattern = re.compile(
+                  r'<<<<<<< Updated upstream\n(.*?)\n=======\n(.*?)\n>>>>>>> Stashed changes',
+                  re.DOTALL,
+              )
+              def pick(match):
+                  return match.group(1) if prefer == 'upstream' else match.group(2)
+              return pattern.sub(pick, text)
+
+          for path in paths:
+              if not path.exists():
+                  continue
+              text = path.read_text(encoding='utf-8')
+              if '<<<<<<< Updated upstream' not in text:
+                  continue
+              # The asset-universe upstream side preserves the live eligibility/exclusion
+              # filtering. The other affected files should keep the timezone-aware side.
+              prefer = 'upstream' if path == Path('core/asset_universe.py') else 'stashed'
+              path.write_text(resolve(text, prefer), encoding='utf-8')
+
+          legacy = Path('archive/legacy/dca_lifecycle.py')
+          if legacy.exists():
+              text = legacy.read_text(encoding='utf-8')
+              text = text.replace('        dca["_processing"] = False\n', '')
+              legacy.write_text(text, encoding='utf-8')
+
+          # Never allow unresolved Git conflict markers to reach CI again.
+          offenders = []
+          for path in root.rglob('*.py'):
+              if any(part in {'.git', '.venv', 'venv', '__pycache__'} for part in path.parts):
+                  continue
+              text = path.read_text(encoding='utf-8', errors='ignore')
+              if '<<<<<<< ' in text or '\n=======\n' in text or '\n>>>>>>> ' in text:
+                  offenders.append(str(path))
+          if offenders:
+              raise SystemExit('Unresolved merge markers remain: ' + ', '.join(offenders))
+
+      - name: Validate repaired Python
+        run: |
+          python -m compileall -q core routes monitoring archive
+
+      - name: Commit repair
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No repair changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add core routes monitoring archive
+          git commit -m 'fix: repair CI conflict markers and lint blockers'
+          git push
+
+      - name: Verify repository state
+        run: |
+          python -m compileall -q core routes monitoring archive
+          python - <<'PY'
+          from pathlib import Path
+          bad = []
+          for p in Path('.').rglob('*.py'):
+              if any(x in {'.git', '.venv', 'venv', '__pycache__'} for x in p.parts):
+                  continue
+              s = p.read_text(encoding='utf-8', errors='ignore')
+              if '<<<<<<< ' in s or '\n=======\n' in s or '\n>>>>>>> ' in s:
+                  bad.append(str(p))
+          assert not bad, bad
+          print('Python compilation and merge-marker verification passed.')
+          PY
