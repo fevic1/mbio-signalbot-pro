@@ -1,5 +1,4 @@
 import pytest
-from types import SimpleNamespace
 
 import core.state as state
 from core.dca_runtime import DCARuntimeCoordinator
@@ -21,7 +20,12 @@ class FakeManager:
         return [
             {
                 "level": i,
-                "price": round(entry_price * (1 - spacing * i) if direction == "LONG" else entry_price * (1 + spacing * i), 2),
+                "price": round(
+                    entry_price * (1 - spacing * i)
+                    if direction == "LONG"
+                    else entry_price * (1 + spacing * i),
+                    2,
+                ),
                 "size": round(base_size * (multiplier ** i), 8),
                 "status": "pending",
                 "order_id": None,
@@ -94,7 +98,7 @@ async def test_initial_runtime_rebuild_skips_filled_base():
 async def test_filled_order_is_detected_and_remaining_ladder_rebuilt():
     executor = FakeExecutor(
         [],
-        [{"coin": "BTC", "size": 2.5, "entry_price": 98.0}],
+        [{"coin": "BTC", "size": 3.25, "entry_price": 98.0}],
     )
     manager = FakeManager(executor)
     runtime = DCARuntimeCoordinator(manager)
