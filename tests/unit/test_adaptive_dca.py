@@ -1,4 +1,6 @@
 import pytest
+import sys
+from types import SimpleNamespace
 
 from core.adaptive_dca import (
     AdaptiveDCAConfig,
@@ -184,10 +186,10 @@ async def test_manager_reprices_stale_order_without_exchange_access(monkeypatch)
     }
     monkeypatch.setattr("core.dca_manager.time.time", lambda: 100.0)
     monkeypatch.setattr("core.dca_manager.state.save_state", lambda: None)
-    monkeypatch.setattr(
-        "core.data_fetcher.get_mtf_data",
-        lambda _: {"1h": {"price": 96.0, "atr": 1.0, "rsi": 50.0}},
+    fake_data_fetcher = SimpleNamespace(
+        get_mtf_data=lambda _: {"1h": {"price": 96.0, "atr": 1.0, "rsi": 50.0}}
     )
+    monkeypatch.setitem(sys.modules, "core.data_fetcher", fake_data_fetcher)
     monkeypatch.setattr(manager, "_cancel_order", lambda *args: _ok())
     monkeypatch.setattr(manager, "_submit_limit", lambda *args: _ok(order_id=11))
 
@@ -237,10 +239,10 @@ async def test_manager_acceleration_cancels_resting_orders_and_rebuilds(monkeypa
     }
     monkeypatch.setattr("core.dca_manager.time.time", lambda: 100.0)
     monkeypatch.setattr("core.dca_manager.state.save_state", lambda: None)
-    monkeypatch.setattr(
-        "core.data_fetcher.get_mtf_data",
-        lambda _: {"1h": {"price": 96.0, "atr": 2.0, "rsi": 30.0}},
+    fake_data_fetcher = SimpleNamespace(
+        get_mtf_data=lambda _: {"1h": {"price": 96.0, "atr": 2.0, "rsi": 30.0}}
     )
+    monkeypatch.setitem(sys.modules, "core.data_fetcher", fake_data_fetcher)
     monkeypatch.setattr(
         manager,
         "_ai_advice",
