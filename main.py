@@ -48,8 +48,9 @@ from monitoring.alert_manager import (
 from monitoring.position_tracker import (
     entry_scanner_loop, full_analysis_loop,
     position_monitor_loop, quick_signal_scanner,
-    update_trailing_dca, monitor_dca_profit_targets,
+    monitor_dca_profit_targets,
     monitor_grid_bots)
+from monitoring.adaptive_dca_supervisor import adaptive_dca_supervisor_loop
 from core.strategy_manager import StrategyManager
 from core.llm_reasoning import LLMReasoningEngine
 from core.strategy_registry import get_strategy_class, list_strategies
@@ -842,7 +843,7 @@ async def main() -> None:
         ("entry_scanner", entry_scanner_loop(run_trade, TELEGRAM_CHAT_ID)),
         ("full_analysis", full_analysis_loop(run_cycle)),
         ("slot_hunter", autonomous_slot_hunter(TELEGRAM_CHAT_ID)),
-        ("trailing_dca", update_trailing_dca()),
+        ("adaptive_dca", adaptive_dca_supervisor_loop()),
         ("profit_target_monitor", monitor_dca_profit_targets()),
     ]
     if _grid_enabled:
