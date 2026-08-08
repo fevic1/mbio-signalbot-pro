@@ -3,6 +3,7 @@ execution/hl_executor.py — Live Hyperliquid Execution (SDK-Agnostic)
 Dynamically adapts to any hyperliquid SDK structure.
 """
 import os
+import time
 import threading
 import logging
 from typing import Optional, Dict
@@ -49,10 +50,10 @@ _constants = None
 def _load_sdk():
     """Load Hyperliquid SDK classes using any available import pattern."""
     global _Info, _Exchange, _constants
-    
+
     if _Info is not None:
         return  # Already loaded
-    
+
     # Pattern 1: Submodule imports (official SDK structure)
     try:
         from hyperliquid.info import Info
@@ -63,7 +64,7 @@ def _load_sdk():
         return
     except ImportError:
         pass
-    
+
     # Pattern 2: Top-level imports (alternative structure)
     try:
         from hyperliquid import Info, Exchange
@@ -73,7 +74,7 @@ def _load_sdk():
         return
     except ImportError:
         pass
-    
+
     # Pattern 3: Direct attribute access
     try:
         import hyperliquid
@@ -86,7 +87,7 @@ def _load_sdk():
             return
     except Exception:
         pass
-    
+
     # If all patterns fail, raise clear error
     raise ImportError(
         "Could not load Hyperliquid SDK. "
@@ -133,10 +134,12 @@ class HLExecutor:
         return cls._instance
 
     def __init__(self, private_key: str | None = None, chat_id: int | None = None):
+        self._orders_cache = (0.0, None)
+        self._positions_cache = (0.0, None)
         if getattr(self, "_initialized", False):
             return
         _load_sdk()  # Ensure SDK is loaded
-        
+
         # Multi-user support: use provided key or fallback to env var
         if private_key:
             self.private_key = private_key
@@ -144,15 +147,15 @@ class HLExecutor:
             self.private_key = os.getenv("HL_PRIVATE_KEY")
         if not self.private_key:
             raise ValueError("HL_PRIVATE_KEY not set")
-        
+
         from eth_account import Account
         self.account = Account.from_key(self.private_key)
         self.address = self.account.address
-        
+
         # Initialize clients using dynamically loaded classes
         base_url = _constants.MAINNET_API_URL
         self.info = _Info(base_url, skip_ws=True)
-        
+
         # --- HIP-4 INSTITUTIONAL INTEGRATION ---
         from core.hip4_metadata import HIP4MetadataManager
         self.hip4_manager = HIP4MetadataManager.get_instance()
@@ -160,7 +163,7 @@ class HLExecutor:
         logger.info("✅ HIP-4 Metadata Manager initialized.")
         # ---------------------------------------
         self.exchange = _Exchange(self.account, base_url, account_address=self.address)
-        
+
         mode = "multi-user" if private_key else "single-user (env)"
         logger.info(f"✅ HLExecutor initialized for {self.address} [{mode}]")
         self._initialized = True
@@ -176,40 +179,50 @@ class HLExecutor:
             return {"success": False, "error": str(e)}
 
     def get_open_positions(self):
+        now = time.monotonic()
+        if self._positions_cache[1] is not None and now - self._positions_cache[0] < 5:
+            return self._positions_cache[1]
+
         try:
             import requests
-            # Use HL_ACCOUNT_ADDRESS from env (master account) for querying positions
+
             query_address = os.getenv("HL_ACCOUNT_ADDRESS", self.address)
-            
-            # Use direct HTTP call to clearinghouseState (bypasses SDK issues)
+
             resp = requests.post(
                 "https://api.hyperliquid.xyz/info",
                 json={"type": "clearinghouseState", "user": query_address},
-                timeout=15
+                timeout=15,
             )
+
             logger.debug(f"🔍 Querying positions for: {query_address}")
+
             if resp.status_code != 200:
                 logger.error(f"Failed to fetch positions: HTTP {resp.status_code}")
                 return []
-            
+
             user_state = resp.json()
-            logger.info(f"🔍 API Response keys: {list(user_state.keys())}")
-            logger.info(f"🔍 assetPositions count: {len(user_state.get('assetPositions', []))}")
-            if user_state.get('assetPositions'):
-                logger.info(f"🔍 First position sample: {user_state['assetPositions'][0]}")
+
             positions = []
+
             for p in user_state.get("assetPositions", []):
                 pos = p.get("position", {})
                 szi = float(pos.get("szi", 0))
-                if abs(szi) > 0.0001:
-                    positions.append({
-                        "coin": pos.get("coin", "?"), 
-                        "side": "long" if szi > 0 else "short", 
-                        "size": abs(szi), 
-                        "entry_price": float(pos.get("entryPx", 0) or 0)
-                    })
-            logger.info(f"📊 Fetched {len(positions)} open positions from exchange")
+
+                if abs(szi) <= 0.0001:
+                    continue
+
+                positions.append(
+                    {
+                        "coin": pos.get("coin", "?"),
+                        "side": "long" if szi > 0 else "short",
+                        "size": abs(szi),
+                        "entry_price": float(pos.get("entryPx", 0) or 0),
+                    }
+                )
+
+            self._positions_cache = (time.monotonic(), positions)
             return positions
+
         except Exception as e:
             logger.error(f"Failed to get open positions: {e}")
             return []
@@ -224,31 +237,37 @@ class HLExecutor:
         return 0.0
 
     def get_open_orders(self) -> list:
-        """Fetch open orders via direct HTTP (bypasses SDK v0.24.0 bug).
-        Same proven pattern as get_open_positions(). Per CODING_STANDARD:
-        No duplicated business logic. Every external call: timeout."""
+        now = time.monotonic()
+        if self._orders_cache[1] is not None and now - self._orders_cache[0] < 5:
+            return self._orders_cache[1]
+
         try:
             import requests
+
             query_address = os.getenv("HL_ACCOUNT_ADDRESS", self.address)
+
             resp = requests.post(
                 "https://api.hyperliquid.xyz/info",
                 json={"type": "openOrders", "user": query_address},
-                timeout=15
+                timeout=15,
             )
+
             if resp.status_code != 200:
                 logger.error(f"Failed to fetch open orders: HTTP {resp.status_code}")
                 return []
+
             orders = resp.json()
+
             if not isinstance(orders, list):
                 logger.warning(f"Unexpected openOrders response type: {type(orders)}")
                 return []
-            logger.debug(f"📋 Fetched {len(orders)} open orders from exchange")
+
+            self._orders_cache = (time.monotonic(), orders)
             return orders
+
         except Exception as e:
             logger.error(f"Failed to get open orders: {e}")
             return []
-
-
 
     def place_order(
         self,
@@ -265,32 +284,30 @@ class HLExecutor:
             is_buy = side.upper() == "BUY"
             sz = float(size)
             # Round size to exchange precision
-            # _prec removed: Using HIP-4 live metadata
             sz = self.hip4_manager.format_size(coin, sz)
-            
+
             # Determine price
             if limit_price is None:
                 mids = self.info.all_mids()
                 mid = float(mids.get(coin, 0))
                 limit_price = mid * 1.001 if is_buy else mid * 0.999
-            
+
             # Convert to float without rounding (preserve full precision)
             px = float(limit_price)
-            
+
             logger.info(f"🚀 Order: {side} {coin} {sz} @ {px}")
-            
+
             # Apply tick rounding and size rounding according to asset precision
             px = _round_px(coin, px)
-            # sz = _round_sz(coin, sz)  <-- REMOVED: HIP-4 format_size already applied
             logger.info(f"🎯 Rounded: {coin} px={px} sz={sz}")
-            
+
 
             # Hyperliquid minimum order protection
             notional = abs(sz * px)
 
             if notional < get_exchange_limits()["min_notional_usd"]:
                 logger.warning(
-                    f"⛔ Skipping order: {coin} {side} "
+                    f"⚠️ Skipping order: {coin} {side} "
                     f"size={sz} px={px} "
                     f"notional=${notional:.2f} < ${get_exchange_limits()['min_notional_usd']} minimum"
                 )
@@ -316,47 +333,97 @@ class HLExecutor:
             )
 
             result = self.exchange.order(coin, is_buy, sz, px, {"limit": {"tif": "Gtc"}}, reduce_only)
-            
-            # Defensive response parsing
+
+            # === DEFENSIVE RESPONSE PARSING (PATCHED) ===
+            # The SDK can return a string, a dict, or a nested structure.
+
+            # 1. If result itself is not a dict, wrap it
+            if isinstance(result, str):
+                logger.warning(f"⚠️ HL SDK returned string response: {result}")
+                return {"success": False, "error": f"HL SDK: {result}"}
+
             if not isinstance(result, dict):
-                return {"success": False, "error": "Invalid response type"}
-            
-            # Try multiple response structures
+                logger.warning(f"⚠️ HL SDK returned unexpected type {type(result)}: {result}")
+                return {"success": False, "error": f"Invalid response type: {type(result).__name__}"}
+
+            # 2. Extract "response" field safely
+            response = result.get("response")
+
+            # If response is a string, it's likely an error message
+            if isinstance(response, str):
+                logger.warning(f"⚠️ HL response field is string: {response}")
+                return {"success": False, "error": f"HL API: {response}"}
+
+            # 3. Try multiple response structures
             statuses = None
-            if "response" in result and isinstance(result["response"], dict):
-                data = result["response"].get("data", {})
-                statuses = data.get("statuses") if isinstance(data, dict) else None
-            elif isinstance(result.get("response"), list):
-                statuses = result["response"]
-            elif isinstance(result, list):
-                statuses = result
-            
+
+            if isinstance(response, dict):
+                data = response.get("data", {}) if isinstance(response.get("data"), dict) else {}
+                statuses = data.get("statuses")
+            elif isinstance(response, list):
+                statuses = response
+            elif response is None:
+                # Sometimes result is a flat dict with error directly
+                if "error" in result:
+                    return {"success": False, "error": str(result["error"])}
+
+            # 4. If statuses is a string, something went wrong
+            if isinstance(statuses, str):
+                return {"success": False, "error": f"HL status string: {statuses}"}
+
+            # 5. Process statuses list
             if statuses and isinstance(statuses, list) and len(statuses) > 0:
                 status = statuses[0]
+
+                # status might itself be a string
+                if isinstance(status, str):
+                    return {"success": False, "error": f"HL status: {status}"}
+
+                if not isinstance(status, dict):
+                    return {"success": False, "error": f"Unexpected status type: {type(status).__name__}"}
+
                 if "filled" in status:
                     f = status["filled"]
-                    _emit_execution_event(
-                        "ORDER_FILLED",
-                        {
-                            "coin": coin,
-                            "order_id": f.get("oid"),
-                            "avg_price": f.get("avgPx"),
-                            "order_type": order_type,
-                            "execution_label": getattr(execution_context, "execution_label", None),
-                            "strategy": getattr(execution_context, "strategy", None),
-                            "regime": getattr(execution_context, "regime", None),
-                        }
-                    )
+                    if isinstance(f, dict):
+                        _emit_execution_event(
+                            "ORDER_FILLED",
+                            {
+                                "coin": coin,
+                                "order_id": f.get("oid"),
+                                "avg_price": f.get("avgPx"),
+                                "order_type": order_type,
+                                "execution_label": getattr(execution_context, "execution_label", None),
+                                "strategy": getattr(execution_context, "strategy", None),
+                                "regime": getattr(execution_context, "regime", None),
+                            }
+                        )
 
-                    return {"success": True, "order_id": f.get("oid"), "avg_price": f.get("avgPx")}
+                        return {"success": True, "order_id": f.get("oid"), "avg_price": f.get("avgPx")}
+                    else:
+                        logger.warning(f"⚠️ 'filled' value is not a dict: {f}")
+                        return {"success": False, "error": f"Unexpected 'filled' type: {type(f).__name__}"}
+
                 if "resting" in status:
-                    return {"success": True, "order_id": status["resting"].get("oid"), "status": "resting"}
+                    r = status["resting"]
+                    if isinstance(r, dict):
+                        return {"success": True, "order_id": r.get("oid"), "status": "resting"}
+                    else:
+                        return {"success": True, "order_id": str(r), "status": "resting"}
+
                 if "error" in status:
-                    return {"success": False, "error": status["error"]}
-            
-            err = result.get("response", {}).get("data", {}).get("error", "Unknown")
+                    return {"success": False, "error": str(status["error"])}
+
+            # 6. Final fallback — try to extract error from nested dicts safely
+            err = "Unknown"
+            if isinstance(response, dict):
+                data = response.get("data", {})
+                if isinstance(data, dict):
+                    err = data.get("error", "Unknown")
+                elif isinstance(data, str):
+                    err = data
+
             return {"success": False, "error": err}
-            
+
         except Exception as e:
             logger.error(f"❌ Order failed: {e}")
             return {"success": False, "error": str(e)}
@@ -373,16 +440,16 @@ class HLExecutor:
             # 1. Get current positions (synchronous)
             positions = self.get_open_positions()
             target = next((p for p in positions if p['coin'] == asset.upper()), None)
-            
+
             if not target:
                 return {"success": False, "error": f"No open position for {asset}"}
-            
+
             # 2. Determine closing direction
             close_side = "SELL" if target['side'] == 'long' else "BUY"
             close_size = target['size']
-            
-            logger.info(f"🔄 Closing {asset}: {close_side} {close_size} (reduce_only)")
-            
+
+            logger.info(f"🔒 Closing {asset}: {close_side} {close_size} (reduce_only)")
+
             # 3. Execute market order with reduce_only=True
             result = self.place_order(
                 coin=asset,
@@ -392,9 +459,9 @@ class HLExecutor:
                 order_type="Limit",
                 reduce_only=True
             )
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"❌ Close position failed for {asset}: {e}")
             return {"success": False, "error": str(e)}
@@ -457,7 +524,7 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
                     "success": False,
                     "error": str(e)
                 }
-        
+
         # Delegate to the class method which handles all execution logic
         execution_context = ExecutionContext(
             execution_label=_execution_label,
@@ -480,7 +547,7 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
             result["_strategy"] = _strategy
             result["_regime"] = _regime
         logger.info(f"📦 Order result: {result}")
-        
+
         # 📊 --- SMART TRADE RECORDING ---
         if result and result.get("success"):
             try:
@@ -488,7 +555,7 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
                 import core.state as state
                 tracker = get_performance_tracker()
                 price = float(result.get("avg_price", limit_px or 0))
-                
+
                 if kwargs.get("reduce_only", False):
                     # THIS IS A CLOSING TRADE
                     pos = state.OPEN_POSITIONS.get(coin)
@@ -523,7 +590,10 @@ def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float
         return result or {"success": False, "error": "None returned"}
     except Exception as e:
         logger.error(f"❌ execute_hl_order error: {e}")
-        return {"success": False, "error": str(e)}
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
 # =============================================================================
@@ -535,11 +605,11 @@ _executor_lock = threading.Lock()
 def get_hl_executor(private_key: str | None = None, chat_id: int | None = None) -> "HLExecutor":
     """
     Get the singleton HLExecutor instance.
-    
+
     Args:
         private_key: Optional override for multi-user support
         chat_id: Optional Telegram chat ID for alerts
-        
+
     Returns:
         The singleton HLExecutor instance
     """
@@ -549,4 +619,3 @@ def get_hl_executor(private_key: str | None = None, chat_id: int | None = None) 
             if _executor_instance is None:
                 _executor_instance = HLExecutor(private_key=private_key, chat_id=chat_id)
     return _executor_instance
-

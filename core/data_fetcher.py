@@ -36,6 +36,8 @@ _TICKER_DEFAULTS = {
     "LINK-USD": 15.0, "BNB-USD": 600.0, "HYPE-USD": 60.0,
 }
 
+_PRICE_CACHE: dict[str, float] = {}
+
 
 def _get_neutral_data(price: float = 100.0) -> dict:
     return {
@@ -129,19 +131,46 @@ def get_hype_price_from_hyperliquid() -> float:
         return 60.0
 
 
-def get_current_price(ticker_symbol: str) -> float:
-    """Fetch the latest price for a ticker via HL allMids."""
+def get_current_price(ticker_symbol: str):
+    """
+    Fetch the latest market price.
+
+    Never returns 0.
+    Returns the last known valid price if the API temporarily fails.
+    Returns None if no valid price has ever been observed.
+    """
+    coin = _TICKER_TO_COIN.get(
+        ticker_symbol,
+        ticker_symbol.replace("-USD", ""),
+    )
+
     try:
-        coin = _TICKER_TO_COIN.get(ticker_symbol, ticker_symbol.replace("-USD", ""))
         r = requests.post(
             "https://api.hyperliquid.xyz/info",
-            json={"type": "allMids"}, timeout=10
+            json={"type": "allMids"},
+            timeout=10,
         )
+
         if r.status_code == 200:
-            return float(r.json().get(coin, 0))
-        return 0.0
-    except Exception:
-        return 0.0
+            price = float(r.json().get(coin, 0))
+
+            if price > 0:
+                _PRICE_CACHE[coin] = price
+                return price
+
+            logger.warning("Invalid price for %s: %s", coin, price)
+
+        else:
+            logger.warning(
+                "Price API returned HTTP %s for %s",
+                r.status_code,
+                coin,
+            )
+
+    except Exception as e:
+        logger.warning("Price lookup failed for %s: %s", coin, e)
+
+    return _PRICE_CACHE.get(coin)
 
 
 def get_all_live_prices(coins: list) -> dict:

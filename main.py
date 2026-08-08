@@ -36,7 +36,7 @@ from core.hunter_protocol import update_hold_tracking, run_hunter_protocol_idle,
 from core.state import OPEN_POSITIONS, SIGNAL_CACHE, TIER_TIMESTAMPS, reset_daily_pnl_if_new_day
 import core.state as state
 from core.app_context import app_context
-from core.dca_lifecycle import activate_auto_dca, deactivate_auto_dca, get_active_engines, handle_position_close_event, cmd_stop_auto_dca, open_dca_position
+from core.dca_execution_engine import activate_auto_dca, deactivate_auto_dca, get_active_engines, handle_position_close_event, cmd_stop_auto_dca, open_dca_position
 from db import init_db, save_signal
 from core.asset_universe import init_asset_universe, get_universe
 from monitoring.alert_manager import (
@@ -48,8 +48,9 @@ from monitoring.alert_manager import (
 from monitoring.position_tracker import (
     entry_scanner_loop, full_analysis_loop,
     position_monitor_loop, quick_signal_scanner,
-    update_trailing_dca, monitor_dca_profit_targets,
+    update_trailing_dca,
     monitor_grid_bots)
+from monitoring.grid_monitor import monitor_dca_profit_targets
 from core.strategy_manager import StrategyManager
 from core.llm_reasoning import LLMReasoningEngine
 from core.strategy_registry import get_strategy_class, list_strategies

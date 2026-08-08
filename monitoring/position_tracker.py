@@ -529,35 +529,6 @@ async def update_trailing_dca():
             logger.error(f"❌ Trailing DCA update failed: {e}")
 
 
-async def monitor_dca_profit_targets():
-    """Background task: Check DCA profit targets every 2 minutes."""
-    while True:
-        await asyncio.sleep(120)
-        try:
-            from core.state import OPEN_POSITIONS
-            from core.dca_manager import DCAManager
-            # HLExecutor now from app_context
-            executor = app_context.executor
-            dca = DCAManager(executor)
-            for asset, pos in OPEN_POSITIONS.items():
-                dca_config = pos.get("dca")
-                if dca_config and dca_config.get("profit_target_pct", 0) > 0 and dca_config.get("enabled"):
-                    mids = executor.info.all_mids()
-                    current_price = float(mids.get(asset, 0))
-                    if current_price > 0:
-                        recommendation = dca.check_profit_target(asset, dca_config, current_price)
-                        if recommendation:
-                            side = dca_config.get("direction", "LONG")
-                            close_side = "SELL" if side == "LONG" else "BUY"
-                            result = await dca.close_dca_position(asset, dca_config, close_side)
-                            if result["base_closed"]:
-                                OPEN_POSITIONS.pop(asset, None)
-                                import core.state as _st
-                                _st.save_state()
-                                logger.info(f"🎯 Auto-closed {asset} at {recommendation['pnl_pct']:.2f}% profit")
-        except Exception as e:
-            logger.error(f"❌ DCA profit target monitor failed: {e}")
-
 
 async def monitor_grid_bots():
     """Background task: Monitor GRID bots for fills and exit conditions.

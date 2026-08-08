@@ -29,7 +29,7 @@ daily_pnl_reset_date: str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 STATE_FILE = Path("data/state.json")
 
-# Auto-DCA persistence variables (populated by dca_lifecycle module)
+# Auto-DCA persistence variables (populated by DCAExecutionEngine)
 auto_dca_active: dict = {}
 auto_dca_params: dict = {}
 auto_dca_consec_losses: dict = {}

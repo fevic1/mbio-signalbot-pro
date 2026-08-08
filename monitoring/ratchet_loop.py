@@ -1,8 +1,14 @@
 import asyncio
 import logging
-from core.profit_ratchet import is_ratchet_enabled, calculate_partial_close_size, TARGET_NET_PROFIT
+from core.market_cache import market_cache
+
+from core import state
 from core.data_fetcher import get_current_price
-import core.state as state
+from core.profit_ratchet import (
+    TARGET_NET_PROFIT,
+    calculate_partial_close_size,
+    is_ratchet_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +26,7 @@ async def ratchet_monitor_loop():
                     side = pos.get("side", "BUY")
                     exchange = pos.get("exchange", "hyperliquid")
                     
-                    current_price = get_current_price(f"{asset}-USD")
+                    current_price = market_cache.price(f"{asset}-USD")
                     if current_price <= 0: continue
                         
                     size_to_close = calculate_partial_close_size(entry, current_price, side, TARGET_NET_PROFIT)

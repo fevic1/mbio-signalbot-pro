@@ -29,6 +29,8 @@ services:
       - ./db:/app/db
       - ./templates:/app/templates:ro
     environment:
+      CHROMA_TELEMETRY_ENABLED: "FALSE"
+      CHROMADB_ANONYMIZED_TELEMETRY: "FALSE"
       HL_PRIVATE_KEY: ${HL_PRIVATE_KEY}
       HL_ACCOUNT_ADDRESS: ${HL_ACCOUNT_ADDRESS}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
@@ -36,6 +38,10 @@ services:
       MBIO_SESSION_SECRET: ${MBIO_SESSION_SECRET}
       MBIO_ADMIN_PASSWORD: ${MBIO_ADMIN_PASSWORD}
       MBIO_ADMIN_EMAIL: ${MBIO_ADMIN_EMAIL}
+<<<<<<< Updated upstream
+=======
+      FIRECRAWL_MAX_CONCURRENCY: "2"
+>>>>>>> Stashed changes
     env_file:
       - .env
     depends_on:
@@ -110,3 +116,4 @@ networks:
 
 volumes:
   frontend-dist:
+

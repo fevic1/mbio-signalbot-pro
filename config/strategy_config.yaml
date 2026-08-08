@@ -73,7 +73,7 @@ intervals:
   big_move_threshold: 0.02
   cache_price_threshold: 0.02
   entry_scanner_sec: 900
-  full_analysis_hours: 1
+  full_analysis_hours: 6
   position_monitor_sec: 60
   quick_scanner_sec: 300
 min_confidence: 80
@@ -95,55 +95,6 @@ risk_guard:
   max_consecutive_losses: 3
   max_daily_loss_pct: -5.0
   max_open_positions: 4
-  max_position_pct: 0.5
-  min_trade_interval_sec: 60
-scanner:
-  full_analysis_interval_h: 1
-  quick_scan_interval_min: 5
-  quick_scan_threshold_pct: 2.0
-sentiment:
-  btc_trend_filter: true
-  enabled: true
-  news_filter: true
-signals:
-  buy_1d_rsi_max: 38
-  confidence_bands:
-    regular_signal_conf_max: 84
-    regular_signal_conf_min: 60
-    strong_signal_conf_max: 95
-    strong_signal_conf_min: 85
-    weak_signal_conf_max: 69
-    weak_signal_conf_min: 50
-  sell_1d_rsi_min: 62
-  strong_buy_1d_rsi_max: 35
-  strong_buy_1h_rsi_max: 45
-  strong_sell_1d_rsi_min: 65
-  strong_sell_1h_rsi_min: 58
-smart_entry:
-  enabled: true
-  initial_pct: 0.5
-  max_pending_per_asset: 1
-  pullback_pct: 0.005
-smart_exit:
-  enabled: true
-  max_age_hours: 72
-  tp1_partial_pct: 0.4
-  tp2_partial_pct: 0.35
-trade_plan:
-  min_atr_pct: 0.02
-  sl_atr_multiplier: 1.5
-  tp1_atr_multiplier: 0.8
-  tp2_atr_multiplier: 1.8
-  tp3_atr_multiplier: 3.5
-trading:
-  max_open_positions: 2
-  entry_min_confidence: 80
-  risk_pct_per_trade: 0.02
-  small_account_threshold: 100.0
-  small_account_max_pct: 0.5
-  large_account_max_pct: 0.2
-  min_order_value_usd: 10.0
-  drawdown_halt_pct: -15.0
   correlation_block: true
   correlated_groups:
   - - BTC
@@ -161,22 +112,30 @@ execution:
   taker_fee_pct: 0.00035
 dca:
   enabled: true
-  max_levels: 3
-  level_spacing_pct: 2.0
-  size_multiplier: 1.5
-  # Manual DCA open path (Telegram /open_dca + dashboard modal).
-  # Values match the previously-hardcoded live behavior — no behavior change.
   # Assets the DCA engine + dashboard asset bar are allowed to trade
   # (single source of truth; replaces the hardcoded BTC/ETH list).
-  tradeable_assets: [BTC, ETH]
+  # NOTE: Must match hyperliquid.assets if you want to DCA all of them.
+  tradeable_assets:
+    - BTC
+    - ETH
+    - SOL
+    - XRP
+    - DOGE
+    - AVAX
+    - LINK
+    - HYPE
   manual:
-    risk_pct: 0.01              # 1% of balance = max loss per DCA
-    min_sl_distance_pct: 0.055  # liquidation buffer at 20x leverage
+    leverage: 20.0        # MATCH your Hyperliquid account
+    risk_pct: 0.05
     max_levels: 3
     spacing_pct: 1.2
     size_multiplier: 1.25
-  tp_pct: 1.0
-  sl_pct: 4.0
+  sl_pct: 2.5
+  tp_pct: 2.0
+  # ── SHARED DCA SETTINGS ──
+  max_levels: 3
+  level_spacing_pct: 2.0
+  size_multiplier: 1.5
   tp_recalc_on_fill: true
   cancel_unfilled_on_exit: true
   min_notional: 10.0
@@ -192,12 +151,14 @@ dca:
   max_total_dca_exposure_pct: 3.0
   pause_on_large_drop_pct: 5.0
   resume_after_stabilization_min: 30
+
 auto_dca:
   reentry_cooldown_sec: 60
   max_consecutive_losses: 3
   pause_after_loss_min: 30
   reuse_last_params: true
   telegram_notify_reentry: true
+
 grid:
   enabled: false
   default_profit_per_grid_pct: 0.5
@@ -232,3 +193,4 @@ universe:
   top_n: 50
   min_volume_usd: 1000000
   exclude_stablecoins: true
+

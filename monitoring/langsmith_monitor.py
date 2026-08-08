@@ -1,11 +1,9 @@
 """
 Advanced LangSmith monitoring with cost tracking, latency alerts, and analytics.
 """
-import logging
-import time
-from datetime import datetime, timezone, timedelta
-from typing import Dict, List
 import json
+import logging
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +13,7 @@ class LangSmithMonitor:
     def __init__(self):
         self.call_history = []
         self.daily_stats = {
-            'date': datetime.now(timezone.utc).date().isoformat(),
+            'date': datetime.now(UTC).date().isoformat(),
             'total_calls': 0,
             'total_tokens': 0,
             'total_cost_usd': 0.0,
@@ -40,7 +38,7 @@ class LangSmithMonitor:
                    success: bool, provider: str = 'groq'):
         """Record an LLM call for analytics."""
         call_record = {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': datetime.now(UTC).isoformat(),
             'model': model,
             'tokens': tokens_used,
             'latency_ms': latency_ms,
@@ -66,7 +64,7 @@ class LangSmithMonitor:
         cost_per_token = self.cost_per_1k_tokens.get(provider, 0.001) / 1000
         return tokens * cost_per_token
     
-    def _update_daily_stats(self, call: Dict):
+    def _update_daily_stats(self, call: dict):
         """Update daily statistics."""
         self.daily_stats['total_calls'] += 1
         self.daily_stats['total_tokens'] += call['tokens']
@@ -93,7 +91,7 @@ class LangSmithMonitor:
         total_calls = sum(m['calls'] for m in self.daily_stats['by_model'].values())
         self.daily_stats['avg_latency_ms'] = total_latency / total_calls if total_calls > 0 else 0
     
-    def _check_alerts(self, call: Dict):
+    def _check_alerts(self, call: dict):
         """Check for alert conditions."""
         alerts = []
         

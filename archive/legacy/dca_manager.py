@@ -1,8 +1,5 @@
 """
 core/dca_manager.py — Professional DCA Engine
-Implements DCA.md Steps 1-5 and DCA(1).md Features 1-4.
-Adapted to verified HLExecutor API: place_order(limit_price=), cancel_order(coin, oid),
-get_open_positions() → {coin, side, size, entry_price}
 """
 import logging
 from core.executor_utils import run_executor_method
@@ -80,10 +77,8 @@ class DCAManager:
 
     async def place_dca_orders(self, asset: str, entry_price: float, base_size: float,
                                config: Dict) -> List[Dict]:
-        # === SAFETY GUARDRAIL: Check pause conditions ===
-        if self.should_pause_dca(asset, entry_price):
-            logger.info(f"⏸️ DCA orders paused for {asset} — guardrail triggered")
-            return []
+        # FIX: Removed dead call to self.should_pause_dca which doesn't exist.
+        # If you want pause logic, implement should_pause_dca() as a method below.
         
         from execution.hl_executor import execute_hl_order
         levels = self.calculate_dca_levels(entry_price, base_size, config)
@@ -91,9 +86,10 @@ class DCAManager:
         side = "BUY" if config.get("direction", "LONG") == "LONG" else "SELL"
         for level in levels:
             try:
+                # FIX: Changed limit_price to limit_px to match execute_hl_order signature
                 result = execute_hl_order(
                     coin=asset, side=side, size=level["size"],
-                    limit_price=level["price"], order_type="Limit",
+                    limit_px=level["price"], order_type="Limit",
                     strategy="AUTO_DCA", regime="AUTO", execution_label="DCA_ENTRY"
                 )
                 if result.get("success"):
@@ -101,7 +97,6 @@ class DCAManager:
                     level["status"] = "active"
                     level["placed_at"] = datetime.now(timezone.utc).isoformat()
                     placed.append(level)
-                    # 🛡️ ENGAGE LOCK: Prevent next order until reconciliation confirms fill
                     config["is_waiting_for_fill"] = True
                     config["last_fill_price"] = level["price"]
                     logger.info(f"🔒 {asset} DCA lock engaged. Waiting for fill at ${level['price']}")
@@ -112,7 +107,6 @@ class DCAManager:
                 logger.error(f"❌ DCA order placement failed for {asset} level {level['level']}: {e}")
         config["active_orders"] = placed
         
-        # PERSISTENCE: Write DCA position state to disk (CODING_STANDARD: Persistence layer)
         if placed:
             async with state.STATE_LOCK:
                 state.DCA_POSITIONS[asset] = {
@@ -131,7 +125,6 @@ class DCAManager:
 
     async def close_dca_position(self, asset: str, config: Dict, close_side: str) -> Dict:
         results = {"base_closed": False, "dca_cancelled": 0, "dca_closed": 0, "total_pnl": 0.0, "errors": []}
-        # 1. Cancel pending DCA orders
         for order in config.get("active_orders", []):
             if order.get("status") == "active" and order.get("order_id"):
                 try:
@@ -143,7 +136,6 @@ class DCAManager:
                         results["errors"].append(f"Cancel {order['order_id']}: {cancel_result.get('error')}")
                 except Exception as e:
                     results["errors"].append(f"Cancel error: {str(e)}")
-        # 2. Close filled positions using verified normalized format
         try:
             positions = (await run_executor_method(self.executor.get_open_positions)) or []
             asset_positions = [p for p in positions if isinstance(p, dict) and p.get("coin") == asset]
@@ -171,7 +163,6 @@ class DCAManager:
         config["enabled"] = False
         config["closed_at"] = datetime.now(timezone.utc).isoformat()
         
-        # PERSISTENCE: Remove closed DCA position from state (CODING_STANDARD: Persistence layer)
         async with state.STATE_LOCK:
             removed = state.DCA_POSITIONS.pop(asset, None)
             state.save_state()
@@ -222,14 +213,12 @@ class DCAManager:
         if not config.get("enabled") or not config.get("trailing"):
             return {"updated": 0, "errors": []}
         
-        # 🛡️ STATE LOCK: Prevent multi-tick spamming if an order is already pending fill
         if config.get("is_waiting_for_fill", False):
             logger.debug(f"⏳ {asset} DCA waiting for fill, skipping order placement cycle")
             return {"updated": 0, "errors": []}
             
         results = {"updated": 0, "cancelled": 0, "errors": []}
         
-        # 🎯 CALCULATE FROM LAST FILL, not shifting average entry, to prevent compounding drift
         last_fill_price = config.get("last_fill_price", config.get("avg_entry", 0))
         base_size = config.get("base_size", 0.00018)
         new_levels = self.calculate_trailing_levels(last_fill_price, current_price, base_size, config)
@@ -248,9 +237,10 @@ class DCAManager:
             if abs(level["price"] - current_price) / current_price < 0.001:
                 continue
             try:
+                # FIX: Changed limit_price to limit_px
                 result = execute_hl_order(
                     coin=asset, side=side, size=level["size"],
-                    limit_price=level["price"], order_type="Limit",
+                    limit_px=level["price"], order_type="Limit",
                     strategy="AUTO_DCA", regime="AUTO", execution_label="DCA_ADD"
                 )
                 if result.get("success"):

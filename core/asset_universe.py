@@ -12,7 +12,8 @@ import requests
 logger = logging.getLogger(__name__)
 
 HL_INFO_URL = "https://api.hyperliquid.xyz/info"
-REFRESH_INTERVAL = 300  # 5 minutes per Rate Limiting Discipline
+REFRESH_INTERVAL = 21600  # 6 hours
+SCAN_COIN_LIMIT = 50
 REQUEST_TIMEOUT = 15
 MIN_ASSETS = 10
 SIGNAL_SCAN_LIMIT = 10
@@ -87,6 +88,7 @@ class AssetUniverse:
         ])
 
     def signal_scanner_coins(self) -> List[str]:
+<<<<<<< Updated upstream
         """Return only the live exchange-ranked top 10 assets for signal scanning."""
         self._ensure_fresh()
         eligible = {
@@ -106,6 +108,21 @@ class AssetUniverse:
             len(selected), len(eligible), ", ".join(selected),
         )
         return selected
+=======
+        self._ensure_fresh()
+
+        ranked = sorted(
+            self._volume_ctxs.items(),
+            key=lambda x: x[1],
+            reverse=True,
+        )
+
+        return [
+            coin
+            for coin, _ in ranked[:SCAN_COIN_LIMIT]
+            if coin in self._assets
+        ]
+>>>>>>> Stashed changes
 
     def total_assets(self) -> int:
         return len(self._assets)

@@ -45,7 +45,7 @@ def check_stagnant_positions() -> List[str]:
         if asset.startswith("GRID::"):
             continue
             
-        # 2. Skip DCA positions (managed by dca_lifecycle)
+        # 2. Skip DCA positions (managed by DCAExecutionEngine)
         if pos.get("dca") or pos.get("strategy") in ["AUTO_DCA", "MANUAL_DCA"]:
             continue
             

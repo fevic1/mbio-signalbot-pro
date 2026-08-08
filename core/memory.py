@@ -1,6 +1,10 @@
 import chromadb
 from chromadb.config import Settings
+<<<<<<< Updated upstream
 from datetime import datetime
+=======
+from datetime import datetime, timezone
+>>>>>>> Stashed changes
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,7 +33,11 @@ class TradeMemory:
             "strategy": strategy,
             "entry_price": float(entry_price),
             "exit_price": float(exit_price),
+<<<<<<< Updated upstream
             "timestamp": datetime.utcnow().isoformat()
+=======
+            "timestamp": datetime.now(timezone.utc).isoformat()
+>>>>>>> Stashed changes
         }
         
         if metadata_extra:

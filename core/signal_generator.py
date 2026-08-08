@@ -51,17 +51,34 @@ OUTPUT FORMAT:
 def _build_user_prompt(asset_batch: dict, regimes: dict = None) -> str:
     if regimes is None:
         regimes = {}
+
     lines = []
+
     for asset_name, data in asset_batch.items():
-        d1h, d4h, d1d = data.get("1h", {}), data.get("4h", {}), data.get("1d", {})
+        d1h = data.get("1h", {})
+        d4h = data.get("4h", {})
+        d1d = data.get("1d", {})
         regime = regimes.get(asset_name, "UNKNOWN")
-        lines.append(
-            f"ASSET: {asset_name} (Current Market Regime: {regime})\n"
-            f"1H: Price={d1h.get('price', 0)}, RSI={d1h.get('rsi', 50)}, MACD={d1h.get('macd', 0)}, BB=[{d1h.get('bb_lower', 0)}, {d1h.get('bb_upper', 0)}]\n"
-            f"4H: RSI={d4h.get('rsi', 50)}, MACD={d4h.get('macd', 0)}\n"
-            f"1D: RSI={d1d.get('rsi', 50)}, MACD={d1d.get('macd', 0)}\n"
-        )
-    return "Analyze the following market data:\n\n" + "\n".join(lines)
+
+        lines.append(f"""ASSET: {asset_name}
+REGIME: {regime}
+PRICE: {d1h.get("price",0)}
+RSI_1H: {d1h.get("rsi",50)}
+RSI_4H: {d4h.get("rsi",50)}
+RSI_1D: {d1d.get("rsi",50)}
+MACD_1H: {d1h.get("macd",0)}
+VOLUME_RATIO: {d1h.get("volume_ratio",1)}
+BB_LOWER: {d1h.get("bb_lower",0)}
+BB_UPPER: {d1h.get("bb_upper",0)}
+""")
+
+    return (
+        "Analyze these summarized market features only. "
+        "Do not infer missing data. "
+        "Return JSON only.\n\n"
+        + "\n".join(lines)
+    )
+
 
 def _parse_json_response(text: str) -> Dict:
     if not text: return {}

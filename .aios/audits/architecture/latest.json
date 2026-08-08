@@ -1,0 +1,501 @@
+[
+  {
+    "name": "AgentExecutor",
+    "implementations": [
+      "aios.runtime.executor",
+      "aios.workforce.execution"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "RuntimeWorker",
+    "implementations": [
+      "aios.runtime.worker",
+      "aios.runtime.workers.manager"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "TaskScheduler",
+    "implementations": [
+      "aios.runtime.scheduler",
+      "aios.runtime.scheduler.__init__"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "HealthResult",
+    "implementations": [
+      "aios.systems.health",
+      "aios.monitoring.health"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "SystemHealth",
+    "implementations": [
+      "aios.systems.health",
+      "aios.monitoring.health"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "PolicyRegistry",
+    "implementations": [
+      "aios.policy.registry",
+      "aios.policies.registry"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "PolicyEngine",
+    "implementations": [
+      "aios.policy.engine",
+      "aios.council.policy",
+      "aios.runtime.policy_engine.engine"
+    ],
+    "canonical": "aios.policy.engine",
+    "status": "migration_pending"
+  },
+  {
+    "name": "PolicyResult",
+    "implementations": [
+      "aios.policy.result",
+      "aios.decision.models"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "Agent",
+    "implementations": [
+      "aios.core.agent",
+      "aios.agents.models",
+      "aios.agents.runtime.agent"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "Factory",
+    "implementations": [
+      "aios.core.factory",
+      "aios.core.factory.legacy_factory"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "Workflow",
+    "implementations": [
+      "aios.core.workflow",
+      "aios.workflows.engine.workflow"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "DecisionEvaluator",
+    "implementations": [
+      "aios.decision.evaluator",
+      "aios.memory.evaluator"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "ArchitectureGuard",
+    "implementations": [
+      "aios.integrity.architecture",
+      "aios.governance.architecture_guard"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "PlannerFeedbackEngine",
+    "implementations": [
+      "aios.learning.planner_feedback",
+      "aios.learning.planner_feedback.engine"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "PatternDetector",
+    "implementations": [
+      "aios.learning.pattern_detector",
+      "aios.evolution.pattern_detector"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "ExecutionMemory",
+    "implementations": [
+      "aios.learning.execution_memory",
+      "aios.memory.layers.execution.store"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "RollbackManager",
+    "implementations": [
+      "aios.operations.rollback_manager",
+      "aios.control.rollback_manager"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "QualityGate",
+    "implementations": [
+      "aios.governance.quality_gate",
+      "aios.reviews.reviewers.quality"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "AuditLogger",
+    "implementations": [
+      "aios.governance.audit",
+      "aios.audit.logger"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "RuntimeAudit",
+    "implementations": [
+      "aios.control.audit",
+      "aios.runtime.audit.audit"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "WorkflowEngine",
+    "implementations": [
+      "aios.workflows.engine",
+      "aios.workflows.execution_engine",
+      "aios.runtime.workflow_engine.engine",
+      "aios.workflows.engine.engine"
+    ],
+    "canonical": "aios.workflows.engine",
+    "status": "migration_pending"
+  },
+  {
+    "name": "ProjectPlanner",
+    "implementations": [
+      "aios.projects.planner_integration",
+      "aios.project.planner"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "Project",
+    "implementations": [
+      "aios.projects.models",
+      "aios.project.models"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "Milestone",
+    "implementations": [
+      "aios.projects.milestones",
+      "aios.project.models"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "ProjectManager",
+    "implementations": [
+      "aios.projects.manager",
+      "aios.project.manager"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "RecoveryManager",
+    "implementations": [
+      "aios.storage.recovery",
+      "aios.execution.recovery"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "ProviderResponse",
+    "implementations": [
+      "aios.providers.base",
+      "aios.providers.types"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "ProviderHealth",
+    "implementations": [
+      "aios.providers.types",
+      "aios.providers.health"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "ProviderError",
+    "implementations": [
+      "aios.providers.exceptions",
+      "aios.providers.models"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "ProviderUnavailable",
+    "implementations": [
+      "aios.providers.exceptions",
+      "aios.providers.models"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "AgentRegistry",
+    "implementations": [
+      "aios.workforce.registry",
+      "aios.agents.runtime.registry"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "ExecutionEventPublisher",
+    "implementations": [
+      "aios.execution.events",
+      "aios.execution.events.publisher"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "Worker",
+    "implementations": [
+      "aios.execution.worker",
+      "aios.core.worker.worker"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "Dispatcher",
+    "implementations": [
+      "aios.execution.dispatcher",
+      "aios.core.dispatcher.dispatcher"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "Scheduler",
+    "implementations": [
+      "aios.execution.scheduler",
+      "aios.core.scheduler.scheduler"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "TaskNode",
+    "implementations": [
+      "aios.project.models",
+      "aios.project.graph.models"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "Skill",
+    "implementations": [
+      "aios.skills.base",
+      "aios.skills.core.models"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "SkillRegistry",
+    "implementations": [
+      "aios.skills.registry",
+      "aios.skills.core.registry"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "HealthState",
+    "implementations": [
+      "aios.supervisor.health",
+      "aios.supervisor.health.__init__"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "HealthStatus",
+    "implementations": [
+      "aios.supervisor.health",
+      "aios.supervisor.health.__init__"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "Supervisor",
+    "implementations": [
+      "aios.supervisor.supervisor",
+      "aios.runtime.supervisor.engine"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "TaskGraphBuilder",
+    "implementations": [
+      "aios.planning.task_graph",
+      "aios.project.graph.builder"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "MemoryRetriever",
+    "implementations": [
+      "aios.memory.retriever",
+      "aios.memory.search.retriever"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "MemoryEvent",
+    "implementations": [
+      "aios.memory.events",
+      "aios.memory.events.model"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "PromptEngine",
+    "implementations": [
+      "aios.prompts.engine",
+      "aios.runtime.prompts.engine"
+    ],
+    "canonical": "aios.prompts.engine",
+    "status": "migration_pending"
+  },
+  {
+    "name": "ToolRegistry",
+    "implementations": [
+      "aios.tools.registry",
+      "aios.runtime.tools.registry"
+    ],
+    "canonical": "aios.tools.registry",
+    "status": "migration_pending"
+  },
+  {
+    "name": "RuntimeState",
+    "implementations": [
+      "aios.runtime.state.state",
+      "aios.runtime.state.models"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "LifecycleManager",
+    "implementations": [
+      "aios.runtime.lifecycle.manager",
+      "aios.system.lifecycle.manager"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "RuntimeVerifier",
+    "implementations": [
+      "aios.runtime.verification.verifier",
+      "aios.runtime.verify.verifier"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "AgentRuntime",
+    "implementations": [
+      "aios.runtime.agent_runtime.runtime",
+      "aios.agents.runtime.runtime"
+    ],
+    "canonical": "aios.agents.runtime.runtime",
+    "status": "migration_pending"
+  },
+  {
+    "name": "TaskEngine",
+    "implementations": [
+      "aios.runtime.task_engine.engine",
+      "aios.execution.task_engine.engine"
+    ],
+    "canonical": "aios.execution.task_engine",
+    "status": "migration_pending"
+  },
+  {
+    "name": "ExecutionGraph",
+    "implementations": [
+      "aios.runtime.dag.graph",
+      "aios.execution.graph.graph"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "AgentRegistryAdapter",
+    "implementations": [
+      "aios.system.services.registry",
+      "aios.system.services.registry"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "MemoryLayer",
+    "implementations": [
+      "aios.core.memory.layer",
+      "aios.memory.layers.base"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  },
+  {
+    "name": "AgentWorkspace",
+    "implementations": [
+      "aios.agents.runtime.workspace",
+      "aios.agents.workspace.workspace"
+    ],
+    "canonical": null,
+    "status": "untracked"
+  }
+]

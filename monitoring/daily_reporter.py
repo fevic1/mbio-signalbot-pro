@@ -2,12 +2,11 @@
 Automated daily reporting to Telegram with bot performance and LangSmith stats.
 """
 import logging
-import asyncio
-from datetime import datetime, timezone
-from typing import Optional
-import core.state as state
-from monitoring.langsmith_monitor import get_langsmith_monitor
+from datetime import UTC, datetime
+
+from core import state
 from monitoring.alert_manager import send_telegram_message
+from monitoring.langsmith_monitor import get_langsmith_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +19,7 @@ class DailyReporter:
     
     async def check_and_send_report(self):
         """Check if it's time for daily report and send if needed."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today = now.date()
         
         # Send report at 8:00 AM UTC daily
@@ -46,7 +45,7 @@ class DailyReporter:
             
             # Combine reports
             full_report = f"""
-🌅 **Daily Bot Report - {datetime.now(timezone.utc).strftime('%Y-%m-%d')}**
+🌅 **Daily Bot Report - {datetime.now(UTC).strftime('%Y-%m-%d')}**
 {trading_report}
 {langsmith_report}
 {system_report}
