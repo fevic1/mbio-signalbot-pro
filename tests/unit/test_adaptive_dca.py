@@ -190,8 +190,8 @@ async def test_manager_reprices_stale_order_without_exchange_access(monkeypatch)
         get_mtf_data=lambda _: {"1h": {"price": 96.0, "atr": 1.0, "rsi": 50.0}}
     )
     monkeypatch.setitem(sys.modules, "core.data_fetcher", fake_data_fetcher)
-    monkeypatch.setattr(manager, "_cancel_order", lambda *args: _ok())
-    monkeypatch.setattr(manager, "_submit_limit", lambda *args: _ok(order_id=11))
+    monkeypatch.setattr(manager, "_cancel_order", _async_ok)
+    monkeypatch.setattr(manager, "_submit_limit", lambda *args: _async_ok(order_id=11))
 
     result = await manager.monitor_adaptive_dca("BTC", config, 96.0)
 
@@ -243,19 +243,8 @@ async def test_manager_acceleration_cancels_resting_orders_and_rebuilds(monkeypa
         get_mtf_data=lambda _: {"1h": {"price": 96.0, "atr": 2.0, "rsi": 30.0}}
     )
     monkeypatch.setitem(sys.modules, "core.data_fetcher", fake_data_fetcher)
-    monkeypatch.setattr(
-        manager,
-        "_ai_advice",
-        lambda *args: {
-            "action": "ACCELERATE",
-            "confidence": 0.95,
-            "learner_score": 0.90,
-            "max_price": 96.0,
-            "size_multiplier": 1.25,
-            "valid_for_seconds": 30,
-        },
-    )
-    monkeypatch.setattr(manager, "_risk_budget_allows_acceleration", lambda *args: _true())
+    monkeypatch.setattr(manager, "_ai_advice", _async_acceleration_advice)
+    monkeypatch.setattr(manager, "_risk_budget_allows_acceleration", _async_true)
     cancelled = []
 
     async def cancel(asset, order_id):
@@ -285,9 +274,24 @@ async def test_manager_acceleration_cancels_resting_orders_and_rebuilds(monkeypa
     assert all(order["status"] == "active" for order in config["active_orders"])
 
 
+async def _async_ok(*args, **kwargs):
+    return _ok(**kwargs)
+
+
+async def _async_true(*args, **kwargs):
+    return True
+
+
+async def _async_acceleration_advice(*args, **kwargs):
+    return {
+        "action": "ACCELERATE",
+        "confidence": 0.95,
+        "learner_score": 0.90,
+        "max_price": 96.0,
+        "size_multiplier": 1.25,
+        "valid_for_seconds": 30,
+    }
+
+
 def _ok(**extra):
     return {"success": True, **extra}
-
-
-def _true():
-    return True
