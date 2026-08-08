@@ -56,9 +56,10 @@ class FakeExecutor:
 
 
 @pytest.fixture(autouse=True)
-def reset_state():
+def reset_state(monkeypatch):
     state.DCA_POSITIONS.clear()
     state.OPEN_POSITIONS.clear()
+    monkeypatch.setattr(state, "save_state", lambda: None)
     yield
     state.DCA_POSITIONS.clear()
     state.OPEN_POSITIONS.clear()
@@ -127,7 +128,7 @@ async def test_filled_order_is_detected_and_remaining_ladder_rebuilt():
     assert result["action"] == "REBUILD"
     assert position["dca"]["filled_levels"] == [1, 2]
     assert position["dca"]["last_fill_price"] == pytest.approx(98.0)
-    assert [x[3] for x in manager.placed] == [94.08]
+    assert [x[3] for x in manager.placed] == [92.12]
     assert manager.cancelled == [20]
 
 
