@@ -36,6 +36,8 @@ async def adaptive_dca_supervisor_loop(
     logger.info("Adaptive DCA supervisor started")
     while True:
         try:
+            cfg = get_config().get("dca", {}) or {}
+            global_adaptive = cfg.get("adaptive", {}) or {}
             executor = executor_factory() if executor_factory else app_context.executor
             manager = DCAManager(executor)
             runtime = DCARuntimeCoordinator(manager)
@@ -47,6 +49,12 @@ async def adaptive_dca_supervisor_loop(
                 dca_config = position.get("dca")
                 if not isinstance(dca_config, dict) or not dca_config.get("enabled"):
                     continue
+
+                # Global policy is the source of defaults; persisted per-position
+                # values win when explicitly present.
+                adaptive_config = dca_config.setdefault("adaptive", {})
+                for key, value in global_adaptive.items():
+                    adaptive_config.setdefault(key, value)
 
                 # Reconcile exchange order IDs, fills, partial fills, external
                 # cancellations, restart recovery, and remaining ladder state
