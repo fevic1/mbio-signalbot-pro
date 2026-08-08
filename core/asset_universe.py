@@ -15,6 +15,7 @@ HL_INFO_URL = "https://api.hyperliquid.xyz/info"
 REFRESH_INTERVAL = 300  # 5 minutes per Rate Limiting Discipline
 REQUEST_TIMEOUT = 15
 MIN_ASSETS = 10
+SIGNAL_SCAN_LIMIT = 10
 
 DEFAULT_EXCLUSIONS = {"USDC", "USDT"}
 
@@ -51,7 +52,6 @@ class AssetUniverse:
                 inst._refresh_lock = threading.Lock()
                 inst._exclusions: set = set(DEFAULT_EXCLUSIONS)
                 inst._initialized: bool = False
-                cls._instance = inst
         return cls._instance
 
     # ── Public API (unchanged interface) ──────────────────────────────
@@ -88,7 +88,36 @@ class AssetUniverse:
         ])
 
     def signal_scanner_coins(self) -> List[str]:
-        return self.tradeable_coins()
+        """Return only the exchange-ranked top 10 assets for signal scanning.
+
+        This is the upstream scanner gate. It deliberately does not introduce
+        a second liquidity/regime/quality filter. Ranking comes from the live
+        Hyperliquid 24h notional volume context already fetched by this module.
+        """
+        self._ensure_fresh()
+        eligible = {
+            name
+            for name, meta in self._assets.items()
+            if name not in self._exclusions
+            and not meta.is_delisted
+            and not meta.only_isolated
+        }
+        ranked = sorted(
+            (
+                (name, float(self._volume_ctxs.get(name, 0.0)))
+                for name in eligible
+            ),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        selected = [name for name, _volume in ranked[:SIGNAL_SCAN_LIMIT]]
+        logger.info(
+            "🎯 Signal scanner universe: %d/%d assets selected from live Hyperliquid volume ranking: %s",
+            len(selected),
+            len(eligible),
+            ", ".join(selected),
+        )
+        return selected
 
     def total_assets(self) -> int:
         return len(self._assets)
@@ -128,7 +157,6 @@ class AssetUniverse:
                 logger.error(f"AssetUniverse: only {len(universe)} assets — skipping")
                 return False
 
-            # Fetch prices for tick derivation
             prices = self._fetch_prices()
 
             new_assets = {}
@@ -143,53 +171,35 @@ class AssetUniverse:
                 dl = bool(a.get("isDelisted", False))
                 new_assets[name] = _AssetMeta(name, sz, ml, iso, dl, tick)
 
-            # Fetch Spot Meta - Construct pair names from token indices
             new_spot = []
             try:
                 r_spot = requests.post(HL_INFO_URL, json={"type": "spotMeta"}, timeout=REQUEST_TIMEOUT)
                 if r_spot.status_code == 200:
                     spot_data = r_spot.json()
-                    # Build token index -> name map
                     token_map = {t["index"]: t.get("name", "") for t in spot_data.get("tokens", [])}
                     token_details = {t["index"]: t for t in spot_data.get("tokens", [])}
-                    
                     for pair in spot_data.get("universe", []):
-                        # Get token indices [base, quote]
                         token_indices = pair.get("tokens", [])
                         if len(token_indices) >= 2:
                             base_idx = token_indices[0]
                             quote_idx = token_indices[1]
-                            
-                            # Construct pair name from token names
                             base_name = token_map.get(base_idx, "")
                             quote_name = token_map.get(quote_idx, "")
-                            
-                            # Skip if we can't resolve token names
                             if not base_name or not quote_name:
                                 continue
-                            
-                            # Normalize token names: strip "U" prefix from crypto assets (UBTC->BTC, UETH->ETH)
-                            # Keep stablecoins as-is (USDC, USDT, USDH, USDE)
                             stablecoins = {"USDC", "USDT", "USDH", "USDE", "USD", "DAI", "FRAX"}
-                            
+
                             def normalize_token_name(name):
                                 if name.startswith("U") and len(name) > 2 and name not in stablecoins:
-                                    return name[1:]  # Strip "U" prefix
+                                    return name[1:]
                                 return name
-                            
+
                             base_display = normalize_token_name(base_name)
                             quote_display = normalize_token_name(quote_name)
-                            
-                            # Construct the pair name (e.g., "BTC/USDC")
                             pair_name = f"{base_display}/{quote_display}"
-                            
-                            # Get szDecimals from the base token
                             sz_dec = token_details.get(base_idx, {}).get("szDecimals", 4)
-                            
-                            # Skip USDC/USDC or other same-token pairs
                             if base_name == quote_name:
                                 continue
-                            
                             new_spot.append({
                                 "name": pair_name,
                                 "sz_decimals": sz_dec,
@@ -199,7 +209,6 @@ class AssetUniverse:
             except Exception as e:
                 logger.error(f"AssetUniverse spot fetch error: {e}")
 
-            # Fetch Volume Contexts for Trending
             new_volume = {}
             try:
                 r_ctx = requests.post(HL_INFO_URL, json={"type": "metaAndAssetCtxs"}, timeout=REQUEST_TIMEOUT)
@@ -253,17 +262,10 @@ class AssetUniverse:
     def get_categorized_assets(self) -> dict:
         """Return assets grouped by PERP, SPOT, TRENDING."""
         self._ensure_fresh()
-        
-        # PERP: All non-delisted tradeable coins
         perp_coins = self.tradeable_coins()
-        
-        # SPOT: Canonical spot pairs
         spot_coins = [p["name"] for p in self._spot_pairs]
-        
-        # TRENDING: Top 10 by volume
         sorted_by_vol = sorted(self._volume_ctxs.items(), key=lambda x: x[1], reverse=True)
-        trending_coins = [name for name, vol in sorted_by_vol[:10]]
-        
+        trending_coins = [name for name, vol in sorted_by_vol[:SIGNAL_SCAN_LIMIT]]
         return {
             "PERP": perp_coins,
             "SPOT": spot_coins,
