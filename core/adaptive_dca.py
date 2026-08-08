@@ -168,11 +168,15 @@ def evaluate_dca_order(
             )
 
     if stale:
-        target = order_price
-        if normalized_side == "LONG":
-            target = min(order_price, market.price)
-        else:
-            target = max(order_price, market.price)
+        # Reprice toward the live market while maintaining a deterministic
+        # non-crossing offset. This prevents cancelling and recreating the same
+        # stale limit price indefinitely.
+        offset = cfg.min_reprice_distance_pct / 100.0
+        target = (
+            market.price * (1.0 - offset)
+            if normalized_side == "LONG"
+            else market.price * (1.0 + offset)
+        )
         return DCAActionDecision(
             DCAAction.REPRICE,
             "pending order is stale",
