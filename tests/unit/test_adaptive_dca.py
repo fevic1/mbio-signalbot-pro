@@ -5,6 +5,7 @@ from core.adaptive_dca import (
     evaluate_dca_order,
     parse_ai_advice,
 )
+from core.dca_manager import DCAManager
 
 
 def test_ai_advice_is_bounded_and_unknown_action_fails_closed():
@@ -110,3 +111,28 @@ def test_invalid_side_fails_closed():
         now_ts=60.0,
     )
     assert decision.action is DCAAction.PAUSE
+
+
+def test_manager_clamps_acceleration_multiplier():
+    manager = DCAManager(None)
+    config = {
+        "adaptive": {
+            "enabled": True,
+            "aggressive_enabled": True,
+            "acceleration_confidence": 5.0,
+            "min_learner_score": -2.0,
+            "max_acceleration_multiplier": 9.0,
+        }
+    }
+    bounded = manager._adaptive_config(config)
+    assert bounded.acceleration_confidence == 1.0
+    assert bounded.min_learner_score == 0.0
+    assert bounded.max_acceleration_multiplier == 1.25
+
+
+def test_manager_builds_progressive_dca_levels():
+    manager = DCAManager(None)
+    config = {"levels": 3, "spacing_pct": 2.0, "multiplier": 1.5, "direction": "LONG"}
+    levels = manager.calculate_dca_levels(100.0, 1.0, config)
+    assert [level["price"] for level in levels] == [98.0, 96.0, 94.0]
+    assert [level["size"] for level in levels] == [1.5, 2.25, 3.375]
