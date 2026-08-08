@@ -63,7 +63,6 @@ hyperliquid:
     DOGE: 0.087
     ETH: 1700.0
     SOL: 67.0
-    XRP: 1.17
 idle_monitor:
   confidence_reduction: 10
   enabled: true
@@ -164,17 +163,27 @@ dca:
   max_levels: 3
   level_spacing_pct: 2.0
   size_multiplier: 1.5
-  # Manual DCA open path (Telegram /open_dca + dashboard modal).
-  # Values match the previously-hardcoded live behavior — no behavior change.
-  # Assets the DCA engine + dashboard asset bar are allowed to trade
-  # (single source of truth; replaces the hardcoded BTC/ETH list).
-  tradeable_assets: [BTC, ETH]
+  tradeable_assets: [BTC, ETH, SOL, XRP, DOGE, AVAX, LINK, HYPE]
   manual:
-    risk_pct: 0.01              # 1% of balance = max loss per DCA
-    min_sl_distance_pct: 0.055  # liquidation buffer at 20x leverage
+    risk_pct: 0.01
+    min_sl_distance_pct: 0.055
     max_levels: 3
     spacing_pct: 1.2
     size_multiplier: 1.25
+  adaptive:
+    enabled: true
+    aggressive_enabled: true
+    order_ttl_seconds: 45.0
+    monitor_interval_sec: 5.0
+    ai_review_interval_sec: 45.0
+    acceleration_confidence: 0.72
+    min_learner_score: 0.60
+    max_acceleration_multiplier: 1.25
+    market_move_trigger_pct: 0.25
+    min_reprice_distance_pct: 0.15
+    max_order_age_seconds: 300.0
+    min_liquidity_score: 0.50
+    max_spread_pct: 0.50
   tp_pct: 1.0
   sl_pct: 4.0
   tp_recalc_on_fill: true
