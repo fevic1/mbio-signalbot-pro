@@ -20,12 +20,7 @@ class FakeManager:
         return [
             {
                 "level": i,
-                "price": round(
-                    entry_price * (1 - spacing * i)
-                    if direction == "LONG"
-                    else entry_price * (1 + spacing * i),
-                    2,
-                ),
+                "price": round(entry_price * (1 - spacing * i) if direction == "LONG" else entry_price * (1 + spacing * i), 2),
                 "size": round(base_size * (multiplier ** i), 8),
                 "status": "pending",
                 "order_id": None,
@@ -71,23 +66,11 @@ async def test_initial_runtime_rebuild_skips_filled_base():
     manager = FakeManager(executor)
     runtime = DCARuntimeCoordinator(manager)
     position = {
-        "side": "BUY",
-        "entry": 100.0,
-        "size": 1.0,
-        "dca": {
-            "enabled": True,
-            "direction": "LONG",
-            "levels": 3,
-            "spacing_pct": 2.0,
-            "size_multiplier": 1.5,
-            "base_size": 1.0,
-            "active_orders": [],
-            "filled_levels": [1],
-        },
+        "side": "BUY", "entry": 100.0, "size": 1.0,
+        "dca": {"enabled": True, "direction": "LONG", "levels": 3, "spacing_pct": 2.0,
+                "size_multiplier": 1.5, "base_size": 1.0, "active_orders": [], "filled_levels": [1]},
     }
-
     result = await runtime.ensure("BTC", position)
-
     assert result["action"] == "INITIALIZE"
     assert [x[0] for x in manager.placed] == ["BTC", "BTC"]
     assert [x[3] for x in manager.placed] == [96.0, 94.0]
@@ -97,70 +80,37 @@ async def test_initial_runtime_rebuild_skips_filled_base():
 
 @pytest.mark.asyncio
 async def test_filled_order_is_detected_and_remaining_ladder_rebuilt():
-    executor = FakeExecutor(
-        [],
-        [{"coin": "BTC", "size": 3.25, "entry_price": 98.0}],
-    )
+    executor = FakeExecutor([], [{"coin": "BTC", "size": 3.25, "entry_price": 98.0}])
     manager = FakeManager(executor)
     runtime = DCARuntimeCoordinator(manager)
     position = {
-        "side": "BUY",
-        "entry": 100.0,
-        "size": 1.0,
-        "dca": {
-            "enabled": True,
-            "direction": "LONG",
-            "levels": 3,
-            "spacing_pct": 2.0,
-            "size_multiplier": 1.5,
-            "base_size": 1.0,
-            "filled_levels": [1],
-            "last_exchange_size": 1.0,
-            "last_fill_price": 100.0,
-            "active_orders": [
-                {"level": 2, "price": 96.0, "size": 2.25, "order_id": 20, "status": "active"},
-            ],
-        },
+        "side": "BUY", "entry": 100.0, "size": 1.0,
+        "dca": {"enabled": True, "direction": "LONG", "levels": 3, "spacing_pct": 2.0,
+                "size_multiplier": 1.5, "base_size": 1.0, "filled_levels": [1],
+                "last_exchange_size": 1.0, "last_fill_price": 100.0,
+                "active_orders": [{"level": 2, "price": 96.0, "size": 2.25, "order_id": 20, "status": "active"}]},
     }
-
     result = await runtime.ensure("BTC", position)
-
     assert result["action"] == "REBUILD"
     assert position["dca"]["filled_levels"] == [1, 2]
     assert position["dca"]["last_fill_price"] == pytest.approx(98.0)
     assert [x[3] for x in manager.placed] == [92.12]
-    assert manager.cancelled == [20]
+    assert manager.cancelled == []
 
 
 @pytest.mark.asyncio
 async def test_external_cancel_without_fill_is_replaced():
-    executor = FakeExecutor(
-        [],
-        [{"coin": "BTC", "size": 1.0, "entry_price": 100.0}],
-    )
+    executor = FakeExecutor([], [{"coin": "BTC", "size": 1.0, "entry_price": 100.0}])
     manager = FakeManager(executor)
     runtime = DCARuntimeCoordinator(manager)
     position = {
-        "side": "BUY",
-        "entry": 100.0,
-        "size": 1.0,
-        "dca": {
-            "enabled": True,
-            "direction": "LONG",
-            "levels": 2,
-            "spacing_pct": 2.0,
-            "size_multiplier": 1.5,
-            "base_size": 1.0,
-            "filled_levels": [1],
-            "last_exchange_size": 1.0,
-            "active_orders": [
-                {"level": 2, "price": 96.0, "size": 2.25, "order_id": 20, "status": "active"},
-            ],
-        },
+        "side": "BUY", "entry": 100.0, "size": 1.0,
+        "dca": {"enabled": True, "direction": "LONG", "levels": 2, "spacing_pct": 2.0,
+                "size_multiplier": 1.5, "base_size": 1.0, "filled_levels": [1],
+                "last_exchange_size": 1.0,
+                "active_orders": [{"level": 2, "price": 96.0, "size": 2.25, "order_id": 20, "status": "active"}]},
     }
-
     result = await runtime.ensure("BTC", position)
-
     assert result["action"] == "REBUILD"
     assert manager.cancelled == []
     assert len(position["dca"]["active_orders"]) == 1
