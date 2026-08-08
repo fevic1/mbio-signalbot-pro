@@ -153,3 +153,139 @@ def test_supervisor_interval_has_safe_bounds(monkeypatch):
         lambda: {"dca": {"adaptive": {"monitor_interval_sec": 120}}},
     )
     assert _interval_seconds() == 60.0
+
+
+@pytest.mark.asyncio
+async def test_manager_reprices_stale_order_without_exchange_access(monkeypatch):
+    manager = DCAManager(None)
+    config = {
+        "enabled": True,
+        "direction": "LONG",
+        "base_size": 1.0,
+        "levels": 3,
+        "spacing_pct": 2.0,
+        "multiplier": 1.5,
+        "active_orders": [
+            {
+                "level": 1,
+                "price": 94.0,
+                "size": 1.5,
+                "order_id": 10,
+                "status": "active",
+                "placed_at_ts": 0.0,
+            }
+        ],
+        "adaptive": {
+            "enabled": True,
+            "monitor_interval_sec": 2.0,
+            "order_ttl_seconds": 45.0,
+            "last_ai_review_ts": 100.0,
+        },
+    }
+    monkeypatch.setattr("core.dca_manager.time.time", lambda: 100.0)
+    monkeypatch.setattr("core.dca_manager.state.save_state", lambda: None)
+    monkeypatch.setattr(
+        "core.data_fetcher.get_mtf_data",
+        lambda _: {"1h": {"price": 96.0, "atr": 1.0, "rsi": 50.0}},
+    )
+    monkeypatch.setattr(manager, "_cancel_order", lambda *args: _ok())
+    monkeypatch.setattr(manager, "_submit_limit", lambda *args: _ok(order_id=11))
+
+    result = await manager.monitor_adaptive_dca("BTC", config, 96.0)
+
+    assert result["action"] == "REPRICE"
+    assert config["active_orders"][0]["order_id"] == 11
+    assert config["active_orders"][0]["price"] == pytest.approx(95.856)
+
+
+@pytest.mark.asyncio
+async def test_manager_acceleration_cancels_resting_orders_and_rebuilds(monkeypatch):
+    manager = DCAManager(None)
+    config = {
+        "enabled": True,
+        "direction": "LONG",
+        "base_size": 1.0,
+        "levels": 3,
+        "spacing_pct": 2.0,
+        "multiplier": 1.5,
+        "filled_levels": [],
+        "active_orders": [
+            {
+                "level": 1,
+                "price": 94.0,
+                "size": 1.5,
+                "order_id": 10,
+                "status": "active",
+                "placed_at_ts": 0.0,
+            },
+            {
+                "level": 2,
+                "price": 92.0,
+                "size": 2.25,
+                "order_id": 20,
+                "status": "active",
+                "placed_at_ts": 0.0,
+            },
+        ],
+        "adaptive": {
+            "enabled": True,
+            "aggressive_enabled": True,
+            "monitor_interval_sec": 2.0,
+            "order_ttl_seconds": 45.0,
+            "last_ai_review_ts": 100.0,
+        },
+    }
+    monkeypatch.setattr("core.dca_manager.time.time", lambda: 100.0)
+    monkeypatch.setattr("core.dca_manager.state.save_state", lambda: None)
+    monkeypatch.setattr(
+        "core.data_fetcher.get_mtf_data",
+        lambda _: {"1h": {"price": 96.0, "atr": 2.0, "rsi": 30.0}},
+    )
+    monkeypatch.setattr(
+        manager,
+        "_ai_advice",
+        lambda *args: {
+            "action": "ACCELERATE",
+            "confidence": 0.95,
+            "learner_score": 0.90,
+            "max_price": 96.0,
+            "size_multiplier": 1.25,
+            "valid_for_seconds": 30,
+        },
+    )
+    monkeypatch.setattr(manager, "_risk_budget_allows_acceleration", lambda *args: _true())
+    cancelled = []
+
+    async def cancel(asset, order_id):
+        cancelled.append(order_id)
+        return _ok()
+
+    submitted = []
+
+    async def submit_limit(asset, side, size, price, label):
+        submitted.append((label, size, price))
+        return _ok(order_id=100 + len(submitted))
+
+    async def submit_aggressive(asset, side, size, label):
+        submitted.append((label, size, 96.0))
+        return _ok(avg_price=95.9)
+
+    monkeypatch.setattr(manager, "_cancel_order", cancel)
+    monkeypatch.setattr(manager, "_submit_limit", submit_limit)
+    monkeypatch.setattr(manager, "_submit_aggressive", submit_aggressive)
+
+    result = await manager.monitor_adaptive_dca("BTC", config, 96.0)
+
+    assert result["action"] == "ACCELERATE"
+    assert cancelled == [10, 20]
+    assert config["filled_levels"] == [1]
+    assert len(config["active_orders"]) == 2
+    assert all(order["status"] == "active" for order in config["active_orders"])
+
+
+def _ok(**extra):
+    return {"success": True, **extra}
+
+
+def _true():
+    return True
