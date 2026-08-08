@@ -1,7 +1,8 @@
-"""Fast adaptive-DCA supervisor.
+"""Institutional adaptive-DCA supervisor.
 
-Runs independently from the legacy five-minute trailing task. It delegates all
-order decisions to DCAManager and never writes exchange orders itself.
+The supervisor is the runtime heartbeat. It first reconciles persisted DCA
+state with exchange state, then delegates adaptive policy/execution to
+DCAManager. It never places exchange orders directly.
 """
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from typing import Callable
 from config_loader import get_config
 from core.app_context import app_context
 from core.dca_manager import DCAManager
+from core.dca_runtime import DCARuntimeCoordinator
 import core.state as state
 
 logger = logging.getLogger(__name__)
@@ -21,33 +23,54 @@ def _interval_seconds() -> float:
     cfg = get_config().get("dca", {}) or {}
     adaptive = cfg.get("adaptive", {}) or {}
     try:
-        return max(2.0, min(60.0, float(adaptive.get("monitor_interval_sec", 10.0))))
+        return max(2.0, min(60.0, float(adaptive.get("monitor_interval_sec", 5.0))))
     except (TypeError, ValueError):
-        return 10.0
+        return 5.0
 
 
 async def adaptive_dca_supervisor_loop(
     *,
     executor_factory: Callable[[], object] | None = None,
 ) -> None:
-    """Continuously reassess live DCA positions.
-
-    The supervisor is intentionally small. DCAManager owns all order/risk logic.
-    """
+    """Continuously reconcile and reassess every live DCA position."""
     logger.info("Adaptive DCA supervisor started")
     while True:
         try:
+            cfg = get_config().get("dca", {}) or {}
+            global_adaptive = cfg.get("adaptive", {}) or {}
             executor = executor_factory() if executor_factory else app_context.executor
             manager = DCAManager(executor)
+            runtime = DCARuntimeCoordinator(manager)
             mids = executor.info.all_mids() or {}
 
             for asset, position in list(state.OPEN_POSITIONS.items()):
                 if str(asset).startswith("GRID::"):
                     continue
                 dca_config = position.get("dca")
-                if not isinstance(dca_config, dict):
+                if not isinstance(dca_config, dict) or not dca_config.get("enabled"):
                     continue
-                if not dca_config.get("enabled"):
+
+                # Global policy is the source of defaults; persisted per-position
+                # values win when explicitly present.
+                adaptive_config = dca_config.setdefault("adaptive", {})
+                for key, value in global_adaptive.items():
+                    adaptive_config.setdefault(key, value)
+
+                # Reconcile exchange order IDs, fills, partial fills, external
+                # cancellations, restart recovery, and remaining ladder state
+                # before any adaptive decision is allowed to act.
+                try:
+                    runtime_result = await runtime.ensure(asset, position)
+                    if runtime_result.get("action") not in {"SYNC"}:
+                        logger.info(
+                            "DCA runtime %s: action=%s",
+                            asset,
+                            runtime_result.get("action"),
+                        )
+                except Exception as exc:
+                    # Fail closed for this asset. Do not allow adaptive policy to
+                    # place new exposure when exchange reconciliation failed.
+                    logger.exception("DCA runtime reconciliation failed %s: %s", asset, exc)
                     continue
 
                 current_price = float(mids.get(asset, 0) or 0)
