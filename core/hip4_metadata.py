@@ -11,6 +11,8 @@ from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
+SIGNAL_SCAN_LIMIT = 10
+
 
 class HIP4MetadataManager:
     _instance = None
@@ -114,11 +116,12 @@ class HIP4MetadataManager:
 
     def resolve_universe(self, rules: dict) -> List[str]:
         """
-        Dynamically resolve the trading universe based on YAML rules.
-        Uses raw HTTP for metaAndAssetCtxs (SDK doesn't expose volume).
+        Dynamically resolve the trading universe from Hyperliquid 24h
+        notional-volume ranking. MBIO deliberately hard-caps this upstream
+        signal-scanning universe at SIGNAL_SCAN_LIMIT before market data or AI
+        signal analysis begins.
         """
         try:
-            # Fetch metadata and asset contexts via raw HTTP
             resp = requests.post(
                 "https://api.hyperliquid.xyz/info",
                 json={"type": "metaAndAssetCtxs"},
@@ -127,7 +130,6 @@ class HIP4MetadataManager:
             resp.raise_for_status()
             data = resp.json()
             
-            # Hyperliquid returns a list: [meta_dict, [ctx1, ctx2, ...]]
             if isinstance(data, list) and len(data) >= 2:
                 universe = data[0].get("universe", [])
                 asset_ctxs = data[1]
@@ -140,33 +142,28 @@ class HIP4MetadataManager:
             
             for i, asset in enumerate(universe):
                 name = asset.get("name")
-                if not name: 
+                if not name:
                     continue
-                
-                # Skip stablecoins if requested
                 if rules.get("exclude_stablecoins", True) and name in stablecoins:
                     continue
-                
-                # Skip SPOT assets
-                if asset.get("isSpot", False): 
+                if asset.get("isSpot", False):
                     continue
-                
-                # Get 24h volume (returned as string in API)
                 ctx = asset_ctxs[i] if i < len(asset_ctxs) else {}
                 day_ntl_str = ctx.get("dayNtlVlm", "0")
                 day_ntl = float(day_ntl_str) if day_ntl_str else 0.0
-                
                 if day_ntl >= rules.get("min_volume_usd", 0):
                     candidates.append({"name": name, "volume": day_ntl})
             
-            # Sort by volume descending
             candidates.sort(key=lambda x: x["volume"], reverse=True)
             
-            # Take top N
-            top_n = rules.get("top_n", 50)
+            configured_top_n = int(rules.get("top_n", SIGNAL_SCAN_LIMIT))
+            top_n = min(configured_top_n, SIGNAL_SCAN_LIMIT)
             resolved = [c["name"] for c in candidates[:top_n]]
             
-            logger.info(f"✅ HIP-4: Dynamically resolved universe: {len(resolved)} assets (Top {top_n} by volume)")
+            logger.info(
+                f"🎯 HIP-4: Signal scan gate selected {len(resolved)} assets "
+                f"from {len(candidates)} exchange-ranked candidates (Top {top_n} by volume): {resolved}"
+            )
             return resolved
             
         except Exception as e:
@@ -181,20 +178,15 @@ class HIP4MetadataManager:
         self._ensure_fresh()
         categories = {"PERP": [], "SPOT": [], "TRADFI": []}
         
-        # Known TRADFI tickers on Hyperliquid (Pre-market/Stocks)
         tradfi_tickers = {"AAPL", "TSLA", "NVDA", "AMZN", "META", "GOOGL", "SPY", "QQQ", "MSFT", "COIN", "MSTR", "AMD", "NFLX", "SMCI", "PLTR"}
         
         try:
-            # Use cached metadata to avoid unnecessary API calls
             universe = self._metadata.get("universe", [])
             
             for asset in universe:
                 name = asset.get("name")
                 if not name: continue
-                
                 is_spot = asset.get("isSpot", False)
-                
-                # Categorization Logic
                 if name in tradfi_tickers or "TRADFI" in name:
                     categories["TRADFI"].append(name)
                 elif is_spot:
