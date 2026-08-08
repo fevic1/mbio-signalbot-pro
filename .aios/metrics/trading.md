@@ -1,8 +1,0 @@
-# trading
-
-## KPIs
-
-## Targets
-
-## Alerts
-

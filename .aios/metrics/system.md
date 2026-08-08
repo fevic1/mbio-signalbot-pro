@@ -1,8 +1,0 @@
-# system
-
-## KPIs
-
-## Targets
-
-## Alerts
-

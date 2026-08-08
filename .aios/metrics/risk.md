@@ -1,8 +1,0 @@
-# risk
-
-## KPIs
-
-## Targets
-
-## Alerts
-
