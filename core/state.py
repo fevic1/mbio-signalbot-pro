@@ -34,9 +34,52 @@ auto_dca_active: dict = {}
 auto_dca_params: dict = {}
 auto_dca_consec_losses: dict = {}
 
+def _sync_dca_positions_from_open_positions() -> None:
+    """Mirror live DCA order state into the isolated persistence view.
+
+    OPEN_POSITIONS is the canonical live position/configuration source.  The
+    isolated DCA view is retained for consumers that need DCA-specific state,
+    but must not lag behind adaptive repricing, acceleration, or rebuilds.
+    """
+    for asset, position in OPEN_POSITIONS.items():
+        if not isinstance(position, dict):
+            continue
+        config = position.get("dca")
+        if not isinstance(config, dict) or not config.get("enabled"):
+            continue
+
+        DCA_POSITIONS[asset] = {
+            "entry_price": float(
+                config.get("avg_entry", position.get("entry", position.get("entry_price", 0))) or 0
+            ),
+            "base_size": float(config.get("base_size", position.get("size", 0)) or 0),
+            "direction": str(
+                config.get(
+                    "direction",
+                    "LONG" if str(position.get("side", "BUY")).upper() == "BUY" else "SHORT",
+                )
+            ).upper(),
+            "levels": list(config.get("active_orders", [])),
+            "active_orders": list(config.get("active_orders", [])),
+            "filled_levels": list(config.get("filled_levels", [])),
+            "is_waiting_for_fill": bool(config.get("is_waiting_for_fill", False)),
+            "last_fill_price": float(
+                config.get(
+                    "last_fill_price",
+                    config.get("avg_entry", position.get("entry", position.get("entry_price", 0))),
+                )
+                or 0
+            ),
+            "adaptive": dict(config.get("adaptive", {}) or {}),
+            "opened_at": config.get(
+                "opened_at", position.get("opened_at", datetime.now(timezone.utc).isoformat())
+            ),
+        }
+
 def save_state() -> None:
     """Persist state to disk."""
     try:
+        _sync_dca_positions_from_open_positions()
         data = {
             "open_positions": OPEN_POSITIONS,
             "dca_positions": DCA_POSITIONS,
