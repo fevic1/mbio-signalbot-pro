@@ -1,0 +1,46 @@
+name: Adaptive DCA Wiring
+
+on:
+  push:
+    branches: [institutional-upgrade]
+    paths:
+      - "scripts/apply_adaptive_dca_wiring.py"
+      - ".github/workflows/adaptive-dca-wiring.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: ${{ !contains(github.event.head_commit.message, '[skip adaptive-dca-wiring]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Apply exact-match wiring
+        run: python scripts/apply_adaptive_dca_wiring.py
+
+      - name: Verify syntax and whitespace
+        run: |
+          git diff --check
+          python -m py_compile main.py core/adaptive_dca.py core/dca_manager.py monitoring/adaptive_dca_supervisor.py
+
+      - name: Commit wiring change
+        run: |
+          if git diff --quiet -- main.py; then
+            echo "No wiring change required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.py
+          git commit -m "chore(dca): wire adaptive supervisor [skip adaptive-dca-wiring]"
+          git push
