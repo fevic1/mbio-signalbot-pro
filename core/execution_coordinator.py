@@ -6,15 +6,12 @@ must use this gateway instead of calling the exchange executor directly.
 from __future__ import annotations
 
 import asyncio
-import logging
 from dataclasses import dataclass
 from typing import Any
 
 from core.event_bus import event_bus
 from core.rate_limiter import rate_limiter
 from core.verification_engine import verification_engine
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -34,11 +31,9 @@ class ExecutionCoordinator:
             ok, reason = verification_engine.verify_order(kwargs)
             if not ok:
                 return ExecutionResult(False, {}, reason)
-
             await rate_limiter.acquire("exchange")
             result = await self._place_order(**kwargs)
             await event_bus.publish("order_submitted", {"request": kwargs, "response": result})
-
             if not result.get("success"):
                 return ExecutionResult(False, result, result.get("error"))
             return ExecutionResult(True, result)
@@ -49,25 +44,27 @@ class ExecutionCoordinator:
         size = kwargs.pop("size")
         price = kwargs.pop("price", kwargs.pop("limit_price", None))
         reduce_only = kwargs.pop("reduce_only", False)
-        strategy = kwargs.pop("strategy", None)
-        regime = kwargs.pop("regime", None)
-        execution_label = kwargs.pop("execution_label", None)
+        strategy = kwargs.pop("strategy", "UNKNOWN")
+        regime = kwargs.pop("regime", "UNKNOWN")
+        execution_label = kwargs.pop("execution_label", "COORDINATED")
+        order_type = kwargs.pop("order_type", "Limit")
 
         if not coin:
             return {"success": False, "error": "Missing asset/coin"}
 
         from execution.execution_context import ExecutionContext
         context = ExecutionContext(
-            strategy=strategy or "UNKNOWN",
-            regime=regime or "UNKNOWN",
-            execution_label=execution_label or "COORDINATED",
+            execution_label=execution_label,
+            strategy=strategy,
+            regime=regime,
+            order_type=order_type,
         )
-
         result = self.executor.place_order(
             coin=coin,
             side=side,
             size=size,
             limit_price=price,
+            order_type=order_type,
             reduce_only=reduce_only,
             execution_context=context,
         )
@@ -86,7 +83,8 @@ class ExecutionCoordinator:
             return result
 
     async def replace_order(self, cancel_id, new_order):
-        await self.cancel_order(order_id=cancel_id, coin=new_order.get("asset", new_order.get("coin")))
+        coin = new_order.get("asset", new_order.get("coin"))
+        await self.cancel_order(order_id=cancel_id, coin=coin)
         return await self.submit_order(**new_order)
 
     async def get_open_positions(self):
