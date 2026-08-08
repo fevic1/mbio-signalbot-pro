@@ -16,6 +16,7 @@ Reviewed the adaptive DCA policy, DCA manager, fast supervisor, automatic runtim
 - Resting DCA orders are cancelled before an accelerated leg is submitted to reduce double-fill risk.
 - The accelerated leg uses the existing executor's marketable-limit path rather than an unbounded market-order path.
 - Remaining unfilled levels are rebuilt from the new execution anchor after acceleration.
+- Stale limits are repriced toward the live market using a deterministic non-crossing offset instead of being cancelled and recreated at the same price.
 - State is persisted after adaptive actions.
 - The existing large-drop DCA pause guardrail remains active.
 - The supervisor has a bounded 2–60 second scheduling range and defaults to 10 seconds.
@@ -28,21 +29,20 @@ Reviewed the adaptive DCA policy, DCA manager, fast supervisor, automatic runtim
 - Adaptive policy compiled successfully in GitHub Actions.
 - DCA manager compiled successfully in GitHub Actions.
 - Adaptive supervisor compiled successfully in GitHub Actions.
-- Adaptive DCA unit suite passed.
-- Manager bounds and progressive ladder sizing tests passed.
-- Supervisor interval bounds test passed.
-- Runtime wiring test passed against the actual `main.py`.
+- Runtime `main.py` compiled successfully.
+- 12 adaptive DCA tests passed in the latest dedicated CI run, including policy gates, manager sizing/bounds, stale-order repricing, guarded acceleration, ladder rebuild, supervisor interval bounds, and runtime task registration.
 - Automatic wiring workflow passed syntax, whitespace, and runtime-registration verification before committing the wiring change.
+- A missing test dependency and two test-isolation issues were caught by CI and corrected before the final passing run. No production code was marked verified while its corresponding tests were failing.
 
 Workflows: `Adaptive DCA CI` and `Adaptive DCA Wiring`.
 
 ## Live-money gate
 
-The adaptive DCA path is **not yet approved for unrestricted live-money operation**. The code path is wired and statically/unit verified, but the following production verification remains mandatory:
+The adaptive DCA path is **not yet approved for unrestricted live-money operation**. The code path is wired and unit/integration mocked-verified, but the following production verification remains mandatory:
 
 1. Run the supervisor in dry-run mode against a live market-data feed with exchange writes disabled.
-2. Exercise stale-order cancellation/reprice behavior using mocked executor responses.
-3. Exercise AI-approved acceleration using mocked multi-provider output and MetaLearner weights.
+2. Exercise stale-order cancellation/reprice behavior using mocked executor responses. **Completed in unit tests; repeat in a full runtime harness.**
+3. Exercise AI-approved acceleration using mocked multi-provider output and MetaLearner weights. **Completed in unit tests; repeat in a full runtime harness.**
 4. Verify every acceleration risk gate blocks correctly under failure conditions.
 5. Verify restart/reconciliation cannot duplicate resting orders.
 6. Run the repository's broader CI suite.
