@@ -52,9 +52,8 @@ class AssetUniverse:
                 inst._refresh_lock = threading.Lock()
                 inst._exclusions: set = set(DEFAULT_EXCLUSIONS)
                 inst._initialized: bool = False
+                cls._instance = inst
         return cls._instance
-
-    # ── Public API (unchanged interface) ──────────────────────────────
 
     def sz_decimals(self, coin: str) -> int:
         meta = self._get(coin)
@@ -88,34 +87,23 @@ class AssetUniverse:
         ])
 
     def signal_scanner_coins(self) -> List[str]:
-        """Return only the exchange-ranked top 10 assets for signal scanning.
-
-        This is the upstream scanner gate. It deliberately does not introduce
-        a second liquidity/regime/quality filter. Ranking comes from the live
-        Hyperliquid 24h notional volume context already fetched by this module.
-        """
+        """Return only the live exchange-ranked top 10 assets for signal scanning."""
         self._ensure_fresh()
         eligible = {
-            name
-            for name, meta in self._assets.items()
+            name for name, meta in self._assets.items()
             if name not in self._exclusions
             and not meta.is_delisted
             and not meta.only_isolated
         }
         ranked = sorted(
-            (
-                (name, float(self._volume_ctxs.get(name, 0.0)))
-                for name in eligible
-            ),
+            ((name, float(self._volume_ctxs.get(name, 0.0))) for name in eligible),
             key=lambda item: item[1],
             reverse=True,
         )
         selected = [name for name, _volume in ranked[:SIGNAL_SCAN_LIMIT]]
         logger.info(
             "🎯 Signal scanner universe: %d/%d assets selected from live Hyperliquid volume ranking: %s",
-            len(selected),
-            len(eligible),
-            ", ".join(selected),
+            len(selected), len(eligible), ", ".join(selected),
         )
         return selected
 
@@ -132,8 +120,6 @@ class AssetUniverse:
         t = threading.Thread(target=self._bg_loop, daemon=True)
         t.start()
         logger.info(f"AssetUniverse: background refresh started ({REFRESH_INTERVAL}s)")
-
-    # ── Internal ──────────────────────────────────────────────────────
 
     def _get(self, coin: str) -> Optional[_AssetMeta]:
         self._ensure_fresh()
@@ -158,7 +144,6 @@ class AssetUniverse:
                 return False
 
             prices = self._fetch_prices()
-
             new_assets = {}
             for a in universe:
                 name = a.get("name", "").upper()
@@ -181,10 +166,8 @@ class AssetUniverse:
                     for pair in spot_data.get("universe", []):
                         token_indices = pair.get("tokens", [])
                         if len(token_indices) >= 2:
-                            base_idx = token_indices[0]
-                            quote_idx = token_indices[1]
-                            base_name = token_map.get(base_idx, "")
-                            quote_name = token_map.get(quote_idx, "")
+                            base_idx, quote_idx = token_indices[0], token_indices[1]
+                            base_name, quote_name = token_map.get(base_idx, ""), token_map.get(quote_idx, "")
                             if not base_name or not quote_name:
                                 continue
                             stablecoins = {"USDC", "USDT", "USDH", "USDE", "USD", "DAI", "FRAX"}
@@ -200,12 +183,7 @@ class AssetUniverse:
                             sz_dec = token_details.get(base_idx, {}).get("szDecimals", 4)
                             if base_name == quote_name:
                                 continue
-                            new_spot.append({
-                                "name": pair_name,
-                                "sz_decimals": sz_dec,
-                                "is_canonical": pair.get("isCanonical", False),
-                                "index": pair.get("index", 0)
-                            })
+                            new_spot.append({"name": pair_name, "sz_decimals": sz_dec, "is_canonical": pair.get("isCanonical", False), "index": pair.get("index", 0)})
             except Exception as e:
                 logger.error(f"AssetUniverse spot fetch error: {e}")
 
@@ -232,7 +210,6 @@ class AssetUniverse:
             self._initialized = True
             logger.info(f"AssetUniverse: {len(new_assets)} perps, {len(new_spot)} spot pairs loaded")
             return True
-
         except Exception as e:
             logger.error(f"AssetUniverse refresh error: {e}", exc_info=True)
             return False
@@ -249,14 +226,13 @@ class AssetUniverse:
     def _derive_tick(self, coin: str, price: float) -> float:
         if coin in _TICK_FALLBACK:
             return _TICK_FALLBACK[coin]
-        if price <= 0:
-            return 0.0001
+        if price <= 0: return 0.0001
         if price >= 10000: return 1.0
-        if price >= 1000:  return 0.1
-        if price >= 100:   return 0.01
-        if price >= 10:    return 0.001
-        if price >= 1:     return 0.0001
-        if price >= 0.1:   return 0.00001
+        if price >= 1000: return 0.1
+        if price >= 100: return 0.01
+        if price >= 10: return 0.001
+        if price >= 1: return 0.0001
+        if price >= 0.1: return 0.00001
         return 0.000001
 
     def get_categorized_assets(self) -> dict:
@@ -266,12 +242,7 @@ class AssetUniverse:
         spot_coins = [p["name"] for p in self._spot_pairs]
         sorted_by_vol = sorted(self._volume_ctxs.items(), key=lambda x: x[1], reverse=True)
         trending_coins = [name for name, vol in sorted_by_vol[:SIGNAL_SCAN_LIMIT]]
-        return {
-            "PERP": perp_coins,
-            "SPOT": spot_coins,
-            "TRENDING": trending_coins,
-            "last_refresh": self._last_refresh
-        }
+        return {"PERP": perp_coins, "SPOT": spot_coins, "TRENDING": trending_coins, "last_refresh": self._last_refresh}
 
     def _bg_loop(self):
         while True:
