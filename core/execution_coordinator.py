@@ -28,9 +28,10 @@ class ExecutionCoordinator:
 
     async def submit_order(self, **kwargs) -> ExecutionResult:
         async with self._lock:
-            ok, reason = verification_engine.verify_order(kwargs)
-            if not ok:
-                return ExecutionResult(False, {}, reason)
+            verification = await verification_engine.verify(**kwargs)
+            if not verification.passed:
+                return ExecutionResult(False, {}, verification.reason)
+
             await rate_limiter.acquire("exchange")
             result = await self._place_order(**kwargs)
             await event_bus.publish("order_submitted", {"request": kwargs, "response": result})
@@ -48,7 +49,6 @@ class ExecutionCoordinator:
         regime = kwargs.pop("regime", "UNKNOWN")
         execution_label = kwargs.pop("execution_label", "COORDINATED")
         order_type = kwargs.pop("order_type", "Limit")
-
         if not coin:
             return {"success": False, "error": "Missing asset/coin"}
 
