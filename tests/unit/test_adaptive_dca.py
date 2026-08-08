@@ -6,6 +6,7 @@ from core.adaptive_dca import (
     parse_ai_advice,
 )
 from core.dca_manager import DCAManager
+from monitoring.adaptive_dca_supervisor import _interval_seconds
 
 
 def test_ai_advice_is_bounded_and_unknown_action_fails_closed():
@@ -136,3 +137,17 @@ def test_manager_builds_progressive_dca_levels():
     levels = manager.calculate_dca_levels(100.0, 1.0, config)
     assert [level["price"] for level in levels] == [98.0, 96.0, 94.0]
     assert [level["size"] for level in levels] == [1.5, 2.25, 3.375]
+
+
+def test_supervisor_interval_has_safe_bounds(monkeypatch):
+    monkeypatch.setattr(
+        "monitoring.adaptive_dca_supervisor.get_config",
+        lambda: {"dca": {"adaptive": {"monitor_interval_sec": 0.1}}},
+    )
+    assert _interval_seconds() == 2.0
+
+    monkeypatch.setattr(
+        "monitoring.adaptive_dca_supervisor.get_config",
+        lambda: {"dca": {"adaptive": {"monitor_interval_sec": 120}}},
+    )
+    assert _interval_seconds() == 60.0
