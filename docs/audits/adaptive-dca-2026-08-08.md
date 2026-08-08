@@ -2,7 +2,7 @@
 
 ## Scope
 
-Reviewed the adaptive DCA policy, DCA manager integration, unit tests, and isolated CI workflow on `institutional-upgrade`.
+Reviewed the adaptive DCA policy, DCA manager, fast supervisor, automatic runtime wiring, unit tests, and dedicated CI workflows on `institutional-upgrade`.
 
 ## Controls verified
 
@@ -18,29 +18,34 @@ Reviewed the adaptive DCA policy, DCA manager integration, unit tests, and isola
 - Remaining unfilled levels are rebuilt from the new execution anchor after acceleration.
 - State is persisted after adaptive actions.
 - The existing large-drop DCA pause guardrail remains active.
+- The supervisor has a bounded 2–60 second scheduling range and defaults to 10 seconds.
+- The supervisor skips grid positions and only evaluates enabled DCA metadata.
+- Runtime wiring is applied by an exact-match, fail-closed script. It aborts if the expected source marker is missing or duplicated.
+- The legacy five-minute `update_trailing_dca` task is removed from the main background task registry; the adaptive supervisor is registered instead.
 
 ## Verification
 
 - Adaptive policy compiled successfully in GitHub Actions.
 - DCA manager compiled successfully in GitHub Actions.
-- Adaptive DCA unit suite passed in GitHub Actions.
+- Adaptive supervisor compiled successfully in GitHub Actions.
+- Adaptive DCA unit suite passed.
 - Manager bounds and progressive ladder sizing tests passed.
+- Supervisor interval bounds test passed.
+- Runtime wiring test passed against the actual `main.py`.
+- Automatic wiring workflow passed syntax, whitespace, and runtime-registration verification before committing the wiring change.
 
-Workflow: `Adaptive DCA CI`
+Workflows: `Adaptive DCA CI` and `Adaptive DCA Wiring`.
 
-## Production wiring gate
+## Live-money gate
 
-The adaptive policy and manager are **not declared production-live solely by these commits**. The current `monitoring/position_tracker.py` contains a legacy `update_trailing_dca()` loop that sleeps for 300 seconds and references a `dca` object that is not defined in that function's module scope. The next integration change must replace that legacy path with a dedicated fast adaptive-DCA supervisor and then verify the complete runtime path before live deployment.
+The adaptive DCA path is **not yet approved for unrestricted live-money operation**. The code path is wired and statically/unit verified, but the following production verification remains mandatory:
 
-No production capital should be enabled for the adaptive path until that wiring test passes.
+1. Run the supervisor in dry-run mode against a live market-data feed with exchange writes disabled.
+2. Exercise stale-order cancellation/reprice behavior using mocked executor responses.
+3. Exercise AI-approved acceleration using mocked multi-provider output and MetaLearner weights.
+4. Verify every acceleration risk gate blocks correctly under failure conditions.
+5. Verify restart/reconciliation cannot duplicate resting orders.
+6. Run the repository's broader CI suite.
+7. Review live execution slippage and exchange acknowledgement behavior before enabling live acceleration.
 
-## Required next verification
-
-1. Wire a dedicated adaptive-DCA supervisor into the application task registry.
-2. Verify one supervisor tick per configured interval without exchange writes in dry-run mode.
-3. Verify stale-order cancellation/reprice behavior with mocked executor responses.
-4. Verify AI-approved acceleration with mocked multi-provider output and MetaLearner weights.
-5. Verify acceleration is blocked when any risk gate fails.
-6. Verify restart/reconciliation does not duplicate resting orders.
-7. Run the full repository CI suite.
-8. Only then enable the feature for live-money DCA.
+No production capital should be enabled for unrestricted adaptive acceleration until these checks pass.
