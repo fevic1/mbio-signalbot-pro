@@ -3,11 +3,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
-<<<<<<< Updated upstream
-from datetime import datetime
-=======
 from datetime import datetime, timezone
->>>>>>> Stashed changes
 
 logger = logging.getLogger(__name__)
 
@@ -96,11 +92,7 @@ class MCPRegistry:
             if server_id not in self._servers:
                 return False
 
-<<<<<<< Updated upstream
-            self._servers[server_id].last_heartbeat = datetime.utcnow()
-=======
             self._servers[server_id].last_heartbeat = datetime.now(timezone.utc)
->>>>>>> Stashed changes
             return True
 
     async def is_server_alive(self, server_id: str, timeout_seconds: int = 60) -> bool:
@@ -113,11 +105,7 @@ class MCPRegistry:
             if server.last_heartbeat is None:
                 return False
 
-<<<<<<< Updated upstream
-            elapsed = (datetime.utcnow() - server.last_heartbeat).total_seconds()
-=======
             elapsed = (datetime.now(timezone.utc) - server.last_heartbeat).total_seconds()
->>>>>>> Stashed changes
             return elapsed < timeout_seconds
 
 

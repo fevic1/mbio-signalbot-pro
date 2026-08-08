@@ -6,11 +6,7 @@ All execution tools require OTP confirmation. All tools are rate-limited and aud
 """
 import time
 import logging
-<<<<<<< Updated upstream
-from datetime import datetime
-=======
 from datetime import datetime, timezone
->>>>>>> Stashed changes
 from typing import Optional, List, Dict, Any
 from fastmcp import FastMCP
 from fastapi import Request
@@ -87,11 +83,7 @@ async def get_account_balance() -> Dict[str, Any]:
             "unrealized_pnl": balance.get("unrealized_pnl", 0),
             "equity": balance.get("equity", 0),
             "margin_used": balance.get("margin_used", 0),
-<<<<<<< Updated upstream
-            "timestamp": datetime.utcnow().isoformat()
-=======
             "timestamp": datetime.now(timezone.utc).isoformat()
->>>>>>> Stashed changes
         }
     except Exception as e:
         logger.error(f"get_account_balance failed: {e}")
@@ -153,11 +145,7 @@ async def get_market_regime(asset: str = "BTC") -> Dict[str, Any]:
             "momentum": regime_result["momentum"],
             "volatility": regime_result["volatility"],
             "mean_reversion": regime_result["mean_reversion"],
-<<<<<<< Updated upstream
-            "timestamp": datetime.utcnow().isoformat()
-=======
             "timestamp": datetime.now(timezone.utc).isoformat()
->>>>>>> Stashed changes
         }
     except Exception as e:
         logger.error(f"get_market_regime failed: {e}")

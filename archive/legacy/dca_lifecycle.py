@@ -27,7 +27,6 @@ def _get_dca_config():
         from config_loader import get_config
         return get_config().get("dca", {})
     except Exception as e:
-        dca["_processing"] = False
         logger.warning(f"Config read failed, using defaults: {e}")
         return {}
 
