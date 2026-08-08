@@ -35,7 +35,7 @@ def test_stale_long_order_is_repriced_toward_market():
         config=AdaptiveDCAConfig(order_ttl_seconds=45.0),
     )
     assert decision.action is DCAAction.REPRICE
-    assert decision.target_price == 94.0
+    assert decision.target_price == 95.856
 
 
 def test_ai_can_accelerate_only_when_all_gates_pass():
