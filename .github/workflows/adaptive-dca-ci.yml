@@ -8,6 +8,7 @@ on:
     paths:
       - "core/adaptive_dca.py"
       - "core/dca_manager.py"
+      - "monitoring/adaptive_dca_supervisor.py"
       - "tests/unit/test_adaptive_dca.py"
       - ".github/workflows/adaptive-dca-ci.yml"
 
@@ -36,7 +37,7 @@ jobs:
           python -m pip install pytest pyyaml
 
       - name: Compile adaptive DCA modules
-        run: python -m py_compile core/adaptive_dca.py core/dca_manager.py
+        run: python -m py_compile core/adaptive_dca.py core/dca_manager.py monitoring/adaptive_dca_supervisor.py
 
       - name: Run adaptive DCA unit tests
         run: pytest tests/unit/test_adaptive_dca.py -q
