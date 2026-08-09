@@ -3,7 +3,7 @@ Advanced LangSmith monitoring with cost tracking, latency alerts, and analytics.
 """
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ class LangSmithMonitor:
     def __init__(self):
         self.call_history = []
         self.daily_stats = {
-            'date': datetime.now(UTC).date().isoformat(),
+            'date': datetime.now(timezone.utc).date().isoformat(),
             'total_calls': 0,
             'total_tokens': 0,
             'total_cost_usd': 0.0,
@@ -38,7 +38,7 @@ class LangSmithMonitor:
                    success: bool, provider: str = 'groq'):
         """Record an LLM call for analytics."""
         call_record = {
-            'timestamp': datetime.now(UTC).isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'model': model,
             'tokens': tokens_used,
             'latency_ms': latency_ms,
