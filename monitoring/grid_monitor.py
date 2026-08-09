@@ -84,8 +84,6 @@ async def entry_scanner_loop(run_trade_fn, chat_id: str) -> None:
     logger.info(f"🎯 Entry scanner (every {interval//60}min)")
     while True:
         await asyncio.sleep(interval)
-        # Entry scanner logic – placeholder; actual signals are generated in full_analysis_loop
-        # but we need to call run_trade when a signal appears. This is handled elsewhere.
         pass
 
 
@@ -94,12 +92,10 @@ async def full_analysis_loop(run_cycle_fn):
     import asyncio
     import logging
     from config_loader import get_config
-    
     logger = logging.getLogger(__name__)
     cfg = get_config()
     hours = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("intervals", {}).get("full_analysis_hours", 2)
     logger.info(f"🔄 Full analysis loop started (every {hours}h)")
-    
     while True:
         try:
             logger.info("♻️ Executing full analysis cycle...")
@@ -111,7 +107,6 @@ async def full_analysis_loop(run_cycle_fn):
         await asyncio.sleep(hours * 3600)
 
 
-
 async def quick_signal_scanner(chat_id: str) -> None:
     cfg = get_config()
     interval = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("intervals", {}).get("quick_scanner_sec", 900)
@@ -119,7 +114,6 @@ async def quick_signal_scanner(chat_id: str) -> None:
     logger.info(f"🔄 Quick scanner (every {interval//60}min, {threshold*100:.0f}% threshold)")
     while True:
         await asyncio.sleep(interval)
-        # Quick scanner logic – placeholder for now; you can add as needed
         pass
 
 
@@ -129,19 +123,18 @@ async def update_trailing_dca():
         await asyncio.sleep(300)
         try:
             from core.state import OPEN_POSITIONS
-            # HLExecutor now from app_context
             executor = app_context.executor
             for asset, pos in OPEN_POSITIONS.items():
                 dca_config = pos.get("dca")
                 if dca_config and dca_config.get("trailing") and dca_config.get("enabled"):
-                    # Check stabilization: ensure at least the base level is filled
                     if not dca_config.get("filled_levels"):
                         logger.debug(f"⏳ {asset} DCA not yet stabilized (no filled levels), skipping trailing update")
                         continue
                     mids = executor.info.all_mids()
                     current_price = float(mids.get(asset, 0))
                     if current_price > 0:
-                        result = await dca.update_trailing_orders(asset, dca_config, current_price)
+                        from core.dca_execution_engine import dca_execution_engine
+                        result = await dca_execution_engine.update_trailing_orders(asset, dca_config, current_price)
                         if result["updated"] > 0:
                             logger.info(f"🔄 Updated {result['updated']} trailing DCA orders for {asset}")
         except Exception as e:
@@ -155,7 +148,6 @@ async def monitor_dca_profit_targets():
         try:
             from core.state import OPEN_POSITIONS
             from core.dca_execution_engine import dca_execution_engine
-            # HLExecutor now from app_context
             executor = app_context.executor
             dca = dca_execution_engine
             for asset, pos in OPEN_POSITIONS.items():
