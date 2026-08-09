@@ -87,9 +87,7 @@ class DCAExecutionEngine:
             new_size = float(desired.size)
         except (TypeError, ValueError):
             return True
-        if old_size != new_size:
-            return True
-        if old_price == 0:
+        if old_size != new_size or old_price == 0:
             return True
         return abs(new_price - old_price) / abs(old_price) * 100.0 >= threshold_pct
 
@@ -100,7 +98,6 @@ class DCAExecutionEngine:
         return DCAOrder(order.level, price, size, order.side)
 
     async def _exchange_open_orders(self, asset: str) -> list[dict]:
-        """Exchange is authoritative at the DCA execution boundary."""
         try:
             orders = market_cache.orders()
             return [o for o in orders if isinstance(o, dict) and o.get("coin") == asset]
@@ -109,17 +106,7 @@ class DCAExecutionEngine:
             return []
 
     async def _submit_limit(self, asset: str, order: DCAOrder) -> ExecutionResult:
-        return await self.execution.submit_order(
-            asset=asset,
-            side=order.side,
-            price=order.price,
-            size=order.size,
-            reduce_only=False,
-            strategy="DCA",
-            regime="AUTO",
-            execution_label="DCA_LADDER",
-            order_type="Limit",
-        )
+        return await self.execution.submit_order(asset=asset, side=order.side, price=order.price, size=order.size, reduce_only=False, strategy="DCA", regime="AUTO", execution_label="DCA_LADDER", order_type="Limit")
 
     async def _cancel(self, asset: str, order_id: Any) -> dict:
         return await self.execution.cancel_order(coin=asset, order_id=int(order_id))
@@ -137,26 +124,14 @@ class DCAExecutionEngine:
         if entry <= 0:
             logger.warning("DCA synchronize skipped for %s: invalid entry", asset)
             return
-        ladder = self.build_ladder(
-            entry=entry,
-            side=str(position.get("side", dca.get("direction", "LONG"))),
-            base_size=float(dca.get("base_size", position.get("size", 0)) or 0),
-            levels=int(dca.get("levels", dca.get("max_levels", 3))),
-            spacing=spacing,
-            multiplier=float(dca.get("size_multiplier", 1.25)),
-        )
+        ladder = self.build_ladder(entry, str(position.get("side", dca.get("direction", "LONG"))), float(dca.get("base_size", position.get("size", 0)) or 0), int(dca.get("levels", dca.get("max_levels", 3))), spacing, float(dca.get("size_multiplier", 1.25)))
         await self.replace_ladder(asset, ladder, dca)
 
     async def replace_ladder(self, asset: str, ladder: List[DCAOrder], dca: dict) -> None:
-        """Reconcile DCA at the execution boundary without pointless churn."""
+        """Reconcile DCA against exchange state at the final execution boundary."""
         cfg = get_config()
         dca_cfg = cfg.get("dca", {}) if isinstance(cfg, dict) else {}
-        threshold_pct = float(
-            dca.get("minimum_reprice_pct", dca_cfg.get("minimum_reprice_pct", dca_cfg.get("min_reprice_pct", 0.15)))
-        )
-
-        # Normalize before comparison. Exchange precision is represented by the
-        # existing ladder precision unless explicit config provides decimals.
+        threshold_pct = float(dca.get("minimum_reprice_pct", dca_cfg.get("minimum_reprice_pct", dca_cfg.get("min_reprice_pct", 0.15))))
         price_decimals = dca_cfg.get("price_decimals")
         size_decimals = dca_cfg.get("size_decimals")
         try:
@@ -164,20 +139,18 @@ class DCAExecutionEngine:
             size_decimals = int(size_decimals) if size_decimals is not None else None
         except (TypeError, ValueError):
             price_decimals = size_decimals = None
+
         normalized: list[DCAOrder] = []
-        seen_levels: set[tuple[float, float, str]] = set()
+        seen: set[tuple[float, float, str]] = set()
         for desired in ladder:
             desired = self._normalize_order(desired, price_decimals, size_decimals)
-            key = (desired.price, desired.size, desired.side)
-            if key in seen_levels:
-                continue
-            seen_levels.add(key)
-            normalized.append(desired)
+            key = (desired.price, desired.size, desired.side.upper())
+            if key not in seen:
+                seen.add(key)
+                normalized.append(desired)
 
         exchange_orders = await self._exchange_open_orders(asset)
         local_orders = list(dca.get("active_orders", []))
-        # Exchange state wins. Merge exchange orders with local state by OID, then
-        # retain local metadata such as ladder level where available.
         local_by_oid = {str(o.get("order_id")): o for o in local_orders if o.get("order_id") not in (None, "", 0, "0")}
         authoritative: list[dict] = []
         for exchange_order in exchange_orders:
@@ -185,23 +158,14 @@ class DCAExecutionEngine:
             if oid in (None, "", 0, "0"):
                 continue
             local = local_by_oid.get(str(oid), {})
-            authoritative.append({
-                "order_id": oid,
-                "price": exchange_order.get("limitPx", exchange_order.get("price")),
-                "size": exchange_order.get("sz", exchange_order.get("size")),
-                "side": exchange_order.get("side", local.get("side", "")),
-                "level": local.get("level"),
-                "status": "OPEN",
-            })
+            authoritative.append({"order_id": oid, "price": exchange_order.get("limitPx", exchange_order.get("price")), "size": exchange_order.get("sz", exchange_order.get("size")), "side": exchange_order.get("side", local.get("side", "")), "level": local.get("level"), "status": "OPEN"})
 
-        # In unit tests and during a temporarily unavailable exchange snapshot,
-        # preserve the known local state rather than creating duplicate orders.
         if not exchange_orders and local_orders:
             authoritative = [dict(o) for o in local_orders if str(o.get("status", "OPEN")).upper() in {"OPEN", "ACTIVE"}]
 
         used: set[int] = set()
         retained: list[dict] = []
-        to_replace: list[tuple[dict, DCAOrder]] = []
+        replacements: list[tuple[dict, DCAOrder]] = []
         to_place: list[DCAOrder] = []
 
         for desired in normalized:
@@ -214,47 +178,39 @@ class DCAExecutionEngine:
                 continue
 
             candidate = next((i for i, existing in enumerate(authoritative) if i not in used and str(existing.get("side", "")).upper() in {"", desired.side.upper()}), None)
-            if candidate is not None and not self._effective_reprice(authoritative[candidate], desired, threshold_pct):
+            if candidate is None:
+                to_place.append(desired)
+            elif not self._effective_reprice(authoritative[candidate], desired, threshold_pct):
                 used.add(candidate)
                 current = dict(authoritative[candidate])
                 current.update({"level": desired.level, "status": "OPEN"})
                 retained.append(current)
-                continue
-            if candidate is not None:
-                used.add(candidate)
-                to_replace.append((authoritative[candidate], desired))
             else:
-                to_place.append(desired)
+                used.add(candidate)
+                replacements.append((authoritative[candidate], desired))
 
-        # Never cancel until a genuine reprice is required. Verify each
-        # cancellation before submitting its replacement.
-        for old, _ in to_replace:
+        verified_replacements: list[DCAOrder] = []
+        for old, desired in replacements:
             oid = old.get("order_id")
             if oid in (None, "", 0, "0"):
                 continue
-            result = await self._cancel(asset, oid)
-            if not result.get("success"):
-                logger.error("DCA cancel rejected %s/%s; replacement withheld", asset, oid)
-                continue
-
-            still_open = await self._exchange_open_orders(asset)
-            if any(str(o.get("oid", o.get("order_id"))) == str(oid) for o in still_open):
-                logger.error("DCA cancellation not verified %s/%s; replacement withheld", asset, oid)
-                continue
-            # Cancellation is verified. The replacement is appended below.
-
-        for _, desired in to_replace:
             try:
-                result = await self._submit_limit(asset, desired)
+                result = await self._cancel(asset, oid)
+                if not result.get("success"):
+                    logger.error("DCA cancel rejected %s/%s; replacement withheld", asset, oid)
+                    retained.append(dict(old))
+                    continue
+                still_open = await self._exchange_open_orders(asset)
+                if any(str(o.get("oid", o.get("order_id"))) == str(oid) for o in still_open):
+                    logger.error("DCA cancellation not verified %s/%s; replacement withheld", asset, oid)
+                    retained.append(dict(old))
+                    continue
+                verified_replacements.append(desired)
             except Exception as exc:
-                logger.error("DCA ladder replacement failed %s level=%s: %s", asset, desired.level, exc)
-                continue
-            if result.success:
-                oid = result.payload.get("order_id", result.payload.get("oid"))
-                if oid is not None:
-                    retained.append({"order_id": oid, "price": desired.price, "size": desired.size, "level": desired.level, "side": desired.side, "status": "OPEN"})
+                logger.error("DCA cancellation failed %s/%s; replacement withheld: %s", asset, oid, exc)
+                retained.append(dict(old))
 
-        for desired in to_place:
+        for desired in verified_replacements + to_place:
             try:
                 result = await self._submit_limit(asset, desired)
             except Exception as exc:
@@ -265,12 +221,10 @@ class DCAExecutionEngine:
                 if oid is not None:
                     retained.append({"order_id": oid, "price": desired.price, "size": desired.size, "level": desired.level, "side": desired.side, "status": "OPEN"})
 
-        # Any authoritative order not matched to the desired ladder is stale.
-        # Cancel it only after the desired matching pass is complete.
         for index, old in enumerate(authoritative):
             if index in used:
                 continue
-            if any(old is candidate for candidate, _ in to_replace):
+            if any(old.get("order_id") == candidate.get("order_id") for candidate in replacements):
                 continue
             oid = old.get("order_id")
             if oid in (None, "", 0, "0"):
@@ -284,7 +238,7 @@ class DCAExecutionEngine:
         dca.setdefault("filled_levels", [])
         self.active[asset] = dca
         state.save_state()
-        logger.info("DCA ladder synchronized %s (%d retained, %d replaced, %d submitted, %d desired)", asset, len(retained), len(to_replace), len(to_place), len(normalized))
+        logger.info("DCA ladder synchronized %s (%d retained, %d replaced, %d submitted, %d desired)", asset, len(retained), len(verified_replacements), len(verified_replacements) + len(to_place), len(normalized))
 
     async def on_fill(self, asset: str, position: dict) -> None:
         logger.info("DCA fill received %s", asset)
