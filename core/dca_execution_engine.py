@@ -224,7 +224,7 @@ class DCAExecutionEngine:
         for index, old in enumerate(authoritative):
             if index in used:
                 continue
-            if any(old.get("order_id") == candidate.get("order_id") for candidate in replacements):
+            if any(old.get("order_id") == candidate.get("order_id") for candidate, _ in replacements):
                 continue
             oid = old.get("order_id")
             if oid in (None, "", 0, "0"):
