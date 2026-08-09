@@ -34,7 +34,7 @@ async def monitor_grid_bots():
                 if not config.get("enabled"):
                     continue
 
-                mids = market_cache.all_mids()
+                mids = executor.info.all_mids()
                 current_price = float(mids.get(asset, 0))
                 if current_price <= 0:
                     continue
@@ -129,8 +129,9 @@ async def update_trailing_dca():
         await asyncio.sleep(300)
         try:
             from core.state import OPEN_POSITIONS
-            # HLExecutor now from app_context
+            from core.dca_execution_engine import dca_execution_engine
             executor = app_context.executor
+            dca = dca_execution_engine
             for asset, pos in OPEN_POSITIONS.items():
                 dca_config = pos.get("dca")
                 if dca_config and dca_config.get("trailing") and dca_config.get("enabled"):
@@ -155,7 +156,6 @@ async def monitor_dca_profit_targets():
         try:
             from core.state import OPEN_POSITIONS
             from core.dca_execution_engine import dca_execution_engine
-            # HLExecutor now from app_context
             executor = app_context.executor
             dca = dca_execution_engine
             for asset, pos in OPEN_POSITIONS.items():
