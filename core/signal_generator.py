@@ -82,8 +82,8 @@ BB_UPPER: {d1h.get("bb_upper",0)}
 
 def _parse_json_response(text: str) -> Dict:
     if not text: return {}
-    text = re.sub(r'```json\\s*', '', text)
-    text = re.sub(r'```\\s*', '', text)
+    text = re.sub(r'```json\s*', '', text)
+    text = re.sub(r'```\s*', '', text)
     start = text.find('{')
     end = text.rfind('}')
     if start != -1 and end != -1 and end > start:
