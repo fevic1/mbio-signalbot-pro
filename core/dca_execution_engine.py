@@ -66,6 +66,33 @@ class DCAExecutionEngine:
             ladder.append(DCAOrder(level + 1, round(price, 8), self.level_size(base_size, level, multiplier), order_side))
         return ladder
 
+    @staticmethod
+    def _orders_equivalent(existing: dict, desired: DCAOrder) -> bool:
+        """Return True when an existing resting order already implements desired.
+
+        Exchange/API round-trips can introduce tiny floating-point differences, so
+        comparison is tolerant at sub-tick scale while still requiring the same
+        side, price and size. This is deliberately an execution guard: a no-op
+        synchronization must never cancel and recreate an equivalent order.
+        """
+        try:
+            existing_side = str(existing.get("side", "")).upper()
+            desired_side = str(desired.side).upper()
+            existing_price = float(existing.get("price"))
+            desired_price = float(desired.price)
+            existing_size = float(existing.get("size"))
+            desired_size = float(desired.size)
+        except (TypeError, ValueError):
+            return False
+
+        price_tolerance = max(1e-8, abs(desired_price) * 1e-8)
+        size_tolerance = max(1e-10, abs(desired_size) * 1e-8)
+        return (
+            existing_side == desired_side
+            and abs(existing_price - desired_price) <= price_tolerance
+            and abs(existing_size - desired_size) <= size_tolerance
+        )
+
     async def _submit_limit(self, asset: str, order: DCAOrder) -> ExecutionResult:
         return await self.execution.submit_order(
             asset=asset,
@@ -108,18 +135,60 @@ class DCAExecutionEngine:
         await self.replace_ladder(asset, ladder, dca)
 
     async def replace_ladder(self, asset: str, ladder: List[DCAOrder], dca: dict) -> None:
+        """Reconcile the desired ladder without churning equivalent orders.
+
+        Existing equivalent orders are retained in place. Only orders that no
+        longer belong in the desired ladder are cancelled, and only missing or
+        materially changed levels are submitted. This makes repeated
+        synchronization idempotent across every asset.
+        """
         old_orders = list(dca.get("active_orders", []))
-        for old in old_orders:
+        used_old: set[int] = set()
+        retained_orders = []
+        orders_to_place: list[DCAOrder] = []
+
+        for desired in ladder:
+            match_index = next(
+                (
+                    index
+                    for index, existing in enumerate(old_orders)
+                    if index not in used_old
+                    and str(existing.get("status", "OPEN")).upper() in {"OPEN", "ACTIVE"}
+                    and self._orders_equivalent(existing, desired)
+                ),
+                None,
+            )
+            if match_index is None:
+                orders_to_place.append(desired)
+                continue
+
+            used_old.add(match_index)
+            retained = dict(old_orders[match_index])
+            retained.update({
+                "price": desired.price,
+                "size": desired.size,
+                "level": desired.level,
+                "side": desired.side,
+                "status": "OPEN",
+            })
+            retained_orders.append(retained)
+
+        for index, old in enumerate(old_orders):
+            if index in used_old:
+                continue
             oid = old.get("order_id")
             status = str(old.get("status", "OPEN")).upper()
-            if oid not in (None, "", 0, "0") and status in {"OPEN", "ACTIVE"}:
-                try:
-                    await self._cancel(asset, oid)
-                except Exception as exc:
-                    logger.error("DCA cancel failed %s/%s: %s", asset, oid, exc)
+            if oid in (None, "", 0, "0") or status not in {"OPEN", "ACTIVE"}:
+                continue
+            try:
+                result = await self._cancel(asset, oid)
+                if not result.get("success"):
+                    logger.error("DCA cancel rejected %s/%s: %s", asset, oid, result.get("error"))
+            except Exception as exc:
+                logger.error("DCA cancel failed %s/%s: %s", asset, oid, exc)
 
-        new_orders = []
-        for order in ladder:
+        new_orders = list(retained_orders)
+        for order in orders_to_place:
             try:
                 result = await self._submit_limit(asset, order)
             except Exception as exc:
@@ -133,6 +202,7 @@ class DCAExecutionEngine:
                         "price": order.price,
                         "size": order.size,
                         "level": order.level,
+                        "side": order.side,
                         "status": "OPEN",
                     })
 
@@ -140,7 +210,13 @@ class DCAExecutionEngine:
         dca.setdefault("filled_levels", [])
         self.active[asset] = dca
         state.save_state()
-        logger.info("DCA ladder synchronized %s (%d/%d orders)", asset, len(new_orders), len(ladder))
+        logger.info(
+            "DCA ladder synchronized %s (%d retained, %d submitted, %d desired)",
+            asset,
+            len(retained_orders),
+            len(new_orders) - len(retained_orders),
+            len(ladder),
+        )
 
     async def on_fill(self, asset: str, position: dict) -> None:
         logger.info("DCA fill received %s", asset)
