@@ -109,13 +109,16 @@ async def _call_provider(name: str, client, sys_prompt: str, user_prompt: str, j
         response = await client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
         parsed = json.loads(content) if json_mode else _parse_json_response(content)
+        if not parsed or "results" not in parsed:
+            logger.warning(f"Provider {name} returned no valid results")
+            return {}
         return parsed
     except Exception as e:
         logger.warning(f"Provider {name} failed: {e}")
         return {}
 
 async def analyze_batch(asset_batch: dict, cfg: dict) -> Tuple[Dict, str]:
-    """Returns (results_dict, provider_name)"""
+    """Returns (results_dict, provider_name). Providers are strict fallbacks: Groq → Cerebras → OpenRouter."""
     if not asset_batch: return {}, "none"
 
     regimes = {}
@@ -134,45 +137,41 @@ async def analyze_batch(asset_batch: dict, cfg: dict) -> Tuple[Dict, str]:
     ai_cfg = cfg.get("ai", {})
     models = ai_cfg.get("models", {})
 
-    tasks = []
-    provider_names = []
-    if _groq_client:
-        provider_names.append("groq")
-        tasks.append(_call_provider("groq", _groq_client, sys_prompt, user_prompt, True, models.get("groq", "llama-3.3-70b-versatile")))
-    if _cerebras_client:
-        provider_names.append("cerebras")
-        tasks.append(_call_provider("cerebras", _cerebras_client, sys_prompt, user_prompt, True, models.get("cerebras", "gpt-oss-120b")))
-    if _openrouter_client:
-        provider_names.append("openrouter")
-        tasks.append(_call_provider("openrouter", _openrouter_client, sys_prompt, user_prompt, True, models.get("openrouter", "meta-llama/llama-3.1-70b-instruct")))
+    providers = [
+        ("groq", _groq_client, models.get("groq", "llama-3.3-70b-versatile")),
+        ("cerebras", _cerebras_client, models.get("cerebras", "gpt-oss-120b")),
+        ("openrouter", _openrouter_client, models.get("openrouter", "meta-llama/llama-3.1-70b-instruct")),
+    ]
 
-    if not tasks: return {}, "none"
+    attempted = 0
+    for name, client, model in providers:
+        if client is None:
+            continue
+        attempted += 1
+        result = await _call_provider(name, client, sys_prompt, user_prompt, True, model)
+        if not result or "results" not in result:
+            logger.warning(f"AI fallback: {name} unavailable, trying next provider")
+            continue
 
-    results = await asyncio.gather(*tasks)
-    valid = [r for r in results if r and "results" in r]
+        flat_results = {}
+        for item in result.get("results", []):
+            asset = item.get("asset")
+            if asset:
+                flat_results[asset] = {
+                    "signal": item.get("signal", "HOLD").upper(),
+                    "confidence": max(50, int(item.get("confidence", 50))) if item.get("confidence") not in [None, "", 0] else 50,
+                    "reasoning": item.get("reasoning", "")
+                }
 
-    if not valid:
-        logger.error("❌ CRITICAL: No valid AI responses received!")
-        logger.error(f"   Total tasks: {len(tasks)}")
-        logger.error(f"   Results: {results}")
-        return {}, "failed"
+        if flat_results:
+            logger.info(f"AI provider selected: {name}")
+            return flat_results, name
 
-    best = max(valid, key=lambda r: sum(item.get('confidence', 0) for item in r.get('results', [])))
+        logger.warning(f"AI fallback: {name} returned no usable signals, trying next provider")
 
-    flat_results = {}
-    for item in best.get("results", []):
-        asset = item.get("asset")
-        if asset:
-            flat_results[asset] = {
-                "signal": item.get("signal", "HOLD").upper(),
-                "confidence": max(50, int(item.get("confidence", 50))) if item.get("confidence") not in [None, "", 0] else 50,
-                "reasoning": item.get("reasoning", "")
-            }
-
-    if not flat_results:
-        logger.error("❌ CRITICAL: analyze_batch returned empty results")
-        logger.error(f"   Valid responses: {len(valid)}")
-        logger.error(f"   Total responses: {len(results)}")
-
-    best_index = results.index(best)
-    return flat_results, provider_names[best_index]
+    if attempted == 0:
+        logger.error("❌ CRITICAL: No AI providers configured")
+    else:
+        logger.error("❌ CRITICAL: No valid AI responses received after all fallbacks")
+        logger.error(f"   Providers attempted: {attempted}")
+    return {}, "failed"
