@@ -26,9 +26,12 @@ async def test_same_price_same_size_zero_cancel_zero_submit(engine, monkeypatch)
         submitted.append((asset, order))
         return SimpleNamespace(success=True, payload={"order_id": 999})
 
+    async def exchange(asset):
+        return []
+
     monkeypatch.setattr(engine, "_cancel", cancel)
     monkeypatch.setattr(engine, "_submit_limit", submit)
-    monkeypatch.setattr(engine, "_exchange_open_orders", lambda asset: [])
+    monkeypatch.setattr(engine, "_exchange_open_orders", exchange)
 
     dca = {"active_orders": [
         {"order_id": 101, "price": 100.0, "size": 1.0, "level": 1, "status": "OPEN"},
@@ -56,11 +59,12 @@ async def test_equivalent_exchange_order_with_different_oid_is_retained(engine, 
         submitted.append((asset, order))
         return SimpleNamespace(success=True, payload={"order_id": 999})
 
+    async def exchange(asset):
+        return [{"oid": 777, "coin": asset, "limitPx": 100.0, "sz": 1.0, "side": "BUY"}]
+
     monkeypatch.setattr(engine, "_cancel", cancel)
     monkeypatch.setattr(engine, "_submit_limit", submit)
-    monkeypatch.setattr(engine, "_exchange_open_orders", lambda asset: [
-        {"oid": 777, "coin": asset, "limitPx": 100.0, "sz": 1.0, "side": "BUY"}
-    ])
+    monkeypatch.setattr(engine, "_exchange_open_orders", exchange)
 
     dca = {"active_orders": [{"order_id": 101, "price": 99.0, "size": 1.0, "level": 1, "status": "OPEN"}]}
     await engine.replace_ladder("BTC", [DCAOrder(1, 100.0, 1.0, "BUY")], dca)
@@ -72,20 +76,17 @@ async def test_equivalent_exchange_order_with_different_oid_is_retained(engine, 
 
 @pytest.mark.asyncio
 async def test_duplicate_ladder_levels_are_collapsed_before_submission(engine, monkeypatch):
-    cancelled = []
     submitted = []
-
-    async def cancel(asset, order_id):
-        cancelled.append((asset, order_id))
-        return {"success": True}
 
     async def submit(asset, order):
         submitted.append((asset, order))
         return SimpleNamespace(success=True, payload={"order_id": 303})
 
-    monkeypatch.setattr(engine, "_cancel", cancel)
+    async def exchange(asset):
+        return []
+
     monkeypatch.setattr(engine, "_submit_limit", submit)
-    monkeypatch.setattr(engine, "_exchange_open_orders", lambda asset: [])
+    monkeypatch.setattr(engine, "_exchange_open_orders", exchange)
 
     dca = {"active_orders": []}
     ladder = [DCAOrder(1, 100.0, 1.0, "BUY"), DCAOrder(2, 100.0, 1.0, "BUY")]
@@ -108,9 +109,12 @@ async def test_below_threshold_price_change_is_kept(engine, monkeypatch):
         submitted.append((asset, order))
         return SimpleNamespace(success=True, payload={"order_id": 999})
 
+    async def exchange(asset):
+        return []
+
     monkeypatch.setattr(engine, "_cancel", cancel)
     monkeypatch.setattr(engine, "_submit_limit", submit)
-    monkeypatch.setattr(engine, "_exchange_open_orders", lambda asset: [])
+    monkeypatch.setattr(engine, "_exchange_open_orders", exchange)
 
     dca = {"minimum_reprice_pct": 0.15, "active_orders": [
         {"order_id": 101, "price": 100.0, "size": 1.0, "level": 1, "status": "OPEN"}
@@ -166,9 +170,12 @@ async def test_unverified_cancel_withholds_replacement(engine, monkeypatch):
         submitted.append(order)
         return SimpleNamespace(success=True, payload={"order_id": 202})
 
+    async def exchange(asset):
+        return list(exchange_orders)
+
     monkeypatch.setattr(engine, "_cancel", cancel)
     monkeypatch.setattr(engine, "_submit_limit", submit)
-    monkeypatch.setattr(engine, "_exchange_open_orders", lambda asset: list(exchange_orders))
+    monkeypatch.setattr(engine, "_exchange_open_orders", exchange)
 
     dca = {"minimum_reprice_pct": 0.15, "active_orders": [
         {"order_id": 101, "price": 100.0, "size": 1.0, "level": 1, "status": "OPEN"}
