@@ -6,6 +6,7 @@ MBIO Grid Monitor
 import asyncio
 import logging
 from config_loader import get_config
+from core.market_cache import market_cache
 import core.state as state
 
 logger = logging.getLogger(__name__)
