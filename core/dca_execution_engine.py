@@ -68,13 +68,7 @@ class DCAExecutionEngine:
 
     @staticmethod
     def _orders_equivalent(existing: dict, desired: DCAOrder) -> bool:
-        """Return True when an existing resting order already implements desired.
-
-        Exchange/API round-trips can introduce tiny floating-point differences, so
-        comparison is tolerant at sub-tick scale while still requiring the same
-        side, price and size. This is deliberately an execution guard: a no-op
-        synchronization must never cancel and recreate an equivalent order.
-        """
+        """Return True when an existing resting order already implements desired."""
         try:
             existing_side = str(existing.get("side", "")).upper()
             desired_side = str(desired.side).upper()
@@ -88,7 +82,7 @@ class DCAExecutionEngine:
         price_tolerance = max(1e-8, abs(desired_price) * 1e-8)
         size_tolerance = max(1e-10, abs(desired_size) * 1e-8)
         return (
-            existing_side == desired_side
+            (not existing_side or existing_side == desired_side)
             and abs(existing_price - desired_price) <= price_tolerance
             and abs(existing_size - desired_size) <= size_tolerance
         )
@@ -135,13 +129,7 @@ class DCAExecutionEngine:
         await self.replace_ladder(asset, ladder, dca)
 
     async def replace_ladder(self, asset: str, ladder: List[DCAOrder], dca: dict) -> None:
-        """Reconcile the desired ladder without churning equivalent orders.
-
-        Existing equivalent orders are retained in place. Only orders that no
-        longer belong in the desired ladder are cancelled, and only missing or
-        materially changed levels are submitted. This makes repeated
-        synchronization idempotent across every asset.
-        """
+        """Reconcile the desired ladder without churning equivalent orders."""
         old_orders = list(dca.get("active_orders", []))
         used_old: set[int] = set()
         retained_orders = []
