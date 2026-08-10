@@ -90,9 +90,8 @@ aios_system = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
-    global aios_system
-
+    """MBIO application lifecycle."""
+    yield
 
 api = FastAPI(title="MBIO SignalBot Pro API", version="9.0", lifespan=lifespan)
 api.add_middleware(
