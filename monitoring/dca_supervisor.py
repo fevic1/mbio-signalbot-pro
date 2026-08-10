@@ -216,8 +216,21 @@ class DCASupervisor:
             )
 
             if not verdict.permitted:
-                return self._hold(
-                    f"ADD blocked: {verdict.reason}"
+                return self._decision(
+                    SupervisorDecision(
+                        action="BLOCK",
+                        level=self._level_index(next_level),
+                        price=self._level_price(next_level),
+                        size=self._level_size(next_level),
+                        reason=f"ADD blocked: {verdict.reason}",
+                        metadata={
+                            "available_budget": available_budget,
+                            "current_price": current_price,
+                            "side": self._plan_side(plan, state),
+                            "blockers": list(verdict.blockers),
+                        },
+                    ),
+                    key=self._state_key(state, plan),
                 )
 
             level_price = self._level_price(next_level)

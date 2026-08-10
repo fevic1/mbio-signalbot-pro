@@ -107,156 +107,92 @@ class DCARiskGuard:
 
     def can_add(
         self,
-        state: Any,
-        plan: Any,
+        state,
+        plan,
         current_price: float,
         available_budget: float,
     ) -> RiskVerdict:
-        """
-        Judge whether a normal DCA ADD is permitted.
+        """Judge whether the next DCA ADD is permitted.
 
-        This checks:
-            - state add permission
-            - maximum filled levels
-            - total DCA risk budget
-            - maximum position exposure
-            - configured pause guardrail
-            - consecutive-loss/unfilled breaker
-            - available execution budget
-            - valid current market price
+        All USD guardrails operate on quote notional.  ``plan.level.size``
+        is base-asset quantity, therefore the proposed add value is always
+        calculated as ``price * size``.
         """
+
         blockers: List[str] = []
 
-        guardrails = self._section(self.config, "guardrails")
+        if not state.can_add():
+            blockers.append(f"adding_state={state.adding_state.value}")
 
-        max_levels = self._safe_int(
-            getattr(guardrails, "max_levels", 0),
-            default=0,
-        )
+        next_level = plan.next_unfilled_level()
 
-        risk_budget_usd = getattr(
-            guardrails,
-            "risk_budget_usd",
-            None,
-        )
-
-        max_position_size_usd = getattr(
-            guardrails,
-            "max_position_size_usd",
-            None,
-        )
-
-        pause = bool(getattr(guardrails, "pause", False))
-
-        consecutive_loss_breaker = self._safe_int(
-            getattr(
-                guardrails,
-                "consecutive_loss_breaker",
-                0,
-            ),
-            default=0,
-        )
-
-        can_add = getattr(state, "can_add", None)
-        if callable(can_add):
-            try:
-                if not can_add():
-                    adding_state = self._enum_name(
-                        getattr(state, "adding_state", None)
-                    )
-                    blockers.append(
-                        f"adding_state={adding_state or 'blocked'}"
-                    )
-            except Exception as exc:
-                logger.warning(
-                    "DCA risk guard could not evaluate state.can_add(): %s",
-                    exc,
-                )
-                blockers.append("adding_state_check_failed")
-        else:
-            blockers.append("adding_state_check_unavailable")
-
-        levels_filled = self._safe_int(
-            getattr(state, "levels_filled", 0)
-        )
-
-        if max_levels > 0 and levels_filled >= max_levels:
-            blockers.append("max_levels_filled")
-
-        planned_exposure = self._safe_float(
-            getattr(plan, "total_planned_size", 0.0)
-        )
-
-        if risk_budget_usd is not None:
-            risk_budget = self._safe_float(risk_budget_usd)
-            if planned_exposure > risk_budget:
-                blockers.append(
-                    "risk_budget_exceeded"
-                )
-
-        total_filled_size = getattr(
-            plan,
-            "total_filled_size",
-            None,
-        )
-
-        if callable(total_filled_size):
-            try:
-                filled_exposure = self._safe_float(
-                    total_filled_size()
-                )
-            except Exception:
-                filled_exposure = 0.0
-                blockers.append("filled_exposure_calculation_failed")
-        else:
-            filled_exposure = self._safe_float(
-                getattr(plan, "total_filled_size", 0.0)
+        if next_level is None:
+            blockers.append("no_unfilled_level")
+            return RiskVerdict(
+                permitted=False,
+                reason=f"ADD blocked: {', '.join(blockers)}",
+                blockers=blockers,
             )
 
-        if max_position_size_usd is not None:
-            max_position = self._safe_float(max_position_size_usd)
+        add_price = float(next_level.price)
+        add_size = float(next_level.size)
+        add_value_usd = abs(add_price * add_size)
 
-            if filled_exposure > max_position:
-                blockers.append(
-                    "max_position_size_exceeded"
-                )
+        if available_budget < add_value_usd:
+            blockers.append(
+                f"available_budget_exceeded: "
+                f"${available_budget:.2f} < add=${add_value_usd:.2f}"
+            )
 
-            if (
-                planned_exposure > max_position
-                and filled_exposure <= max_position
-            ):
-                blockers.append(
-                    "planned_position_size_exceeded"
-                )
+        if state.levels_filled >= self.config.guardrails.max_levels:
+            blockers.append("max_levels_filled")
 
-        if pause:
+        try:
+            filled_value_usd = float(plan.total_filled_value())
+        except (AttributeError, TypeError, ValueError):
+            filled_value_usd = 0.0
+
+        projected_position_usd = filled_value_usd + add_value_usd
+
+        risk_budget = self.config.guardrails.risk_budget_usd
+        if risk_budget is not None and projected_position_usd > float(risk_budget):
+            blockers.append(
+                f"risk_budget_exceeded: "
+                f"${projected_position_usd:.2f} > ${float(risk_budget):.2f}"
+            )
+
+        max_position = self.config.guardrails.max_position_size_usd
+        if max_position is not None and projected_position_usd > float(max_position):
+            blockers.append(
+                f"max_position_size_exceeded: "
+                f"${projected_position_usd:.2f} > ${float(max_position):.2f}"
+            )
+
+        max_single_add = self.config.guardrails.max_single_add_usd
+        if max_single_add is not None and add_value_usd > float(max_single_add):
+            blockers.append(
+                f"max_single_add_exceeded: "
+                f"${add_value_usd:.2f} > ${float(max_single_add):.2f}"
+            )
+
+        if self.config.guardrails.pause:
             blockers.append("guardrail_pause_active")
 
-        consecutive_unfilled = self._safe_int(
-            getattr(state, "consecutive_unfilled_levels", 0)
-        )
-
         if (
-            consecutive_loss_breaker > 0
-            and consecutive_unfilled >= consecutive_loss_breaker
+            state.consecutive_unfilled_levels
+            >= self.config.guardrails.consecutive_loss_breaker
         ):
             blockers.append("consecutive_loss_breaker")
 
-        price = self._safe_float(current_price)
-
-        if price <= 0:
-            blockers.append("invalid_current_price")
-
-        budget = self._safe_float(available_budget)
-
-        if planned_exposure > budget:
-            blockers.append("available_budget_exceeded")
-
-        return (
-            RiskVerdict.allow("ADD")
-            if not blockers
-            else RiskVerdict.block("ADD", blockers)
+        permitted = len(blockers) == 0
+        reason = (
+            "ADD permitted"
+            if permitted
+            else f"ADD blocked: {', '.join(blockers)}"
         )
+
+        return RiskVerdict(permitted, reason, blockers)
+
 
     def can_accelerate(
         self,

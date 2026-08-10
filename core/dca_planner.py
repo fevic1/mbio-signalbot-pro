@@ -70,6 +70,21 @@ class DCAPlan:
     def filled_levels(self) -> list[DCALevel]:
         return [level for level in self.levels if level.filled]
 
+    def unfilled_levels(self) -> list[DCALevel]:
+        """Return planned levels that have not been exchange-confirmed filled."""
+        return [
+            level
+            for level in self.levels
+            if not level.filled
+        ]
+
+    def next_unfilled_level(self) -> Optional[DCALevel]:
+        """Return the next pending DCA level in canonical ladder order."""
+        for level in self.levels:
+            if not level.filled:
+                return level
+        return None
+
     def current_avg_entry(self) -> Decimal:
         filled = self.filled_levels()
 
@@ -148,6 +163,16 @@ class DCAPlanBuilder:
             )
 
         config_dict = cls._config_dict(config)
+
+        # Canonical Governor semantics: base_order_size is USD notional.
+        # MBIO DCAManager ladder construction expects base_size in
+        # asset quantity, so normalize once at the adapter boundary.
+        base_order_size = config_dict.get("base_order_size")
+        if base_order_size is not None:
+            base_order_size = float(base_order_size)
+            if base_order_size <= 0:
+                raise ValueError("base_order_size must be greater than zero")
+            config_dict["base_order_size"] = base_order_size / float(entry_price)
 
         manager = manager or DCAManager.__new__(DCAManager)
 
@@ -250,7 +275,10 @@ class DCAPlanBuilder:
         base_size = float(
             config.get(
                 "base_size",
-                config.get("size", 0),
+                config.get(
+                    "base_order_size",
+                    config.get("size", 0),
+                ),
             )
         )
 
@@ -260,11 +288,32 @@ class DCAPlanBuilder:
         if base_size <= 0:
             return []
 
+        canonical_config = dict(config)
+        canonical_config["levels"] = levels
+        canonical_config["base_size"] = base_size
+
+        # DCAManager is the canonical ladder calculator. Normalize the
+        # Governor vocabulary to its execution-layer vocabulary without
+        # duplicating any ladder mathematics.
+        direction = str(
+            config.get(
+                "direction",
+                config.get("side", "LONG"),
+            )
+        ).upper()
+
+        if direction == "BUY":
+            direction = "LONG"
+        elif direction == "SELL":
+            direction = "SHORT"
+
+        canonical_config["direction"] = direction
+
         try:
             result = manager.calculate_dca_levels(
                 float(entry_price),
                 base_size,
-                config,
+                canonical_config,
             )
         except TypeError:
             logger.exception(

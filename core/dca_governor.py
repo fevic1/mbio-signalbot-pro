@@ -324,6 +324,7 @@ class DCAGovernor:
             decision=decision,
             state=state,
             plan=plan,
+            available_budget=available_budget,
             ai_confidence=ai_confidence,
             learner_score=learner_score,
         )
@@ -554,6 +555,7 @@ class DCAGovernor:
         decision: SupervisorDecision,
         state: DCAState,
         plan: DCAPlan,
+               available_budget: float,
         ai_confidence: Optional[float],
         learner_score: Optional[float],
     ) -> GovernorCommand:
@@ -693,7 +695,7 @@ class DCAGovernor:
                     if decision.price is not None
                     else 0.0
                 ),
-                available_budget=0.0,
+                available_budget=available_budget,
             )
 
             if not verdict.permitted:
