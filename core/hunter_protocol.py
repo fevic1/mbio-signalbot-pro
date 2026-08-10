@@ -246,7 +246,6 @@ async def hunter_monitor_loop(system=None):
         )
 
     
-    current_phase = 1  # Tracks which phase to run (1, 2, or 3)
     iteration = 0      # Tracks 5-minute intervals
     
     while True:
@@ -263,41 +262,40 @@ async def hunter_monitor_loop(system=None):
             
             # 2. Every 30 minutes (6 iterations of 5 mins), analyze the next phase of assets
             if iteration % 6 == 0:
-                logger.info(f"🏹 Hunter Monitor: Running Phase {current_phase} asset analysis...")
+                logger.info("🏹 Hunter Monitor: Running Top-10 asset analysis...")
                 
                 try:
                     from core.signal_generator import analyze_batch
-                    from config.config import get_config
-                    
-                    cfg = get_config()
-                    ex_name = os.getenv("DEFAULT_EXCHANGE", "hyperliquid").lower()
-                    assets = cfg.get(ex_name, {}).get("assets", [])
-                    
-                    # Analyze all assets EXCEPT the ones we already have open
-                    open_assets = set(state.OPEN_POSITIONS.keys())
+                    from core.asset_universe import get_universe
                     from core.data_fetcher import get_mtf_data
 
-                    items = {}
+                    # HARD GATE: Hunter must use the same live Top-10
+                    # signal-scanning universe as the primary scanner.
+                    selected_assets = get_universe().signal_scanner_coins()
 
-                    for asset in assets:
-                        if asset in open_assets:
-                            continue
+                    # Never analyze assets that are already open.
+                    open_assets = set(state.OPEN_POSITIONS.keys())
+                    selected_assets = [
+                        asset for asset in selected_assets
+                        if asset not in open_assets
+                    ]
 
-                        items[asset] = get_mtf_data(asset)
-                    
+                    items = {
+                        asset: get_mtf_data(asset)
+                        for asset in selected_assets
+                    }
+
                     if not items:
-                        logger.info("🏹 Hunter Monitor: No new assets to analyze.")
+                        logger.info("🏹 Hunter Monitor: No Top-10 assets available to analyze.")
                     else:
-                        BATCH_SIZE = 15
-                        items_list = list(items.items())
-                        
-                        # Calculate the slice for the current phase
-                        start_idx = (current_phase - 1) * BATCH_SIZE
-                        end_idx = start_idx + BATCH_SIZE
-                        chunk = dict(items_list[start_idx:end_idx])
-                        
+                        BATCH_SIZE = 10
+                        chunk = dict(list(items.items())[:BATCH_SIZE])
+
                         if chunk:
-                            logger.info(f"🧠 Analyzing asset Phase {current_phase} ({len(chunk)} assets)...")
+                            logger.info(
+                                f"🧠 Analyzing Top-10 signal universe "
+                                f"({len(chunk)} assets)..."
+                            )
                             results = {}
                             provider = "aios"
 
@@ -592,14 +590,14 @@ async def hunter_monitor_loop(system=None):
                             else:
                                 logger.info("🏹 Hunter Monitor: No hunted candidates in this phase. All healthy.")
                         else:
-                            logger.info(f"🏹 Hunter Monitor: Phase {current_phase} has no assets to analyze.")
+                            logger.info("🏹 Hunter Monitor: Top-10 universe has no assets to analyze.")
                             
                 except Exception as e:
                     import traceback
-                    logger.error(f"🏹 Hunter Monitor: Failed to analyze Phase {current_phase}: {e}\n{traceback.format_exc()}")
-                
-                # Advance to the next phase (1 -> 2 -> 3 -> 1)
-                current_phase = (current_phase % 3) + 1
+                    logger.error(
+                        f"🏹 Hunter Monitor: Failed to analyze Top-10 universe: "
+                        f"{e}\n{traceback.format_exc()}"
+                    )
                 
         except Exception as e:
             logger.error(f"🏹 Hunter Monitor: Loop error: {e}")
