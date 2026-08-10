@@ -634,11 +634,6 @@ async def run_cycle() -> None:
     logging.getLogger(__name__).info("♻️ Run cycle executed.")
     await asyncio.sleep(10)
 
-async def autonomous_slot_hunter(chat_id: str) -> None:
-    """Alias to wire the modern hunter protocol."""
-    from core.hunter_protocol import hunter_monitor_loop
-    await hunter_monitor_loop(system=aios_system)
-
 
 async def cmd_open_dca(update, context):
     """Thin Telegram wrapper — real logic lives in core.dca_execution_engine.open_dca_position,
@@ -796,7 +791,6 @@ async def main() -> None:
         ("quick_scanner", quick_signal_scanner(TELEGRAM_CHAT_ID)),
         ("entry_scanner", entry_scanner_loop(run_trade, TELEGRAM_CHAT_ID)),
         ("full_analysis", full_analysis_loop(run_cycle)),
-        ("slot_hunter", autonomous_slot_hunter(TELEGRAM_CHAT_ID)),
         ("adaptive_dca", adaptive_dca_supervisor_loop()),
         ("profit_target_monitor", monitor_dca_profit_targets()),
     ]
