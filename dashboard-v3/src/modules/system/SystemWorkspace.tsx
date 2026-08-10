@@ -1,4 +1,3 @@
-import { AiosRuntimePanel } from "./AiosRuntimePanel";
 import { McpRegistryPanel } from "./McpRegistryPanel";
 
 export function SystemWorkspace() {
@@ -12,7 +11,7 @@ export function SystemWorkspace() {
           text-3xl
           font-bold
         ">
-          AIOS Operations Center
+          MBIO Operations Center
         </h1>
 
         <p className="
@@ -20,11 +19,9 @@ export function SystemWorkspace() {
           text-sm
           text-white/40
         ">
-          Runtime health, agent services and MCP infrastructure
+          Runtime health, services and MCP infrastructure
         </p>
       </div>
-
-      <AiosRuntimePanel />
 
       <McpRegistryPanel />
 
