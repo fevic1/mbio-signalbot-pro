@@ -389,6 +389,185 @@ async def cmd_stop_auto_dca(update, context) -> None:
         await update.message.reply_text(f"No active Auto-DCA for {asset}")
 
 
+def _compute_dca_plan(asset: str, side: str, dca_strategy, exchange: str = None, overrides: dict = None) -> dict:
+    """Pure DCA plan calculator — the SINGLE SOURCE OF TRUTH for the manual DCA
+    open path. Read-only: NO state mutation, NO orders, so it is safe to serve
+    from the dashboard preview endpoint. Consumed by GET /dca/preview (show the
+    plan before OTP) and, after STEP B, by open_dca_position (execute the plan).
+    One computation shared by both guarantees the preview can never drift from
+    what executes. (CODING_STANDARD: No duplicated business logic, No magic
+    numbers.) Exchange-agnostic: every exchange minimum is read from
+    core.exchange_limits keyed by the resolved exchange — NO floor literal lives
+    here, so adding Vertex/Bybit later cannot inherit Hyperliquid's numbers.
+    Every terminal path returns the full stable key-set so the modal can always
+    render the numbers it computed — including on rejection."""
+    from core.exchange_limits import get_effective_min_notional, get_exchange_limits, can_trade, is_exchange_configured
+    import os
+
+    asset = (asset or "").strip().upper()
+    side = (side or "").strip().upper()
+    # Resolve target exchange once. DEFAULT_EXCHANGE is config plumbing (which
+    # exchange to target), NOT a minimum value — the minimums come from limits.
+    exchange = (exchange or os.getenv("DEFAULT_EXCHANGE", "hyperliquid")).lower().strip()
+
+    # Stable UI contract: every key always present (None until computed).
+    out: dict = {
+        "can_execute": False, "errors": [], "warnings": [],
+        "asset": asset, "side": side, "exchange": exchange,
+        "price": None, "atr": None, "balance": None,
+        "risk_pct": None, "risk_amount": None, "sl_distance": None,
+        "base_size": None, "base_notional": None,
+        "sl": None, "tp1": None, "tp2": None, "tp3": None, "trailing_stop": None,
+        "max_levels": None, "spacing_pct": None, "size_multiplier": None,
+        "ladder": [], "total_exposure": None, "exchange_min_notional": None,
+    }
+    errors = out["errors"]
+    warnings = out["warnings"]
+
+    # Asset allow-list from config (single source of truth; replaces hardcoded BTC/ETH).
+    try:
+        from config_loader import get_config
+        _tradeable = [str(a).upper() for a in get_config().get("dca", {}).get("tradeable_assets", ["BTC", "ETH"])]
+    except Exception:
+        _tradeable = ["BTC", "ETH"]
+    if asset not in _tradeable:
+        errors.append(f"DCA not enabled for {asset}. Tradeable set: {', '.join(_tradeable)}.")
+    if side not in ("LONG", "SHORT"):
+        errors.append("Side must be LONG or SHORT.")
+    if errors:
+        return out
+    if asset in state.OPEN_POSITIONS:
+        errors.append(f"{asset} already has an active position in global state.")
+    if asset in getattr(dca_strategy, "positions", {}):
+        errors.append(f"{asset} already has an active DCA position.")
+    if errors:
+        return out
+
+    try:
+        from config_loader import get_config
+        m = get_config().get("dca", {}).get("manual", {})
+    except Exception as e:
+        logger.error(f"DCA config read failed: {e}")
+        m = {}
+    risk_pct = float(m.get("risk_pct", 0.01))
+    min_sl_distance_pct = float(m.get("min_sl_distance_pct", 0.055))
+    max_levels = int(m.get("max_levels", 3))
+    spacing_pct = float(m.get("spacing_pct", 1.2))
+    size_multiplier = float(m.get("size_multiplier", 1.25))
+
+    # Apply user overrides (validated). These are the only fields a user may adjust;
+    # entry/ATR/balance stay market/account-derived. Every override is re-checked below
+    # (SL vs liquidation buffer, notional vs exchange min) so a client cannot bypass risk.
+    ov = overrides or {}
+    if ov.get("risk_pct") is not None:
+        risk_pct = float(ov["risk_pct"])
+    if ov.get("spacing_pct") is not None:
+        spacing_pct = float(ov["spacing_pct"])
+    if ov.get("size_multiplier") is not None:
+        size_multiplier = float(ov["size_multiplier"])
+    if ov.get("levels") is not None:
+        max_levels = int(ov["levels"])
+    out["risk_pct"] = risk_pct
+    out["max_levels"] = max_levels
+    out["spacing_pct"] = spacing_pct
+    out["size_multiplier"] = size_multiplier
+
+    try:
+        from core.data_fetcher import get_mtf_data, get_account_balance
+        data = get_mtf_data(f"{asset}-USD")
+        if not data or "1h" not in data:
+            errors.append("Failed to fetch market data.")
+            return out
+        current_price = float(data["1h"]["price"])
+        atr = float(data["1h"]["atr"])
+        balance = float(get_account_balance())
+        out["price"] = round(current_price, 2)
+        out["atr"] = round(atr, 2)
+        out["balance"] = round(balance, 2)
+    except Exception as e:
+        logger.error(f"DCA plan market-data fetch failed for {asset}: {e}")
+        errors.append(f"Market data unavailable: {e}")
+        return out
+
+    sl_distance = atr * dca_strategy.config.SL_ATR_MULT
+    out["sl_distance"] = round(sl_distance, 2)
+    if side == "LONG" and sl_distance > (current_price * min_sl_distance_pct):
+        errors.append("ATR too high for safe SL placement at current leverage. Risk of liquidation.")
+        return out
+
+    # SL/TP computed BEFORE the size gate so a blocked plan still shows intended risk levels.
+    sign = 1.0 if side == "LONG" else -1.0
+    out["sl"] = round(current_price - sign * sl_distance, 2)
+    out["tp1"] = round(current_price + sign * atr * dca_strategy.config.TP1_MULT, 2)
+    out["tp2"] = round(current_price + sign * atr * dca_strategy.config.TP2_MULT, 2)
+    out["tp3"] = round(current_price + sign * atr * dca_strategy.config.TP3_MULT, 2)
+    out["trailing_stop"] = round(current_price - sign * atr * dca_strategy.config.TRAILING_ATR_MULT, 2)
+
+    # User SL/TP overrides (validated). SL must never breach the liquidation buffer.
+    if ov.get("sl") is not None:
+        _sl = float(ov["sl"])
+        _liq_buffer = current_price * min_sl_distance_pct
+        if side == "LONG" and _sl >= current_price - _liq_buffer:
+            errors.append(f"Stop-loss ${_sl:.2f} too close to entry (liquidation buffer ${_liq_buffer:.2f}).")
+        elif side == "SHORT" and _sl <= current_price + _liq_buffer:
+            errors.append(f"Stop-loss ${_sl:.2f} too close to entry (liquidation buffer ${_liq_buffer:.2f}).")
+        else:
+            out["sl"] = round(_sl, 2)
+    if ov.get("tp1") is not None:
+        out["tp1"] = round(float(ov["tp1"]), 2)
+    if ov.get("tp2") is not None:
+        out["tp2"] = round(float(ov["tp2"]), 2)
+    if ov.get("tp3") is not None:
+        out["tp3"] = round(float(ov["tp3"]), 2)
+    if errors:
+        return out
+
+    risk_amount = balance * risk_pct
+    base_size = risk_amount / sl_distance if sl_distance > 0 else 0.0
+    base_notional = round(base_size * current_price, 2)
+    out["risk_amount"] = round(risk_amount, 2)
+    out["base_size"] = round(base_size, 8)
+    out["base_notional"] = base_notional
+    if base_size <= 0:
+        errors.append("Calculated size is too small.")
+        return out
+
+    # Exchange minimums: read from the exchange-keyed authority ONLY. No floor
+    # literal here. Missing config for the target exchange is a hard, explicit
+    # block — it forces the operator to add the exchange's limits before trading.
+    if not is_exchange_configured(exchange):
+        errors.append(f"Exchange limits not configured for '{exchange}'. Add a '{exchange}' block to config/exchange_limits.yaml before trading on it.")
+        return out
+    limits = get_exchange_limits(exchange)
+    raw_min = float(limits["min_notional_usd"])
+    eff_min = get_effective_min_notional(exchange)
+    out["exchange_min_notional"] = eff_min
+    if base_notional < raw_min:
+        errors.append(f"Base order notional ${base_notional:.2f} below {exchange} minimum ${raw_min:.2f}. Increase dca.manual.risk_pct or account balance.")
+        return out
+    if base_notional < eff_min:
+        warnings.append(f"Base notional ${base_notional:.2f} below safe buffer ${eff_min:.2f}; order may be rejected on slippage.")
+
+    ladder = []
+    total_exposure = base_notional
+    for lvl in range(1, max_levels + 1):
+        lvl_size = base_size * (size_multiplier ** lvl)
+        lvl_price = current_price * (1 - sign * (spacing_pct * lvl) / 100.0)
+        notional = round(lvl_size * lvl_price, 2)
+        total_exposure = round(total_exposure + notional, 2)
+        meets = notional >= eff_min
+        ladder.append({"level": lvl, "price": round(lvl_price, 2), "size": round(lvl_size, 8), "notional": notional, "meets_exchange_min": meets})
+        if not meets:
+            warnings.append(f"Ladder level {lvl} notional ${notional:.2f} below {exchange} minimum ${eff_min:.2f}.")
+    out["ladder"] = ladder
+    out["total_exposure"] = total_exposure
+
+    if not can_trade(balance, exchange):
+        warnings.append(f"Balance ${balance:.2f} below safe trading threshold on {exchange}.")
+
+    out["can_execute"] = True
+    return out
+
 async def open_dca_position(asset: str, side: str, dca_strategy=None, exchange: str | None = None, overrides: dict | None = None, investment_amount: float | None = None) -> dict:
     """Open base DCA position and install its verified limit ladder."""
     asset = asset.upper()

@@ -913,7 +913,7 @@ async def dca_preview(request: Request, asset: str = "", side: str = "LONG", exc
     Per LLM INSTRUCTIONS: OTP is required for EXECUTION, not for a read-only preview."""
     try:
         import main as _main
-        from core.dca_lifecycle import _compute_dca_plan
+        from core.dca_execution_engine import _compute_dca_plan
         # Optional user overrides for the live what-if (validated server-side in _compute_dca_plan).
         ov = {}
         q = request.query_params
@@ -946,7 +946,7 @@ async def dca_open(request: Request, user: dict = Depends(require_role("ADMIN", 
         raise HTTPException(status_code=400, detail="Asset required")
     try:
         import main as _main
-        from core.dca_lifecycle import open_dca_position
+        from core.dca_execution_engine import open_dca_position
         result = await open_dca_position(
             asset,
             side,

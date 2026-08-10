@@ -18,7 +18,6 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import Request, FastAPI, Depends
 from contextlib import asynccontextmanager
-from aios.bootstrap.loader import BootstrapLoader
 from core.auth import get_current_user
 from core.app_context import AppContext
 from routes.tradingview_webhook import router as tv_router
@@ -95,48 +94,6 @@ async def lifespan(app: FastAPI):
     global aios_system
 
 
-    logger.info("Starting AIOS Enterprise runtime")
-
-
-    container = BootstrapLoader().boot()
-
-
-    from aios.system.runtime import (
-        AIOSRuntime,
-    )
-
-
-    runtime = AIOSRuntime(
-        container
-    )
-
-
-    runtime_state = runtime.start()
-
-
-    aios_system = container
-
-
-    app.state.aios = container
-
-    app.state.aios_runtime = runtime
-
-
-    logger.info(
-        "AIOS runtime ready: %s",
-        runtime_state.describe(),
-    )
-
-
-    yield
-
-
-    logger.info("Stopping AIOS Enterprise runtime")
-
-
-    runtime.shutdown()
-
-
 api = FastAPI(title="MBIO SignalBot Pro API", version="9.0", lifespan=lifespan)
 api.add_middleware(
     CORSMiddleware,
@@ -200,7 +157,6 @@ async def root():
         return FileResponse(new_index)
     return FileResponse(os.path.join(base_dir, "frontend", "index.html"))
 
-@api.get("/aios/status")
 async def aios_status(request: Request):
     system = request.app.state.aios
     return {
@@ -208,7 +164,6 @@ async def aios_status(request: Request):
         "capabilities": len(system.capability_registry.list())
     }
 
-@api.get("/api/aios/telemetry")
 async def aios_telemetry(request: Request):
     system = request.app.state.aios
 
@@ -279,7 +234,6 @@ async def get_positions(current_user: dict = Depends(get_current_user)) -> dict:
         logger.error(f"❌ Positions endpoint failed: {e}", exc_info=True)
         return {"error": str(e)}
 
-@api.get("/api/aios/capabilities")
 async def aios_capabilities(request: Request):
     system = request.app.state.aios
 
@@ -293,7 +247,6 @@ async def aios_capabilities(request: Request):
         ]
     }
 
-@api.get("/api/aios/workflows")
 async def aios_workflows(request: Request):
     system = request.app.state.aios
 
@@ -311,7 +264,6 @@ async def aios_workflows(request: Request):
     }
 
 
-@api.get("/api/aios/decisions")
 async def aios_decisions(request: Request):
     system = request.app.state.aios
 
@@ -324,7 +276,6 @@ async def aios_decisions(request: Request):
 
 
 
-@api.get("/api/aios/providers/events")
 async def aios_provider_events(request: Request):
     system = request.app.state.aios
 
@@ -344,7 +295,6 @@ async def aios_provider_events(request: Request):
     }
 
 
-@api.get("/api/aios/providers")
 async def aios_providers(request: Request):
     system = request.app.state.aios
 
@@ -692,7 +642,7 @@ async def autonomous_slot_hunter(chat_id: str) -> None:
 
 
 async def cmd_open_dca(update, context):
-    """Thin Telegram wrapper — real logic lives in core.dca_lifecycle.open_dca_position,
+    """Thin Telegram wrapper — real logic lives in core.dca_execution_engine.open_dca_position,
     shared with the dashboard's /dca/open endpoint so both callers stay in sync."""
     args = context.args
     if len(args) != 2:
