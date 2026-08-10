@@ -15,7 +15,6 @@ class AppContext:
     
     def __init__(self):
         self._executor = None
-        self._dca_manager = None
         self._lock = asyncio.Lock()
         self._initialized = False
     
@@ -31,8 +30,6 @@ class AppContext:
             # Use singleton factory to ensure single initialization
             from execution.hl_executor import get_hl_executor
             self._executor = get_hl_executor()
-            from core.dca_manager import DCAManager
-            self._dca_manager = DCAManager(self._executor)
             
             self._initialized = True
             logger.info("✅ AppContext initialized. HLExecutor singleton locked.")
@@ -43,18 +40,10 @@ class AppContext:
         if not self._initialized or self._executor is None:
             raise RuntimeError("AppContext not initialized. Call initialize() first.")
         return self._executor
-
-    @property
-    def dca_manager(self):
-        """Access the canonical DCA manager."""
-        if not self._initialized or self._dca_manager is None:
-            raise RuntimeError("AppContext not initialized. Call initialize() first.")
-        return self._dca_manager
     
     async def shutdown(self):
         """Graceful shutdown. Clears references."""
         async with self._lock:
-            self._dca_manager = None
             self._executor = None
             self._initialized = False
             logger.info("🔒 AppContext shutdown complete")

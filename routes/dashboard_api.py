@@ -980,7 +980,8 @@ async def dca_close(request: Request, user: dict = Depends(require_role("ADMIN",
         position_side = position.get("side", "BUY").upper()
         close_side = "SELL" if position_side in ("BUY", "LONG") else "BUY"
 
-        dm = app_context.dca_manager
+        from core.dca_manager import DCAManager
+        dm = DCAManager(app_context.executor)
         result = await dm.close_dca_position(asset=asset, config=dca_config, close_side=close_side)
 
         if result.get("errors"):

@@ -34,7 +34,7 @@ def check_rate_limit(api_key: str, tool_name: str, is_execution: bool = False) -
     """Check if API key has exceeded rate limit"""
     limit = RATE_LIMIT_EXECUTION if is_execution else RATE_LIMIT_READONLY
     current_time = time.time()
-    
+
     # Clean old entries (older than 1 minute)
     if api_key in _rate_limit_store:
         _rate_limit_store[api_key] = [
@@ -43,12 +43,12 @@ def check_rate_limit(api_key: str, tool_name: str, is_execution: bool = False) -
         ]
     else:
         _rate_limit_store[api_key] = []
-    
+
     # Check limit
     if len(_rate_limit_store[api_key]) >= limit:
         logger.warning(f"Rate limit exceeded for {api_key} on tool {tool_name}")
         return False
-    
+
     # Record this call
     _rate_limit_store[api_key].append((current_time, tool_name))
     return True
@@ -75,7 +75,7 @@ async def get_account_balance() -> Dict[str, Any]:
     try:
         executor = HLExecutor.get_instance()
         balance = await executor.get_balance()
-        
+
         return {
             "success": True,
             "total_balance": balance.get("total", 0),
@@ -97,7 +97,7 @@ async def get_open_positions() -> List[Dict[str, Any]]:
     """
     try:
         from core.state import state
-        
+
         positions = []
         for asset, pos in state.OPEN_POSITIONS.items():
             positions.append({
@@ -110,7 +110,7 @@ async def get_open_positions() -> List[Dict[str, Any]]:
                 "pnl_percentage": pos.get("pnl_percentage", 0),
                 "liquidation_price": pos.get("liquidation_price")
             })
-        
+
         return {"success": True, "positions": positions, "count": len(positions)}
     except Exception as e:
         logger.error(f"get_open_positions failed: {e}")
@@ -125,18 +125,18 @@ async def get_market_regime(asset: str = "BTC") -> Dict[str, Any]:
     try:
         from core.strategy.regime_analyzer import RegimeAnalyzer
         from core.data_fetcher import _fetch_hl_candles, _parse_hl_candles
-        
+
         # Fetch candles
         candles_raw = _fetch_hl_candles(asset, "1h", 7)  # 7 days
         df = _parse_hl_candles(candles_raw)
-        
+
         # Analyze regime
         analyzer = RegimeAnalyzer(lookback=20)
         regime_result = analyzer.analyze(df)
-        
+
         if not regime_result:
             return {"success": False, "error": "Insufficient data for regime analysis"}
-        
+
         return {
             "success": True,
             "asset": asset,
@@ -168,7 +168,7 @@ async def get_asset_prices(assets: List[str]) -> Dict[str, Any]:
                 "change_24h": 0,
                 "volume_24h": 0
             }
-        
+
         return {"success": True, "prices": prices}
     except Exception as e:
         logger.error(f"get_asset_prices failed: {e}")
@@ -189,7 +189,7 @@ async def place_grid(
 ) -> Dict[str, Any]:
     """
     Deploy a new grid bot. REQUIRES OTP CONFIRMATION.
-    
+
     Args:
         asset: Asset symbol (e.g., "BTC")
         lower_price: Lower bound of grid range
@@ -197,16 +197,16 @@ async def place_grid(
         investment: Total investment amount in USD
         nodes: Number of grid levels
         otp: 6-digit OTP code for authorization
-    
+
     Returns: Grid deployment result with grid_id
     """
     api_key = "mcp_client"  # Extract from auth context in production
-    
+
     # Validate OTP
     if not verify_otp_for_user("fixed@mbio.com", otp):  # Use actual user from auth context
         audit_mcp_call(api_key, "place_grid", {"asset": asset}, success=False)
         return {"success": False, "error": "Invalid or expired OTP"}
-    
+
     # Validate parameters
     if lower_price >= upper_price:
         return {"success": False, "error": "lower_price must be less than upper_price"}
@@ -214,13 +214,13 @@ async def place_grid(
         return {"success": False, "error": "investment must be positive"}
     if nodes < 2:
         return {"success": False, "error": "nodes must be at least 2"}
-    
+
     try:
         from core.grid_manager import GridManager
-        
+
         executor = HLExecutor.get_instance()
         grid_manager = GridManager(executor)
-        
+
         # Use the optimized grid params method if available
         # For now, use direct creation
         result = await grid_manager.create_grid(
@@ -232,7 +232,7 @@ async def place_grid(
             profit_per_grid_pct=0.5,
             exchange=os.getenv("DEFAULT_EXCHANGE", "hyperliquid")
         )
-        
+
         audit_mcp_call(api_key, "place_grid", {
             "asset": asset,
             "lower_price": lower_price,
@@ -240,9 +240,9 @@ async def place_grid(
             "investment": investment,
             "nodes": nodes
         }, success=True)
-        
+
         logger.info(f"MCP: Grid deployed for {asset} at ${lower_price}-${upper_price}")
-        
+
         return {
             "success": True,
             "message": f"Grid deployed successfully for {asset}",
@@ -265,45 +265,48 @@ async def place_dca(
 ) -> Dict[str, Any]:
     """
     Open a new DCA position. REQUIRES OTP CONFIRMATION.
-    
+
     Args:
         asset: Asset symbol
         side: "LONG" or "SHORT"
         investment: Total investment amount in USD
         otp: 6-digit OTP code
-    
+
     Returns: DCA deployment result
     """
     api_key = "mcp_client"
-    
+
     # Validate OTP
     if not verify_otp_for_user("fixed@mbio.com", otp):
         audit_mcp_call(api_key, "place_dca", {"asset": asset, "side": side}, success=False)
         return {"success": False, "error": "Invalid or expired OTP"}
-    
+
     # Validate parameters
     if side not in ["LONG", "SHORT"]:
         return {"success": False, "error": "side must be LONG or SHORT"}
     if investment <= 0:
         return {"success": False, "error": "investment must be positive"}
-    
+
     try:
-        dca_manager = app_context.dca_manager
-        
+        from core.dca_manager import DCAManager
+
+        executor = HLExecutor.get_instance()
+        dca_manager = DCAManager(executor)
+
         result = dca_manager.open_dca_position(
             asset=asset,
             side=side,
             investment_amount=investment
         )
-        
+
         audit_mcp_call(api_key, "place_dca", {
             "asset": asset,
             "side": side,
             "investment": investment
         }, success=True)
-        
+
         logger.info(f"MCP: DCA opened for {asset} {side}")
-        
+
         return {
             "success": True,
             "message": f"DCA position opened for {asset} {side}",
@@ -318,27 +321,27 @@ async def place_dca(
 async def close_position(asset: str, otp: str) -> Dict[str, Any]:
     """
     Close an open position. REQUIRES OTP CONFIRMATION.
-    
+
     Args:
         asset: Asset symbol to close
         otp: 6-digit OTP code
-    
+
     Returns: Close result
     """
     api_key = "mcp_client"
-    
+
     # Validate OTP
     if not verify_otp_for_user("fixed@mbio.com", otp):
         audit_mcp_call(api_key, "close_position", {"asset": asset}, success=False)
         return {"success": False, "error": "Invalid or expired OTP"}
-    
+
     try:
         executor = HLExecutor.get_instance()
         result = await executor.close_position(asset=asset)
-        
+
         audit_mcp_call(api_key, "close_position", {"asset": asset}, success=True)
         logger.info(f"MCP: Position closed for {asset}")
-        
+
         return {"success": True, "message": f"Position closed for {asset}"}
     except Exception as e:
         logger.error(f"close_position failed: {e}")
@@ -357,34 +360,34 @@ async def optimize_grid_parameters(
     """
     Calculate optimal grid parameters based on historical volatility and regime.
     Uses GTJA-191 factors and dynamic optimization.
-    
+
     Returns: Suggested lower_price, upper_price, node_count, range_percentage
     """
     try:
         from core.strategy.grid_optimizer import GridOptimizer
         from core.strategy.regime_analyzer import RegimeAnalyzer
         from core.data_fetcher import _fetch_hl_candles, _parse_hl_candles
-        
+
         # Fetch candles
         candles_raw = _fetch_hl_candles(asset, "1h", lookback_days)
         df = _parse_hl_candles(candles_raw)
-        
+
         if len(df) < 20:
             return {"success": False, "error": "Insufficient historical data"}
-        
+
         current_price = df["close"].iloc[-1]
-        
+
         # Analyze regime
         analyzer = RegimeAnalyzer(lookback=20)
         regime_data = analyzer.analyze(df)
-        
+
         if not regime_data:
             return {"success": False, "error": "Regime analysis failed"}
-        
+
         # Optimize parameters
         optimizer = GridOptimizer(base_range_pct=0.05, base_nodes=10)
         params = optimizer.calculate_parameters(regime_data, current_price)
-        
+
         return {
             "success": True,
             "asset": asset,
@@ -403,11 +406,11 @@ async def optimize_grid_parameters(
 def register_mcp_routes(app):
     """Mount MCP server to FastAPI application"""
     from fastmcp.server import FastMCP
-    
+
     # Mount the MCP server as a Streamable HTTP endpoint
     app.mount("/mcp", mcp.streamable_http_app())
     logger.info("MCP server mounted at /mcp")
-    
+
     logger.info(f"MCP server initialized with {len(mcp._tool_manager._tools)} tools")
     logger.info("Read-only tools: get_account_balance, get_open_positions, get_market_regime, get_asset_prices")
     logger.info("Execution tools (OTP required): place_grid, place_dca, close_position")

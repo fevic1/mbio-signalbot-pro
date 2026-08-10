@@ -358,7 +358,8 @@ async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # DCA-AWARE CLOSE
         dca_config = pos.get("dca")
         if dca_config and dca_config.get("enabled"):
-            dca = app_context.dca_manager
+            from core.dca_manager import DCAManager
+            dca = DCAManager(_exec)
             dca.active_dca[asset] = dca_config
 
             if percent >= 100:

@@ -39,6 +39,7 @@ from core.app_context import app_context
 from core.dca_execution_engine import activate_auto_dca, deactivate_auto_dca, get_active_engines, handle_position_close_event, cmd_stop_auto_dca, open_dca_position
 from db import init_db, save_signal
 from core.asset_universe import init_asset_universe, get_universe
+from monitoring.adaptive_dca_supervisor import adaptive_dca_supervisor_loop
 from monitoring.alert_manager import (
     cmd_strategy_select, cmd_ratchet, cmd_signal_source,
     cmd_positions, cmd_close, cmd_closeall, cmd_status, button_callback,
@@ -847,7 +848,7 @@ async def main() -> None:
         ("entry_scanner", entry_scanner_loop(run_trade, TELEGRAM_CHAT_ID)),
         ("full_analysis", full_analysis_loop(run_cycle)),
         ("slot_hunter", autonomous_slot_hunter(TELEGRAM_CHAT_ID)),
-        ("trailing_dca", update_trailing_dca()),
+        ("adaptive_dca", adaptive_dca_supervisor_loop()),
         ("profit_target_monitor", monitor_dca_profit_targets()),
     ]
     if _grid_enabled:

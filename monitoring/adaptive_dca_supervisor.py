@@ -39,8 +39,8 @@ async def adaptive_dca_supervisor_loop(
             cfg = get_config().get("dca", {}) or {}
             global_adaptive = cfg.get("adaptive", {}) or {}
             executor = executor_factory() if executor_factory else app_context.executor
-            manager = app_context.dca_manager
-            runtime = manager._runtime
+            manager = DCAManager(executor)
+            runtime = DCARuntimeCoordinator(manager)
             mids = executor.info.all_mids() or {}
 
             for asset, position in list(state.OPEN_POSITIONS.items()):

@@ -24,11 +24,8 @@ class DCAManager:
     """Own DCA sizing, order lifecycle, adaptive policy, and exits."""
 
     def __init__(self, executor):
-        from core.dca_runtime import DCARuntimeCoordinator
-
         self.executor = executor
         self.active_dca: Dict[str, Dict] = {}
-        self._runtime = DCARuntimeCoordinator(self)
 
     def _global_config(self) -> Dict:
         try:
@@ -362,7 +359,8 @@ class DCAManager:
         return {"enabled": bool(config.get("enabled")), "levels": int(config.get("levels", 0) or 0), "active_orders": len(active), "filled_levels": len(config.get("filled_levels", [])), "total_invested": config.get("total_invested", 0.0), "avg_entry": config.get("avg_entry", 0.0)}
 
     async def synchronize(self, asset: str, position: Dict) -> Dict:
-        return await self._runtime.ensure(asset, position)
+        from core.dca_runtime import DCARuntimeCoordinator
+        return await DCARuntimeCoordinator(self).ensure(asset, position)
 
     async def on_fill(self, asset: str, position: Dict) -> Dict: return await self.synchronize(asset, position)
     async def on_regime_change(self, asset: str, position: Dict) -> Dict: return await self.synchronize(asset, position)
