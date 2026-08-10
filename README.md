@@ -40,27 +40,27 @@ mbio-signalbot-pro/
 ├── utils/                      # Shared utilities
 │
 ├── main.py                     # MBIO application entry point
-├── config_loader.py             # Configuration loading
+├── config_loader.py            # Configuration loading
 ├── db.py                       # Database interface
 ├── router.py                   # Application routing
 ├── registry.py                 # Component/provider registry
-├── provider_types.py            # Provider type definitions
-├── cerebras_provider.py         # Cerebras provider integration
-├── groq_provider.py             # Groq provider integration
+├── provider_types.py           # Provider type definitions
+├── cerebras_provider.py        # Cerebras provider integration
+├── groq_provider.py            # Groq provider integration
 ├── Dockerfile                  # MBIO container image
-├── docker-compose.yml           # MBIO production Docker stack
-├── docker-compose.nginx.yml     # Nginx compose configuration
-├── nginx.conf                   # Nginx configuration
-├── nginx-spa.conf               # SPA Nginx configuration
-├── requirements.txt              # MBIO runtime dependencies
-├── pyproject.toml                # Python project configuration
-├── pytest.ini                    # Pytest configuration
-├── .env.example                  # Environment variable template
-├── .dockerignore                 # Docker build exclusions
-├── API_REFERENCE.md              # API reference
-├── ARCHITECTURE.md               # MBIO architecture documentation
-├── SECURITY_AUDIT_REPORT.md      # Security audit documentation
-└── README.md                     # Project documentation
+├── docker-compose.yml          # MBIO production Docker stack
+├── docker-compose.nginx.yml    # Nginx compose configuration
+├── nginx.conf                  # Nginx configuration
+├── nginx-spa.conf              # SPA Nginx configuration
+├── requirements.txt            # MBIO runtime dependencies
+├── pyproject.toml              # Python project configuration
+├── pytest.ini                  # Pytest configuration
+├── .env.example                # Environment variable template
+├── .dockerignore               # Docker build exclusions
+├── API_REFERENCE.md            # API reference
+├── ARCHITECTURE.md             # MBIO architecture documentation
+├── SECURITY_AUDIT_REPORT.md    # Security audit documentation
+└── README.md                   # Project documentation
 ```
 
 ## Docker Runtime
@@ -75,7 +75,19 @@ Docker
 └── frontend-builder
 ```
 
-AIOS is not part of the MBIO Docker service graph.
+## Canonical DCA Runtime
+
+MBIO SignalBot Pro uses one canonical DCA ownership chain:
+
+```text
+AppContext
+└── DCAManager
+    └── DCARuntimeCoordinator
+```
+
+`AppContext` owns the canonical `DCAManager`. The manager owns the persistent `DCARuntimeCoordinator`. Production code must not construct duplicate DCA managers or runtimes.
+
+Adaptive DCA is registered through the canonical supervisor and persisted DCA state is synchronized from the live open-position state before persistence.
 
 ## Core Capabilities
 
@@ -83,6 +95,7 @@ AIOS is not part of the MBIO Docker service graph.
 - **Strategy engine** for structured signal generation and strategy execution.
 - **Risk management** with controlled exposure and execution safeguards.
 - **Exchange execution** for Hyperliquid and Bybit workflows.
+- **Canonical DCA execution** with adaptive ladder management, runtime coordination, state synchronization, and restart persistence.
 - **Persistent state** for runtime recovery and operational continuity.
 - **Monitoring and health checks** for production operation.
 - **Telegram operations** for alerts and operator interaction.
@@ -116,7 +129,3 @@ python main.py
 - `API_REFERENCE.md` - API reference
 - `SECURITY_AUDIT_REPORT.md` - security audit
 - `docs/` - supporting documentation
-
-## Separation Boundary
-
-MBIO SignalBot Pro and AIOS are maintained as separate concerns. This README documents the MBIO SignalBot Pro application and its runtime architecture. AIOS code is intentionally not included in the MBIO runtime tree or Docker service graph.
