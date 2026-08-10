@@ -6,7 +6,6 @@ All config from strategy_config.yaml. Manual reload after save.
 import time
 import json
 import math
-import os
 import shutil
 import logging
 import yaml
@@ -20,7 +19,7 @@ from routes.dashboard_auth import (
 )
 from routes.dashboard_sse import dashboard_sse_stream
 from core.app_context import app_context
-from core.mcp_registry import MCPServerConfig, mcp_registry
+from core.mcp_registry import MCPServerConfig
 from core.executor_utils import run_executor_method
 from core.exchange_limits import get_exchange_limits, can_trade
 
@@ -914,7 +913,7 @@ async def dca_preview(request: Request, asset: str = "", side: str = "LONG", exc
     Per LLM INSTRUCTIONS: OTP is required for EXECUTION, not for a read-only preview."""
     try:
         import main as _main
-        from core.dca_execution_engine import _compute_dca_plan
+        from core.dca_lifecycle import _compute_dca_plan
         # Optional user overrides for the live what-if (validated server-side in _compute_dca_plan).
         ov = {}
         q = request.query_params
@@ -947,7 +946,7 @@ async def dca_open(request: Request, user: dict = Depends(require_role("ADMIN", 
         raise HTTPException(status_code=400, detail="Asset required")
     try:
         import main as _main
-        from core.dca_execution_engine import open_dca_position
+        from core.dca_lifecycle import open_dca_position
         result = await open_dca_position(
             asset,
             side,
@@ -981,8 +980,8 @@ async def dca_close(request: Request, user: dict = Depends(require_role("ADMIN",
         position_side = position.get("side", "BUY").upper()
         close_side = "SELL" if position_side in ("BUY", "LONG") else "BUY"
 
-        from core.dca_execution_engine import dca_execution_engine
-        result = await dca_execution_engine.close_position(asset, dca_config, close_side)
+        dm = app_context.dca_manager
+        result = await dm.close_dca_position(asset=asset, config=dca_config, close_side=close_side)
 
         if result.get("errors"):
             log_audit(user["id"], "DCA_CLOSE_PARTIAL", resource=asset, details=json.dumps(result, default=str)[:500], ip_address=ip, otp_verified=True)

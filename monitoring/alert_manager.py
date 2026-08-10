@@ -1,4 +1,3 @@
-from core.market_cache import market_cache
 """
 monitoring/alert_manager.py — All Telegram notifications and command handlers.
 No trading logic here. Receives data, formats messages, sends them.
@@ -6,19 +5,19 @@ Command handlers call execution helpers but never own position state.
 """
 
 import asyncio
-import logging
 import os
 import re
-from datetime import timezone, datetime
-
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+import logging
+from core.app_context import app_context
+from datetime import datetime, timezone
+from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from core import state
-from core.app_context import app_context
-from core.executor_utils import run_executor_method
-from core.grid_persistence import clear_grid_state, save_grid_state
+from core.dca_lifecycle import handle_position_close_event
 from core.trade_ledger import record_trade
+from core.grid_persistence import save_grid_state, clear_grid_state
+import core.state as state
+from core.executor_utils import run_executor_method
 
 os.environ.setdefault("CHROMA_TELEMETRY_DISABLED", "true")
 
@@ -37,6 +36,7 @@ def set_bot_ready(ready: bool = True):
 
 async def safe_send_message(chat_id, text, parse_mode=None):
     """Send message only if bot is initialized. Silently skip otherwise."""
+    global _bot_ready
     if not _bot_ready:
         return
     try:
@@ -234,8 +234,8 @@ async def cmd_positions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("📭 No open positions.")
         return
 
-    from config_loader import get_config
     from core.data_fetcher import get_current_price
+    from config_loader import get_config
 
     cfg = get_config()
     assets_map = (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("assets", {}).get("crypto", {})
@@ -258,7 +258,7 @@ async def cmd_positions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         ticker = assets_map.get(asset, f"{asset}-USD")
         try:
-            current = market_cache.price(ticker)
+            current = get_current_price(ticker)
             if side == "BUY":
                 pnl = (current - entry) * size
                 pnl_pct = ((current - entry) / entry) * 100 if entry else 0
@@ -277,7 +277,7 @@ async def cmd_positions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         msg += f"📦 <b>Size:</b> <code>{size:.4f}</code>\n"
         msg += f"💎 <b>Value:</b> <code>${size * entry:,.2f}</code>\n\n"
 
-        msg += "📈 <b>PERFORMANCE &amp; RISK</b>\n"
+        msg += f"📈 <b>PERFORMANCE &amp; RISK</b>\n"
         msg += f"├─ {pnl_emoji} <b>uPnL:</b> <code>{pnl_sign}${pnl:,.2f}</code> ({pnl_sign}{pnl_pct:.2f}%)\n"
         msg += f"├─ 🛡 <b>SL:</b> <code>${sl:,.4f}</code>\n"
         msg += f"├─ 🏁 <b>TP1:</b> <code>${tp1:,.4f}</code>\n"
@@ -331,6 +331,7 @@ async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         pos = state.OPEN_POSITIONS[asset]
 
         # Query live exchange using verified normalized format
+        from core.app_context import app_context
         _live_positions = (await run_executor_method(app_context.executor.get_open_positions)) or []
         _live_pos = None
         for _item in _live_positions:
@@ -357,8 +358,7 @@ async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # DCA-AWARE CLOSE
         dca_config = pos.get("dca")
         if dca_config and dca_config.get("enabled"):
-            from core.dca_execution_engine import dca_execution_engine
-            dca = dca_execution_engine
+            dca = app_context.dca_manager
             dca.active_dca[asset] = dca_config
 
             if percent >= 100:
@@ -437,7 +437,7 @@ async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     except Exception as e:
         logger.error(f"❌ Error in cmd_close: {e}")
-        await update.message.reply_text(f"💥 Error: {e!s}")
+        await update.message.reply_text(f"💥 Error: {str(e)}")
 
 
 async def cmd_closeall(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -450,20 +450,6 @@ async def cmd_closeall(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     closed, failed = 0, 0
     for asset in list(state.OPEN_POSITIONS.keys()):
-        if asset.startswith("GRID::"):
-            try:
-                from core.grid_manager import GridManager, grid_asset_from_key
-                grid_asset = grid_asset_from_key(asset)
-                executor = app_context.executor
-                grid = GridManager(executor)
-                await grid.close_grid(grid_asset, state.OPEN_POSITIONS[asset])
-                state.OPEN_POSITIONS.pop(asset, None)
-                closed += 1
-            except Exception as e:
-                logger.error(f"Failed to close grid {asset}: {e}")
-                failed += 1
-            continue
-            
         success = await _close_position(asset)
         if success:
             closed += 1
@@ -486,18 +472,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         closed = 0
         await query.edit_message_text(f"⏳ Closing {count} position(s)...")
         for asset in list(state.OPEN_POSITIONS.keys()):
-            if asset.startswith("GRID::"):
-                try:
-                    from core.grid_manager import GridManager, grid_asset_from_key
-                    grid_asset = grid_asset_from_key(asset)
-                    executor = app_context.executor
-                    grid = GridManager(executor)
-                    await grid.close_grid(grid_asset, state.OPEN_POSITIONS[asset])
-                    state.OPEN_POSITIONS.pop(asset, None)
-                    closed += 1
-                except Exception as e:
-                    logger.error(f"Failed to close grid {asset}: {e}")
-            elif await _close_position(asset):
+            if await _close_position(asset):
                 closed += 1
         await query.message.reply_text(f"✅ Closed {closed}/{count} positions")
 
@@ -506,52 +481,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if asset not in state.OPEN_POSITIONS:
             await query.edit_message_text(f"❌ No position for {asset}")
             return
-            
-        if asset.startswith("GRID::"):
-            try:
-                from core.grid_manager import GridManager, grid_asset_from_key
-                grid_asset = grid_asset_from_key(asset)
-                executor = app_context.executor
-                grid = GridManager(executor)
-                await grid.close_grid(grid_asset, state.OPEN_POSITIONS[asset])
-                state.OPEN_POSITIONS.pop(asset, None)
-                await query.edit_message_text(f"✅ {grid_asset} GRID closed!")
-            except Exception as e:
-                await query.edit_message_text(f"❌ Failed to close GRID {grid_asset}: {e}")
+        success = await _close_position(asset)
+        if success:
+            await query.edit_message_text(f"✅ {asset} position closed!")
         else:
-            success = await _close_position(asset)
-            if success:
-                await query.edit_message_text(f"✅ {asset} position closed!")
-            else:
-                await query.edit_message_text(f"❌ Failed to close {asset}")
+            await query.edit_message_text(f"❌ Failed to close {asset}")
 
 
 async def _close_position(asset: str, reply_fn=None) -> bool:
     """Execute a market close for an open position."""
-    from config_loader import get_config
-    from core.dca_execution_engine import dca_execution_engine
     from execution.hl_executor import execute_hl_order
+    from config_loader import get_config
 
     cfg = get_config()
     hl_assets = {a: a for a in (cfg if isinstance(cfg, dict) else (cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict())).get("hyperliquid", {}).get("assets", [])}
 
     try:
-        pos = state.OPEN_POSITIONS.get(asset)
-        if not pos:
-            if reply_fn: await reply_fn(f"❌ No state found for {asset}")
-            return False
-
-        # Cancel DCA orders if active
-        dca_config = pos.get("dca")
-        if dca_config and dca_config.get("enabled"):
-            try:
-                dca = dca_execution_engine
-                dca.active_dca[asset] = dca_config
-                side = "SELL" if pos.get("side", "BUY") == "BUY" else "BUY"
-                await dca.close_dca_position(asset, dca_config, side)
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to cancel DCA orders for {asset}: {e}")
-
+        pos = state.OPEN_POSITIONS[asset]
         side = "SELL" if pos.get("side", "BUY") == "BUY" else "BUY"
 
         result = await asyncio.to_thread(
@@ -565,7 +511,7 @@ async def _close_position(asset: str, reply_fn=None) -> bool:
             exit_price = float(result.get("avg_price", 0))
             if exit_price == 0:
                 from core.data_fetcher import get_current_price
-                exit_price = market_cache.price(f"{asset}-USD")
+                exit_price = get_current_price(f"{asset}-USD")
 
             entry_price = pos.get("entry", 0)
             trade_size = pos.get("size", 0)
@@ -635,14 +581,14 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         providers = ", ".join(ai_cfg.get("provider_order", ["groq", "cerebras", "openrouter"]))
 
         try:
-            from core.data_fetcher import get_current_price
             from core.performance_tracker import get_performance_tracker
+            from core.data_fetcher import get_current_price
 
             tracker = get_performance_tracker()
             current_prices = {}
             for asset in state.OPEN_POSITIONS.keys():
                 try:
-                    current_prices[asset] = market_cache.price(f"{asset}-USD")
+                    current_prices[asset] = get_current_price(f"{asset}-USD")
                 except Exception:
                     pass
 
@@ -742,7 +688,6 @@ async def cmd_ratchet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def cmd_signal_source(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Toggle signal source: internal / tradingview / both"""
     import yaml
-
     import config_loader
 
     args = context.args
@@ -777,7 +722,6 @@ async def cmd_signal_source(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def cmd_strategy_select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Select active trading strategy from registry."""
     import yaml
-
     from core.strategy_registry import list_strategies
 
     args = context.args
@@ -840,11 +784,13 @@ async def cmd_dca_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await update.message.reply_text(f"ℹ️ {asset} has no active DCA configuration")
             return
 
-        from core.data_fetcher import get_current_price
-        current_price = market_cache.price(f"{asset}-USD")
-        if current_price is None or current_price <= 0:
-            await update.message.reply_text(f"❌ Could not fetch price for {asset}")
-            return
+        # HLExecutor now from app_context
+        executor = app_context.executor
+        mids = executor.info.all_mids()
+        current_price = float(mids.get(asset, 0))
+        if current_price <= 0:
+            from core.data_fetcher import get_current_price
+            current_price = get_current_price(f"{asset}-USD")
 
         entry = float(pos.get("entry", 0))
         side = pos.get("side", "BUY")
@@ -888,7 +834,7 @@ async def cmd_dca_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     except Exception as e:
         logger.error(f"❌ Error in cmd_dca_chart: {e}")
-        await update.message.reply_text(f"💥 Error: {e!s}")
+        await update.message.reply_text(f"💥 Error: {str(e)}")
 
 
 async def cmd_open_grid(update, context):
@@ -930,11 +876,7 @@ async def cmd_open_grid(update, context):
     if lower_price <= 0 or upper_price <= 0:
         # Adaptive mode
         try:
-            from core.grid_manager import (
-                _get_atr_and_price_history,
-                _get_live_price,
-                compute_adaptive_grid,
-            )
+            from core.grid_manager import _get_atr_and_price_history, _get_live_price, compute_adaptive_grid
             current_price = _get_live_price(asset)
             if current_price > 0:
                 atr, history = _get_atr_and_price_history(asset)
@@ -967,12 +909,13 @@ async def cmd_open_grid(update, context):
     
     # PHASE 3: Execute (network + state mutations)
     try:
-        from core.data_fetcher import get_current_price
+        # HLExecutor now from app_context
         from core.grid_manager import GridManager, grid_state_key
         
         executor = app_context.executor
-        current_price = market_cache.price(f"{asset}-USD")
-        if current_price is None or current_price <= 0:
+        mids = executor.info.all_mids()
+        current_price = float(mids.get(asset, 0))
+        if current_price <= 0:
             await update.message.reply_text(f"❌ Could not fetch price for {asset}")
             return
         
@@ -1013,8 +956,7 @@ async def cmd_open_grid(update, context):
         
     except Exception as e:
         logger.error(f"❌ Error in cmd_open_grid: {e}", exc_info=True)
-        await update.message.reply_text(f"💥 Error: {e!s}")
-
+        await update.message.reply_text(f"💥 Error: {str(e)}")
 
 async def cmd_grid_status(update, context):
     """Display grid status using HTML parse mode."""
@@ -1024,7 +966,7 @@ async def cmd_grid_status(update, context):
         asset = args[0].upper() if args else None
 
         import core.state as gs_state
-        from core.grid_manager import grid_asset_from_key, is_grid_position
+        from core.grid_manager import is_grid_position, grid_asset_from_key
 
         grids_found = []
         for key, config in gs_state.OPEN_POSITIONS.items():
@@ -1099,6 +1041,8 @@ async def cmd_close_grid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     try:
         from core.grid_manager import GridManager, grid_state_key
+        # HLExecutor now from app_context
+
         executor = app_context.executor
         grid = GridManager(executor)
         key = grid_state_key(asset)
@@ -1135,7 +1079,7 @@ async def cmd_close_grid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     except Exception as e:
         logger.error(f"❌ Error in cmd_close_grid: {e}")
-        await update.message.reply_text(f"💥 Error: {e!s}")
+        await update.message.reply_text(f"💥 Error: {str(e)}")
 
 
 async def send_grid_alert(message: str) -> None:
@@ -1150,8 +1094,10 @@ async def send_grid_alert(message: str) -> None:
 
 async def grid_monitor_task():
     """Background task: Monitor reversal grid fills via position snapshot comparison."""
+    import asyncio
     import core.state as gs_state
-    from core.grid_manager import GridManager, grid_asset_from_key, is_grid_position
+    from core.grid_manager import GridManager, is_grid_position, grid_asset_from_key
+    # HLExecutor now from app_context
 
     logger.info("📋 grid_monitor task loop started")
 

@@ -6,7 +6,7 @@ All execution tools require OTP confirmation. All tools are rate-limited and aud
 """
 import time
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, List, Dict, Any
 from fastmcp import FastMCP
 from fastapi import Request
@@ -73,7 +73,7 @@ async def get_account_balance() -> Dict[str, Any]:
     Returns: total_balance, available_balance, unrealized_pnl, equity
     """
     try:
-        executor = app_context.executor
+        executor = HLExecutor.get_instance()
         balance = await executor.get_balance()
         
         return {
@@ -83,7 +83,7 @@ async def get_account_balance() -> Dict[str, Any]:
             "unrealized_pnl": balance.get("unrealized_pnl", 0),
             "equity": balance.get("equity", 0),
             "margin_used": balance.get("margin_used", 0),
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
         logger.error(f"get_account_balance failed: {e}")
@@ -145,7 +145,7 @@ async def get_market_regime(asset: str = "BTC") -> Dict[str, Any]:
             "momentum": regime_result["momentum"],
             "volatility": regime_result["volatility"],
             "mean_reversion": regime_result["mean_reversion"],
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
         logger.error(f"get_market_regime failed: {e}")
@@ -161,7 +161,7 @@ async def get_asset_prices(assets: List[str]) -> Dict[str, Any]:
         prices = {}
         for asset in assets:
             # Use existing price fetching logic
-            executor = app_context.executor
+            executor = HLExecutor.get_instance()
             # This would need a get_price method - implement based on your existing code
             prices[asset] = {
                 "price": 0,  # Placeholder - use your actual price fetching
@@ -218,7 +218,7 @@ async def place_grid(
     try:
         from core.grid_manager import GridManager
         
-        executor = app_context.executor
+        executor = HLExecutor.get_instance()
         grid_manager = GridManager(executor)
         
         # Use the optimized grid params method if available
@@ -288,10 +288,9 @@ async def place_dca(
         return {"success": False, "error": "investment must be positive"}
     
     try:
-        from core.dca_execution_engine import open_dca_position
+        dca_manager = app_context.dca_manager
         
-        executor = app_context.executor
-        result = await open_dca_position(
+        result = dca_manager.open_dca_position(
             asset=asset,
             side=side,
             investment_amount=investment
@@ -334,7 +333,7 @@ async def close_position(asset: str, otp: str) -> Dict[str, Any]:
         return {"success": False, "error": "Invalid or expired OTP"}
     
     try:
-        executor = app_context.executor
+        executor = HLExecutor.get_instance()
         result = await executor.close_position(asset=asset)
         
         audit_mcp_call(api_key, "close_position", {"asset": asset}, success=True)
