@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from core.dca_lifecycle import handle_position_close_event
+from core.dca_execution_engine import handle_position_close_event
 from core.trade_ledger import record_trade
 from core.grid_persistence import save_grid_state, clear_grid_state
 import core.state as state
