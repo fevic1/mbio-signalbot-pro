@@ -179,12 +179,30 @@ class DCAManager:
         return adverse >= threshold
 
     async def _submit_limit(self, asset: str, side: str, size: float, price: float, label: str) -> dict:
-        from execution.hl_executor import execute_hl_order
-        return await asyncio.to_thread(execute_hl_order, coin=asset, side=side, size=size, limit_px=price, order_type="Limit", strategy="AUTO_DCA", regime="AUTO", execution_label=label)
+        return await run_executor_method(
+            self.executor.execute_order,
+            coin=asset,
+            side=side,
+            size=size,
+            limit_px=price,
+            order_type="Limit",
+            strategy="AUTO_DCA",
+            regime="AUTO",
+            execution_label=label,
+        )
 
     async def _submit_aggressive(self, asset: str, side: str, size: float, label: str) -> dict:
-        from execution.hl_executor import execute_hl_order
-        return await asyncio.to_thread(execute_hl_order, coin=asset, side=side, size=size, limit_px=None, order_type="Limit", strategy="AUTO_DCA", regime="AUTO", execution_label=label)
+        return await run_executor_method(
+            self.executor.execute_order,
+            coin=asset,
+            side=side,
+            size=size,
+            limit_px=None,
+            order_type="Limit",
+            strategy="AUTO_DCA",
+            regime="AUTO",
+            execution_label=label,
+        )
 
     async def _cancel_order(self, asset: str, order_id: int) -> dict:
         return await run_executor_method(self.executor.cancel_order, coin=asset, order_id=int(order_id))
@@ -299,8 +317,18 @@ class DCAManager:
                 if not isinstance(pos, dict) or pos.get("coin") != asset: continue
                 size = abs(float(pos.get("size", 0) or 0))
                 if size <= 0: continue
-                from execution.hl_executor import execute_hl_order
-                result = await asyncio.to_thread(execute_hl_order, coin=asset, side=close_side, size=size, reduce_only=True, strategy="AUTO_DCA", regime="AUTO", execution_label="DCA_EXIT")
+                result = await run_executor_method(
+                    self.executor.execute_order,
+                    coin=asset,
+                    side=close_side,
+                    size=size,
+                    limit_px=None,
+                    order_type="Limit",
+                    reduce_only=True,
+                    strategy="AUTO_DCA",
+                    regime="AUTO",
+                    execution_label="DCA_EXIT",
+                )
                 if result.get("success"):
                     results["base_closed"] = True; results["dca_closed"] += 1; entry = float(pos.get("entry_price", 0) or 0); exit_price = float(result.get("avg_price", entry) or entry); results["total_pnl"] += ((exit_price - entry) * size) if close_side == "SELL" else ((entry - exit_price) * size)
                 else: results["errors"].append(f"Close failed: {result.get('error')}")
@@ -322,8 +350,18 @@ class DCAManager:
                 if not isinstance(pos, dict) or pos.get("coin") != asset: continue
                 total_size = abs(float(pos.get("size", 0) or 0)); close_size = total_size * percent / 100.0
                 if close_size <= 0: continue
-                from execution.hl_executor import execute_hl_order
-                result = await asyncio.to_thread(execute_hl_order, coin=asset, side=close_side, size=close_size, reduce_only=True, strategy="AUTO_DCA", regime="AUTO", execution_label="DCA_EXIT")
+                result = await run_executor_method(
+                    self.executor.execute_order,
+                    coin=asset,
+                    side=close_side,
+                    size=close_size,
+                    limit_px=None,
+                    order_type="Limit",
+                    reduce_only=True,
+                    strategy="AUTO_DCA",
+                    regime="AUTO",
+                    execution_label="DCA_EXIT",
+                )
                 if result.get("success"): results["dca_closed"] += 1
         except Exception as exc: results["errors"].append(f"Position close error: {exc}")
         results["base_closed_pct"] = percent

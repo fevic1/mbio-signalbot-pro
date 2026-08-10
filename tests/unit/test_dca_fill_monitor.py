@@ -23,7 +23,8 @@ async def test_missing_resting_order_requires_verified_fill(monkeypatch):
     }
 
     executor = SimpleNamespace(address="0xabc", info=SimpleNamespace(user_fills=lambda _: []))
-    monkeypatch.setattr(app_context, "executor", executor)
+    monkeypatch.setattr(app_context, "_executor", executor)
+    monkeypatch.setattr(app_context, "_initialized", True)
     monkeypatch.setattr(monitor.market_cache, "orders", lambda: [])
     monkeypatch.setattr(monitor.market_cache, "positions", lambda: [])
     monkeypatch.setattr(state, "save_state", lambda: None)
@@ -56,7 +57,8 @@ async def test_missing_resting_order_is_filled_only_when_oid_is_in_user_fills(mo
         address="0xabc",
         info=SimpleNamespace(user_fills=lambda _: [{"coin": "BTC", "oid": 101, "sz": "1.0"}]),
     )
-    monkeypatch.setattr(app_context, "executor", executor)
+    monkeypatch.setattr(app_context, "_executor", executor)
+    monkeypatch.setattr(app_context, "_initialized", True)
     monkeypatch.setattr(monitor.market_cache, "orders", lambda: [])
     monkeypatch.setattr(monitor.market_cache, "positions", lambda: [{"coin": "BTC", "entryPx": "98.0", "size": "2.0"}])
     monkeypatch.setattr(monitor.dca_execution_engine, "on_fill", on_fill)

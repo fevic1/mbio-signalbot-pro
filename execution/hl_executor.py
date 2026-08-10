@@ -269,6 +269,139 @@ class HLExecutor:
             logger.error(f"Failed to get open orders: {e}")
             return []
 
+
+    def execute_order(
+        self,
+        coin: str,
+        side: str,
+        size: float,
+        limit_px: Optional[float] = None,
+        order_type: str = "Limit",
+        reduce_only: bool = False,
+        strategy: str = "SIGNAL",
+        regime: str = "AUTO",
+        execution_label: str = "UNCLASSIFIED",
+    ) -> Dict:
+        """
+        Canonical execution boundary.
+
+        All strategy/DCA execution enters through this method.
+        It performs execution-label validation/context construction,
+        delegates the actual exchange operation to place_order(), and
+        records successful trades through the existing tracker.
+        """
+        try:
+            normalized_label = execution_label or "UNCLASSIFIED"
+
+            if normalized_label != "UNCLASSIFIED":
+                from execution.execution_labels import normalize_execution_label
+                normalized_label = normalize_execution_label(
+                    normalized_label
+                ).value
+
+            if normalized_label.startswith("QT_"):
+                resolved_order_type = "Market"
+            elif normalized_label.startswith("DCA_"):
+                resolved_order_type = "Limit"
+            else:
+                resolved_order_type = order_type
+
+            if normalized_label != "UNCLASSIFIED":
+                from execution.order_intent import OrderIntent
+                from execution.execution_labels import ExecutionLabel
+                from execution.execution_validator import ExecutionValidator
+
+                intent = OrderIntent(
+                    coin=coin,
+                    side=side,
+                    size=size,
+                    label=ExecutionLabel(normalized_label),
+                    strategy=strategy,
+                    order_type=resolved_order_type.upper(),
+                )
+
+                ExecutionValidator().validate(intent)
+
+            execution_context = ExecutionContext(
+                execution_label=normalized_label,
+                strategy=strategy,
+                regime=regime,
+                order_type=resolved_order_type,
+            )
+
+            result = self.place_order(
+                coin=coin,
+                side=side,
+                size=size,
+                limit_price=limit_px,
+                order_type=resolved_order_type,
+                reduce_only=reduce_only,
+                execution_context=execution_context,
+            )
+
+            if isinstance(result, dict):
+                result["_strategy"] = strategy
+                result["_regime"] = regime
+
+            if result and result.get("success"):
+                try:
+                    from core.performance_tracker import get_performance_tracker
+                    import core.state as state
+
+                    tracker = get_performance_tracker()
+                    price = float(
+                        result.get("avg_price", limit_px or 0)
+                    )
+
+                    if reduce_only:
+                        pos = state.OPEN_POSITIONS.get(coin)
+
+                        if pos:
+                            state.record_closed_trade(
+                                asset=coin,
+                                side=pos.get("side", side),
+                                entry=pos.get("entry", price),
+                                exit_price=price,
+                                size=size,
+                                close_reason="Exit",
+                                strategy=strategy,
+                                regime=regime,
+                            )
+
+                            tracker.record_close_trade(
+                                asset=coin,
+                                exit_price=price,
+                                close_reason="Exit",
+                            )
+                    else:
+                        tracker.record_open_trade(
+                            asset=coin,
+                            side=side,
+                            entry=price,
+                            size=size,
+                            strategy=strategy,
+                            regime=regime,
+                            execution_label=normalized_label,
+                        )
+
+                except Exception as exc:
+                    logger.warning(
+                        f"⚠️ Failed to record trade in tracker: {exc}"
+                    )
+
+            return result or {
+                "success": False,
+                "error": "None returned",
+            }
+
+        except Exception as exc:
+            logger.error(f"❌ Canonical execution error: {exc}")
+            return {
+                "success": False,
+                "error": str(exc),
+            }
+
+
     def place_order(
         self,
         coin: str,
@@ -466,133 +599,39 @@ class HLExecutor:
             logger.error(f"❌ Close position failed for {asset}: {e}")
             return {"success": False, "error": str(e)}
 
-def execute_hl_order(coin: str, side: str, size: float, limit_px: Optional[float] = None, **kwargs) -> Dict:
-    """Async wrapper — runs place_order in thread to avoid event loop conflicts."""
-    import asyncio as _aio
+
+
+def execute_hl_order(
+    coin: str,
+    side: str,
+    size: float,
+    limit_px: Optional[float] = None,
+    **kwargs
+) -> Dict:
+    """Legacy compatibility wrapper around the canonical executor boundary."""
     try:
         from core.app_context import app_context
-        executor = app_context.executor
-        _strategy = kwargs.get("strategy", "SIGNAL")
-        _regime = kwargs.get("regime", "AUTO")
 
-        _execution_label = kwargs.get(
-            "execution_label",
-            "UNCLASSIFIED"
-        )
-
-        if _execution_label != "UNCLASSIFIED":
-            from execution.execution_labels import normalize_execution_label
-            _execution_label = normalize_execution_label(
-                _execution_label
-            ).value
-
-        if _execution_label.startswith("QT_"):
-            _order_type = "Market"
-
-        elif _execution_label.startswith("DCA_"):
-            _order_type = "Limit"
-
-        else:
-            _order_type = kwargs.get(
-                "order_type",
-                "Limit"
-            )
-
-        if _execution_label != "UNCLASSIFIED":
-            from execution.order_intent import OrderIntent
-            from execution.execution_labels import ExecutionLabel
-            from execution.execution_validator import ExecutionValidator
-
-            try:
-                intent = OrderIntent(
-                    coin=coin,
-                    side=side,
-                    size=size,
-                    label=ExecutionLabel(_execution_label),
-                    strategy=_strategy,
-                    order_type=_order_type.upper()
-                )
-
-                ExecutionValidator().validate(intent)
-
-            except Exception as e:
-                logger.error(
-                    f"❌ Execution validation failed: {e}"
-                )
-
-                return {
-                    "success": False,
-                    "error": str(e)
-                }
-
-        # Delegate to the class method which handles all execution logic
-        execution_context = ExecutionContext(
-            execution_label=_execution_label,
-            strategy=_strategy,
-            regime=_regime,
-            order_type=_order_type
-        )
-
-        result = executor.place_order(
+        return app_context.executor.execute_order(
             coin=coin,
             side=side,
             size=size,
-            limit_price=limit_px,
-            order_type=_order_type,
+            limit_px=limit_px,
+            order_type=kwargs.get("order_type", "Limit"),
             reduce_only=kwargs.get("reduce_only", False),
-            execution_context=execution_context
+            strategy=kwargs.get("strategy", "SIGNAL"),
+            regime=kwargs.get("regime", "AUTO"),
+            execution_label=kwargs.get(
+                "execution_label",
+                "UNCLASSIFIED",
+            ),
         )
-        # Attach strategy metadata to result for downstream consumers
-        if result and isinstance(result, dict):
-            result["_strategy"] = _strategy
-            result["_regime"] = _regime
-        logger.info(f"📦 Order result: {result}")
 
-        # 📊 --- SMART TRADE RECORDING ---
-        if result and result.get("success"):
-            try:
-                from core.performance_tracker import get_performance_tracker
-                import core.state as state
-                tracker = get_performance_tracker()
-                price = float(result.get("avg_price", limit_px or 0))
-
-                if kwargs.get("reduce_only", False):
-                    # THIS IS A CLOSING TRADE
-                    pos = state.OPEN_POSITIONS.get(coin)
-                    if pos:
-                        # 1. Record directly to state history (works even for existing positions!)
-                        state.record_closed_trade(
-                            asset=coin, side=pos.get("side", side), entry=pos.get("entry", price),
-                            exit_price=price, size=size, close_reason="Exit",
-                            strategy=kwargs.get("strategy", "AI ensemble"), 
-                            regime=kwargs.get("regime", "RANGING")
-                        )
-                        # 2. Update tracker if it happens to be there
-                        tracker.record_close_trade(asset=coin, exit_price=price, close_reason="Exit")
-                    else:
-                        logger.warning(f"⚠️ Closing trade for {coin} but not found in OPEN_POSITIONS")
-                else:
-                    # THIS IS AN OPENING TRADE
-                    tracker.record_open_trade(
-                        asset=coin, side=side, entry=price, size=size, 
-                        strategy=kwargs.get("strategy", "AI ensemble"), 
-                        regime=kwargs.get("regime", "RANGING"),
-                        execution_label=kwargs.get(
-                            "execution_label",
-                            "UNCLASSIFIED"
-                        )
-                    )
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to record trade in tracker: {e}")
-        # ---------------------------------
-
-
-        return result or {"success": False, "error": "None returned"}
-    except Exception as e:
-        logger.error(f"❌ execute_hl_order error: {e}")
+    except Exception as exc:
+        logger.error(f"❌ execute_hl_order error: {exc}")
         return {
             "success": False,
-            "error": str(e)
+            "error": str(exc),
         }
 
 
