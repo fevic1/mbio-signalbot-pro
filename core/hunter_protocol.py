@@ -224,27 +224,8 @@ async def _execute_fill(candidate: Dict):
 async def hunter_monitor_loop(system=None):
     """Continuous background monitor. Checks stagnant positions every 5 mins, analyzes assets in staggered 30-min phases."""
     logger.info("🏹 Hunter Monitor: Starting continuous background monitoring (Staggered 30-min phases)...")
-    event_bus = None
-
-    if system:
-        if hasattr(system, "get"):
-            event_bus = system.get("event_bus")
-        elif hasattr(system, "event_bus"):
-            event_bus = system.event_bus
-
-    if event_bus:
-        from aios.events import Event
-
-        event_bus.publish(
-            Event(
-                "hunter.scan.started",
-                source="hunter_protocol",
-                payload={
-                    "interval": 300,
-                },
-            )
-        )
-
+    # Hunter no longer depends on AIOS runtime services.
+    # MBIO intelligence is provided by core.signal_generator.
     
     iteration = 0      # Tracks 5-minute intervals
     
@@ -266,6 +247,7 @@ async def hunter_monitor_loop(system=None):
                 
                 try:
                     from core.signal_generator import analyze_batch
+                    from core.meta_learner import get_meta_learner
                     from core.asset_universe import get_universe
                     from core.data_fetcher import get_mtf_data
 
@@ -296,88 +278,31 @@ async def hunter_monitor_loop(system=None):
                                 f"🧠 Analyzing Top-10 signal universe "
                                 f"({len(chunk)} assets)..."
                             )
-                            results = {}
-                            provider = "aios"
+                            # MBIO INTELLIGENCE PATH
+                            # Hunter must use the same canonical intelligence
+                            # engine as the primary signal system. AIOS is not
+                            # required for market analysis.
+                            from config_loader import get_config
 
-                            if system and system.orchestrator:
+                            results, provider = await analyze_batch(
+                                chunk,
+                                get_config(),
+                            )
 
-                                logger.info("🧠 AIOS Hunter bridge activated")
+                            logger.info(
+                                f"🧠 MBIO Hunter intelligence provider: {provider}"
+                            )
 
-                                task = system.orchestrator.submit_task(
-                                    name="market_analysis",
-                                    category="trading",
-                                    context={
-                                        "market_data": chunk
-                                    },
+                            # MBIO MetaLearner is the adaptive strategy-selection
+                            # layer. It does not replace market intelligence and
+                            # does not record hypothetical trade outcomes.
+                            meta_learner = get_meta_learner()
+
+                            if provider == "failed":
+                                logger.warning(
+                                    "🏹 Hunter: MBIO intelligence returned no valid signals."
                                 )
 
-                                system.orchestrator.assign_agent(
-                                    task["id"],
-                                    "market_analysis",
-                                )
-
-                                logger.info(
-                                    f"🧠 AIOS executing task {task['id']}"
-                                )
-
-                                execution = await system.orchestrator.execute_task(
-                                    task["id"]
-                                )
-
-                                logger.info(
-                                    f"🧠 AIOS execution complete: {execution.status}"
-                                )
-
-                                market_result = execution.results.get(
-                                    "market_analysis",
-                                    {}
-                                )
-
-                                content = market_result.get(
-                                    "content",
-                                    {}
-                                )
-
-                                if isinstance(content, dict):
-
-                                    confidence = content.get(
-                                        "confidence",
-                                        0,
-                                    )
-
-                                    if confidence <= 1:
-                                        confidence *= 100
-
-                                    results = {
-                                        asset: {
-                                            "signal": (
-                                                "BUY"
-                                                if content.get("trend") == "bullish"
-                                                else "SELL"
-                                                if content.get("trend") == "bearish"
-                                                else "HOLD"
-                                            ),
-                                            "confidence": int(confidence),
-                                            "reasoning": {
-                                                "trend": content.get("trend"),
-                                                "momentum": content.get("momentum"),
-                                                "volatility": content.get("volatility"),
-                                                "risk": content.get("risk"),
-                                            },
-                                        }
-                                        for asset in chunk
-                                    }
-
-                                else:
-                                    results = {}
-
-
-                            else:
-                                raise RuntimeError(
-                                    "AIOS orchestrator unavailable. "
-                                    "Hunter requires AIOS intelligence path."
-                                )
-                            
                             # Build pending signals for hunting
                             pending_signals = []
                             for asset_name, data in chunk.items():
@@ -386,209 +311,44 @@ async def hunter_monitor_loop(system=None):
                                 conf = result.get("confidence", 50)
                                 
                                 if conf >= MIN_CONFIDENCE and "HOLD" not in signal.upper():
+                                    regime = (
+                                        result.get("regime")
+                                        or data.get("regime")
+                                        or data.get("market_regime")
+                                        or "RANGING"
+                                    )
+
+                                    strategy = meta_learner.get_best_strategy(regime)
+
                                     pending_signals.append({
                                         "asset": asset_name,
                                         "signal": signal,
                                         "confidence": conf,
+                                        "regime": regime,
+                                        "strategy": strategy,
                                         "data": data
                                     })
 
-                            if pending_signals:
+                                    logger.info(
+                                        f"🧠 MetaLearner: {asset_name} "
+                                        f"regime={regime} strategy={strategy}"
+                                    )
 
-                                from aios.learning import (
-                                    LearningRanker,
-                                    StrategySelector,
-                                )
 
-                                pending_signals = LearningRanker().rank(
-                                    pending_signals
-                                )
-
-                                pending_signals = StrategySelector().select(
-                                    pending_signals
-                                )
                             
-                            # Execute hunt through AIOS risk gate
+                            # Execute through the canonical MBIO Hunter protocol.
+                            # Candidate filtering has already been performed by
+                            # MBIO intelligence and the confidence gate above.
                             if pending_signals:
-
-                                if not system or not system.orchestrator:
-                                    raise RuntimeError(
-                                        "AIOS unavailable. Execution blocked."
-                                    )
-
-                                risk_task = system.orchestrator.submit_task(
-                                    name="risk_analysis",
-                                    category="trading",
-                                    context={
-                                        "signals": pending_signals,
-                                        "market_analysis": content,
-                                    },
+                                await run_hunter_protocol_idle(
+                                    pending_signals,
+                                    None,
+                                    system=system,
                                 )
-
-                                system.orchestrator.assign_agent(
-                                    risk_task["id"],
-                                    "risk_analysis",
-                                )
-
-                                risk_execution = await system.orchestrator.execute_task(
-                                    risk_task["id"]
-                                )
-
-                                risk_result = risk_execution.results.get(
-                                    "risk_analysis",
-                                    {}
-                                )
-
-                                risk_content = risk_result.get(
-                                    "content",
-                                    {}
-                                )
-
-                                risk_level = (
-                                    risk_content
-                                    .get("risk", {})
-                                    .get("analysis", "high")
-                                )
-
-                                if risk_level != "high":
-
-                                    verify_task = system.orchestrator.submit_task(
-                                        name="verification",
-                                        category="trading",
-                                        context={
-                                            "signals": pending_signals,
-                                            "market_analysis": content,
-                                            "risk_analysis": risk_content,
-                                        },
-                                    )
-
-                                    system.orchestrator.assign_agent(
-                                        verify_task["id"],
-                                        "verification",
-                                    )
-
-                                    verification_execution = await system.orchestrator.execute_task(
-                                        verify_task["id"]
-                                    )
-
-                                    verification_result = verification_execution.results.get(
-                                        "verification",
-                                        {}
-                                    )
-
-                                    verification_content = verification_result.get(
-                                        "content",
-                                        {}
-                                    )
-
-                                    confidence = verification_content.get(
-                                        "confidence",
-                                        0,
-                                    )
-
-                                    if confidence <= 1:
-                                        confidence *= 100
-
-                                    if confidence >= 50:
-
-                                        from aios.memory import LearningSearch
-
-                                        learning_search = LearningSearch()
-
-                                        learning_performance = []
-
-                                        for signal in pending_signals:
-                                            learning_performance.append(
-                                                learning_search.performance_summary(
-                                                    f"{signal.get('asset', 'UNKNOWN')}:{signal.get('signal', 'UNKNOWN')}"
-                                                )
-                                            )
-
-                                        approval_task = system.orchestrator.submit_task(
-                                            name="execution_approval",
-                                            category="trading",
-                                            context={
-                                                "signals": pending_signals,
-                                                "risk": risk_content,
-                                                "verification": verification_content,
-                                                "learning_performance": learning_performance,
-                                            },
-                                        )
-
-                                        system.orchestrator.assign_agent(
-                                            approval_task["id"],
-                                            "execution_approval",
-                                        )
-
-                                        approval_execution = await system.orchestrator.execute_task(
-                                            approval_task["id"]
-                                        )
-
-                                        approval_result = approval_execution.results.get(
-                                            "execution_approval",
-                                            {}
-                                        )
-
-                                        approval_content = approval_result.get(
-                                            "content",
-                                            {}
-                                        )
-
-                                        approved = approval_content.get(
-                                            "approved",
-                                            False,
-                                        )
-
-                                        if approved:
-
-                                            from aios.memory import (
-                                                EventStore,
-                                                create_decision_event,
-                                            )
-
-                                            event_store = EventStore()
-
-                                            for signal in pending_signals:
-
-                                                event = create_decision_event(
-                                                    asset=signal.get("asset"),
-                                                    signal=signal.get("signal"),
-                                                    market_analysis=content,
-                                                    risk_analysis=risk_content,
-                                                    verification=verification_content,
-                                                    approval=approval_content,
-                                                    executed=True,
-                                                )
-
-                                                event_store.append(event)
-
-                                            logger.info(
-                                                "🧠 Hunter decision stored in AIOS memory"
-                                            )
-
-                                            await run_hunter_protocol_idle(
-                                                pending_signals,
-                                                None,
-                                                system=system,
-                                            )
-                                        else:
-                                            logger.warning(
-                                                "Hunter blocked by AIOS execution approval gate"
-                                            )
-
-                                    else:
-                                        logger.warning(
-                                            "Hunter blocked by AIOS verification gate"
-                                        )
-
-                                else:
-
-                                    logger.warning(
-                                        "🏹 Hunter blocked by AIOS risk gate"
-                                    )
-
                             else:
-                                logger.info("🏹 Hunter Monitor: No hunted candidates in this phase. All healthy.")
+                                logger.info(
+                                    "🏹 Hunter Monitor: No hunted candidates in this Top-10 universe."
+                                )
                         else:
                             logger.info("🏹 Hunter Monitor: Top-10 universe has no assets to analyze.")
                             
