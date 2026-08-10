@@ -14,6 +14,7 @@ from config_loader import get_config
 from core.app_context import app_context
 from core.dca_manager import DCAManager
 from core.dca_runtime import DCARuntimeCoordinator
+from core.dca_governor_runtime import DCAGovernorRuntime
 import core.state as state
 
 logger = logging.getLogger(__name__)
@@ -34,13 +35,19 @@ async def adaptive_dca_supervisor_loop(
 ) -> None:
     """Continuously reconcile and reassess every live DCA position."""
     logger.info("Adaptive DCA supervisor started")
+
+    # These objects must survive across supervisor heartbeats.
+    # DCAGovernor owns canonical plan/state, so recreating it every tick
+    # would destroy lifecycle state and restart the DCA ladder.
+    executor = executor_factory() if executor_factory else app_context.executor
+    manager = DCAManager(executor)
+    runtime = DCARuntimeCoordinator(manager)
+    governor_runtime = DCAGovernorRuntime(executor)
+
     while True:
         try:
             cfg = get_config().get("dca", {}) or {}
             global_adaptive = cfg.get("adaptive", {}) or {}
-            executor = executor_factory() if executor_factory else app_context.executor
-            manager = DCAManager(executor)
-            runtime = DCARuntimeCoordinator(manager)
             mids = executor.info.all_mids() or {}
 
             for asset, position in list(state.OPEN_POSITIONS.items()):
@@ -77,9 +84,59 @@ async def adaptive_dca_supervisor_loop(
                 if current_price <= 0:
                     continue
 
-                result = await manager.monitor_adaptive_dca(
-                    asset, dca_config, current_price
-                )
+                direction = str(
+                    dca_config.get(
+                        "direction",
+                        "LONG" if str(position.get("side", "BUY")).upper() == "BUY" else "SHORT",
+                    )
+                ).upper()
+
+                try:
+                    entry_price = float(
+                        dca_config.get(
+                            "avg_entry",
+                            position.get("entry", position.get("entry_price", 0)),
+                        )
+                        or 0
+                    )
+                    available_budget = float(
+                        dca_config.get(
+                            "available_budget",
+                            global_adaptive.get("risk_budget_usd", 0) or 0,
+                        )
+                        or 0
+                    )
+
+                    result = await governor_runtime.evaluate(
+                        asset=asset,
+                        side=direction,
+                        current_price=current_price,
+                        available_budget=available_budget,
+                        dca_config=dca_config,
+                        entry_price=entry_price,
+                        ai_confidence=float(
+                            dca_config.get(
+                                "ai_confidence",
+                                global_adaptive.get("acceleration_confidence", 0),
+                            )
+                            or 0
+                        ),
+                        learner_score=float(
+                            dca_config.get(
+                                "learner_score",
+                                global_adaptive.get("min_learner_score", 0),
+                            )
+                            or 0
+                        ),
+                    )
+                except Exception as exc:
+                    # Fail closed. Existing reconciliation has already completed.
+                    logger.exception(
+                        "DCA Governor evaluation failed %s: %s",
+                        asset,
+                        exc,
+                    )
+                    continue
                 action = result.get("action", "WAIT")
                 if action != "WAIT" or result.get("errors"):
                     logger.info(
