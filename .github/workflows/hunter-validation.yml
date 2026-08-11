@@ -1,0 +1,34 @@
+name: Hunter Path Validation
+
+on:
+  push:
+    branches: [ fix/hunter-core-execution-path ]
+  pull_request:
+    branches: [ main ]
+    paths:
+      - core/hunter_protocol.py
+      - main.py
+      - core/strategy_manager.py
+
+jobs:
+  hunter-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Compile Hunter and core orchestration
+        run: |
+          python -m py_compile core/hunter_protocol.py main.py core/strategy_manager.py
+
+      - name: Verify Hunter has no direct exchange execution
+        run: |
+          ! grep -n "execute_hl_order\|get_exchange_limits" core/hunter_protocol.py
+          grep -n "from main import run_trade" core/hunter_protocol.py
+          grep -n "committee.get_trade_signal" core/hunter_protocol.py
+          grep -n "_hunter_empty_slots" core/hunter_protocol.py
