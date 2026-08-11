@@ -83,9 +83,9 @@ async def open_session(config: MCPServerConfig) -> AsyncIterator[ClientSession]:
 async def detect_transport(config: MCPServerConfig) -> Tuple[str, str | None]:
     """Probe transports without invoking tools.
 
-    Streamable HTTP is always attempted first because it is the current
-    standard. A 401/403 still proves the endpoint speaks the selected
-    transport, so authentication can be completed separately.
+    Streamable HTTP is attempted first because it is the current standard. A
+    401/403 still proves the endpoint is reachable using that transport, so
+    authentication can be completed separately.
     """
     if (config.transport or "auto").lower() not in {"", "auto"}:
         return _transport(config), None
@@ -130,7 +130,6 @@ async def health(config: MCPServerConfig) -> Dict[str, Any]:
             return {
                 "status": "healthy",
                 "transport": _transport(config),
-                "protocol_version": getattr(session, "protocol_version", None),
                 "capabilities": capabilities.model_dump(mode="json") if capabilities else {},
             }
     except MCPClientError as exc:
