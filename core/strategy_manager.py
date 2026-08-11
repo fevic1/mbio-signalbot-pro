@@ -143,7 +143,7 @@ class StrategyManager:
         )
 
         final_signal = winner_signal if passed else "HOLD"
-        final_confidence = int(round(weighted_confidence))
+        final_confidence = int(round(weighted_confidence)) if passed else 0
 
         if final_signal != "HOLD":
             if self.current_regime == "TRENDING_UP" and final_signal == "SELL":
