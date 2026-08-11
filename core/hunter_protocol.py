@@ -1,427 +1,409 @@
-import os
 import asyncio
 import logging
-from core.app_context import app_context
 from datetime import datetime, timezone
 from typing import Dict, List
+
 import core.state as state
-from core.exchange_limits import get_exchange_limits
 
 logger = logging.getLogger(__name__)
 
 # Hunter Protocol Settings
 STAGNATION_THRESHOLD = 3600  # 1 hour in seconds
-MIN_VOTES_TO_PASS = 4        # Needs 4 out of 6 strategy votes to be hunted
-MIN_CONFIDENCE = 70          # Minimum confidence for a strategy vote
-MAX_POSITIONS = 5            # Global safety limit for concurrent positions
+MIN_VOTES_TO_PASS = 4        # Committee policy: 4 of 6 strategy votes conceptually pass
+MIN_CONFIDENCE = 70           # Discovery/committee minimum
+MAX_POSITIONS = 5             # Hunter safety ceiling; core execution remains authoritative
+
 
 def update_hold_tracking(asset_name: str, signal: str):
-    """Tracks how long an open position has been receiving a HOLD signal."""
+    """Track how long an eligible open position has remained on HOLD."""
     if asset_name not in state.OPEN_POSITIONS:
         return
-        
+
     pos = state.OPEN_POSITIONS[asset_name]
-    
-    # Do not track HOLD state for GRID or DCA positions
-    if asset_name.startswith("GRID::") or pos.get("dca") or pos.get("strategy") in ["AUTO_DCA", "MANUAL_DCA"]:
+
+    # GRID and DCA positions have their own lifecycle managers.
+    if (
+        asset_name.startswith("GRID::")
+        or pos.get("dca")
+        or pos.get("strategy") in ["AUTO_DCA", "MANUAL_DCA"]
+    ):
         return
 
     if "HOLD" in signal.upper():
         if "hold_since" not in pos:
             pos["hold_since"] = datetime.now(timezone.utc)
             logger.info(f"🐌 {asset_name} entered HOLD state. Stagnation timer started.")
-    else:
-        if "hold_since" in pos:
-            del pos["hold_since"]
-            logger.info(f"🏃 {asset_name} broke out of HOLD state. Stagnation timer reset.")
+    elif "hold_since" in pos:
+        del pos["hold_since"]
+        logger.info(f"🏃 {asset_name} broke out of HOLD state. Stagnation timer reset.")
+
 
 def check_stagnant_positions() -> List[str]:
-    """Returns a list of asset names that have been in HOLD for > 1 hour (Excludes GRID & DCA)."""
+    """Return non-GRID/non-DCA positions held in HOLD for at least one hour."""
     stagnant_assets = []
     now = datetime.now(timezone.utc)
-    
+
     for asset, pos in state.OPEN_POSITIONS.items():
-        # 1. Skip GRID positions (managed by grid_monitor)
         if asset.startswith("GRID::"):
             continue
-            
-        # 2. Skip DCA positions (managed by DCAExecutionEngine)
         if pos.get("dca") or pos.get("strategy") in ["AUTO_DCA", "MANUAL_DCA"]:
             continue
-            
-        if "hold_since" in pos:
-            hold_duration = (now - pos["hold_since"]).total_seconds()
-            if hold_duration >= STAGNATION_THRESHOLD:
-                stagnant_assets.append(asset)
-                logger.warning(f"⚠️ {asset} has been stagnant (HOLD) for {hold_duration/60:.1f} minutes!")
-                
+
+        hold_since = pos.get("hold_since")
+        if not hold_since:
+            continue
+
+        # Persisted timestamps can be strings after restart.
+        if isinstance(hold_since, str):
+            try:
+                hold_since = datetime.fromisoformat(hold_since.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+
+        if hold_since.tzinfo is None:
+            hold_since = hold_since.replace(tzinfo=timezone.utc)
+
+        hold_duration = (now - hold_since).total_seconds()
+        if hold_duration >= STAGNATION_THRESHOLD:
+            stagnant_assets.append(asset)
+            logger.warning(
+                f"⚠️ {asset} has been stagnant (HOLD) for {hold_duration / 60:.1f} minutes!"
+            )
+
     return stagnant_assets
 
+
 def _active_hunter_positions() -> int:
-    """Count positions that consume Hunter's finite trading slots."""
-    return len([
-        key for key, pos in state.OPEN_POSITIONS.items()
+    """Count real non-GRID positions against Hunter's local slot ceiling."""
+    return sum(
+        1
+        for key in state.OPEN_POSITIONS
         if not key.startswith("GRID::")
-    ])
+    )
 
 
 def _hunter_empty_slots() -> int:
-    """Return currently available Hunter slots without querying the exchange."""
+    """Return locally available Hunter slots without an exchange query."""
     return max(0, MAX_POSITIONS - _active_hunter_positions())
 
-async def run_hunter_protocol_idle(pending_signals: List[Dict], chat_id: int, system=None):
-    """Main Hunter Protocol: swap stagnant positions or fill genuinely empty slots."""
-    logger.info("🏹 Hunter Protocol: Scanning for swap or fill opportunities...")
-    
-    stagnant_assets = check_stagnant_positions()
-    
-    # A full book with no stagnant position has nothing Hunter can execute.
-    # Stop here before market-data/analysis or execution APIs are touched.
-    empty_slots = _hunter_empty_slots()
-    if empty_slots == 0 and not stagnant_assets:
+
+async def _submit_to_core_trade_path(candidate: Dict):
+    """Submit an approved Hunter candidate to the existing core trade lifecycle.
+
+    Hunter does not size orders, call the exchange, create stop-loss/take-profit
+    plans, or bypass capital/risk checks. The existing main.run_trade path owns
+    those responsibilities for all normal signal entries.
+    """
+    asset = candidate.get("asset")
+    signal = candidate.get("signal", "HOLD")
+    confidence = int(candidate.get("confidence", 0) or 0)
+    data = candidate.get("data") or {}
+
+    if not asset or signal == "HOLD" or confidence < MIN_CONFIDENCE:
+        return
+
+    # Final Hunter gate immediately before handing the candidate to core.
+    if _hunter_empty_slots() <= 0:
         logger.info(
-            f"🏹 Hunter Protocol: All {MAX_POSITIONS} trading slots are occupied; "
-            "no stagnant positions. Skipping hunt and execution."
+            f"🏹 Hunter: Slots are full; not submitting {asset} to core trade path."
+        )
+        return
+    if asset in state.OPEN_POSITIONS:
+        logger.info(
+            f"🏹 Hunter: {asset} is already open; not submitting duplicate trade."
         )
         return
 
-    # Pending signals have already passed the existing StrategyManager committee.
-    # Hunter only performs final slot/duplicate safety filtering here.
+    if not data or "1h" not in data:
+        logger.warning(
+            f"🏹 Hunter: {asset} has no committee-evaluation 1h data; not submitting."
+        )
+        return
+
+    try:
+        # Runtime import avoids the main -> hunter -> main import cycle.
+        from main import run_trade
+
+        logger.info(
+            f"🏹 Hunter: Passing committee-approved {asset} {signal} "
+            f"conf={confidence}% to canonical core trade path "
+            f"(strategy={candidate.get('strategy', 'ENSEMBLE')})."
+        )
+
+        await run_trade(
+            asset_name=asset,
+            data=data,
+            signal=signal,
+            conf=confidence,
+            reasoning=(
+                f"Hunter opportunity approved by existing strategy committee; "
+                f"winner={candidate.get('strategy', 'ENSEMBLE')}"
+            ),
+            provider="HunterCommittee",
+        )
+    except Exception as exc:
+        logger.error(
+            f"❌ Hunter: Core trade-path submission failed for {asset}: {exc}"
+        )
+
+
+async def run_hunter_protocol_idle(
+    pending_signals: List[Dict],
+    chat_id: int,
+    system=None,
+):
+    """Process committee-approved opportunities without owning execution.
+
+    Hunter's responsibilities stop at discovery, stagnation detection, duplicate
+    filtering, slot gating, and forwarding an approved opportunity to the core
+    trade lifecycle. It never constructs an order or calls the exchange directly.
+    """
+    logger.info("🏹 Hunter Protocol: Processing committee-approved opportunities...")
+
+    stagnant_assets = check_stagnant_positions()
+    empty_slots = _hunter_empty_slots()
+
+    if empty_slots == 0 and not stagnant_assets:
+        logger.info(
+            f"🏹 Hunter Protocol: All {MAX_POSITIONS} trading slots are occupied; "
+            "skipping hunt and execution."
+        )
+        return
+
     hunted_candidates = []
     for signal_data in pending_signals or []:
         asset_name = signal_data.get("asset")
         signal = signal_data.get("signal", "")
-        conf = signal_data.get("confidence", 0)
-        
+        confidence = int(signal_data.get("confidence", 0) or 0)
+
         if not asset_name:
             continue
-        
-        # Skip already-open assets and HOLD results. DCA/GRID entries are also
-        # represented in OPEN_POSITIONS and therefore consume the duplicate gate.
-        if asset_name in state.OPEN_POSITIONS or "HOLD" in signal.upper():
+        if asset_name in state.OPEN_POSITIONS:
+            logger.debug(f"🏹 Hunter: duplicate open asset rejected: {asset_name}")
             continue
-        
-        if conf >= MIN_CONFIDENCE and signal_data.get("committee_passed", False):
-            hunted_candidates.append({
+        if "HOLD" in signal.upper():
+            continue
+        if confidence < MIN_CONFIDENCE:
+            continue
+        if not signal_data.get("committee_passed", False):
+            continue
+
+        hunted_candidates.append(
+            {
                 "asset": asset_name,
                 "signal": signal,
-                "confidence": conf,
+                "confidence": confidence,
                 "strategy": signal_data.get("strategy", "ENSEMBLE"),
                 "regime": signal_data.get("regime", "RANGING"),
-                "data": signal_data.get("data", {})
-            })
-            logger.info(
-                f"🎯 Hunter Candidate: {asset_name} {signal} "
-                f"committee={signal_data.get('strategy', 'ENSEMBLE')} conf={conf}%"
-            )
-    
-    if not hunted_candidates and not stagnant_assets:
-        logger.info("🏹 Hunter Protocol: No committee-approved candidates or stagnant positions found.")
-        return
-    
-    # Highest committee confidence is considered first; the committee itself
-    # remains the sole strategy decision authority.
-    hunted_candidates.sort(key=lambda x: x["confidence"], reverse=True)
-    
-    # Step 1: Execute swaps for stagnant positions.
-    for stagnant_asset in stagnant_assets:
-        if not hunted_candidates:
-            break
-        best_candidate = hunted_candidates.pop(0)
-        await _execute_swap(stagnant_asset, best_candidate)
+                "data": signal_data.get("data", {}),
+            }
+        )
+        logger.info(
+            f"🎯 Hunter Candidate: {asset_name} {signal} "
+            f"committee={signal_data.get('strategy', 'ENSEMBLE')} "
+            f"conf={confidence}%"
+        )
 
-    # Step 2: Fill only slots that are still available after any swaps.
+    hunted_candidates.sort(key=lambda item: item["confidence"], reverse=True)
+
+    # A stagnant position is a monitoring/replacement condition, not permission
+    # for Hunter to close or reverse it. The existing position lifecycle remains
+    # the owner of position exits. Hunter only forwards a new entry when a real
+    # slot is available.
+    if stagnant_assets:
+        logger.info(
+            f"🏹 Hunter: {len(stagnant_assets)} stagnant position(s) detected; "
+            "no direct Hunter close/swap execution. Waiting for the core position "
+            "lifecycle to release a slot."
+        )
+
+    if not hunted_candidates:
+        logger.info(
+            "🏹 Hunter Protocol: No committee-approved candidates available for the core trade path."
+        )
+        return
+
     empty_slots = _hunter_empty_slots()
     if empty_slots <= 0:
         logger.info(
-            f"🏹 Hunter Protocol: No empty slots remain after stagnant-position handling. "
-            "No fill execution API call."
+            "🏹 Hunter Protocol: No empty slots remain; no core trade submission."
         )
         return
 
-    if hunted_candidates:
-        logger.info(
-            f"🏹 Hunter Protocol: {empty_slots} empty slot(s) available. "
-            f"Filling from {len(hunted_candidates)} committee-approved candidate(s)..."
-        )
-        for _ in range(min(empty_slots, len(hunted_candidates))):
-            # Re-check immediately before every execution to prevent a stale
-            # slot calculation from producing an over-cap fill.
-            if _hunter_empty_slots() <= 0:
-                logger.info("🏹 Hunter Protocol: Slots became full; stopping fill execution.")
-                break
-            best_candidate = hunted_candidates.pop(0)
-            await _execute_fill(best_candidate)
+    logger.info(
+        f"🏹 Hunter Protocol: {empty_slots} empty slot(s); forwarding up to "
+        f"{min(empty_slots, len(hunted_candidates))} committee-approved candidate(s) "
+        "to the core trade path."
+    )
 
-async def _execute_swap(stagnant_asset: str, candidate: Dict):
-    """Executes the swap: closes stagnant, opens committee-approved candidate."""
-    stagnant_pos = state.OPEN_POSITIONS.get(stagnant_asset)
-    if not stagnant_pos:
-        logger.warning(f"🏹 Hunter Protocol: Stagnant asset {stagnant_asset} not found in state.")
-        return
+    for candidate in hunted_candidates[:empty_slots]:
+        if _hunter_empty_slots() <= 0:
+            logger.info(
+                "🏹 Hunter Protocol: Slot state changed to full; stopping submissions."
+            )
+            break
+        await _submit_to_core_trade_path(candidate)
 
-    logger.info(f"🔄 Hunter Protocol: Swapping {stagnant_asset} → {candidate['asset']}")
-    
-    try:
-        from execution.hl_executor import execute_hl_order
-        
-        # 1. Close the stagnant position (reduce_only)
-        close_side = "SELL" if stagnant_pos.get("side") == "BUY" else "BUY"
-        close_size = float(stagnant_pos.get("size", 0))
-        
-        logger.info(f"🏹 Closing stagnant position: {stagnant_asset} {close_side} {close_size}")
-        close_result = execute_hl_order(
-            coin=stagnant_asset,
-            side=close_side,
-            size=close_size,
-            reduce_only=True,
-            strategy="HUNTER_SWAP",
-            regime=candidate.get("regime", "SIDEWAYS"),
-            execution_label="QT_EXIT"
-        )
-        
-        if not close_result.get("success"):
-            logger.error(f"❌ Hunter Protocol: Failed to close {stagnant_asset}: {close_result.get('error')}")
-            return
-            
-        # Remove from state
-        if stagnant_asset in state.OPEN_POSITIONS:
-            del state.OPEN_POSITIONS[stagnant_asset]
-            state.save_state()
-        logger.info(f"✅ Hunter Protocol: Successfully closed {stagnant_asset}")
-        
-        # 2. Open the new committee-approved hunted position using the data
-        # already collected for committee evaluation. Do not refetch it.
-        data = candidate.get("data") or {}
-        if not data or "1h" not in data:
-            logger.error(f"❌ Hunter Protocol: Committee candidate has no usable 1h data for {candidate['asset']}")
-            return
-            
-        current_price = float(data["1h"]["price"])
-        target_notional = 12.0  # Safely above $10 min notional rule
-        new_size = round(target_notional / current_price, 4)
-        
-        if new_size * current_price < get_exchange_limits()["min_notional_usd"]:
-            new_size = round(11.0 / current_price, 4)
-            
-        open_side = "BUY" if candidate['signal'] == "BUY" else "SELL"
-        
-        logger.info(
-            f"🏹 Opening hunted position: {candidate['asset']} {open_side} {new_size} "
-            f"@ ~${current_price} | committee={candidate.get('strategy', 'ENSEMBLE')}"
-        )
-        open_result = execute_hl_order(
-            coin=candidate['asset'],
-            side=open_side,
-            size=new_size,
-            reduce_only=False,
-            strategy="HUNTER_SWAP",
-            regime=candidate.get("regime", "SIDEWAYS"),
-            execution_label="QT_ENTRY"
-        )
-        
-        if open_result.get("success"):
-            logger.info(f"✅ Hunter Protocol: Successfully opened {candidate['asset']} {open_side}")
-        else:
-            logger.error(f"❌ Hunter Protocol: Failed to open {candidate['asset']}: {open_result.get('error')}")
-            
-    except Exception as e:
-        logger.error(f"❌ Hunter Protocol: Swap execution failed: {e}")
-
-async def _execute_fill(candidate: Dict):
-    """Executes a fill only when a slot is still available."""
-    # Final local gate immediately before any execution API call.
-    if _hunter_empty_slots() <= 0:
-        logger.info(
-            f"🏹 Hunter Protocol: Slots are full; refusing fill for {candidate.get('asset')}. "
-            "No execution API call."
-        )
-        return
-
-    logger.info(f"🏹 Hunter Protocol: Filling empty slot with {candidate['asset']} {candidate['signal']}")
-    
-    try:
-        from execution.hl_executor import execute_hl_order
-        
-        # Reuse committee-evaluation market data instead of issuing another
-        # market-data request just before execution.
-        data = candidate.get("data") or {}
-        if not data or "1h" not in data:
-            logger.error(f"❌ Hunter Protocol: Committee candidate has no usable 1h data for {candidate['asset']}")
-            return
-            
-        current_price = float(data["1h"]["price"])
-        target_notional = 12.0
-        new_size = round(target_notional / current_price, 4)
-        
-        if new_size * current_price < get_exchange_limits()["min_notional_usd"]:
-            new_size = round(11.0 / current_price, 4)
-            
-        open_side = "BUY" if candidate['signal'] == "BUY" else "SELL"
-        
-        logger.info(
-            f"🏹 Opening new position: {candidate['asset']} {open_side} {new_size} "
-            f"@ ~${current_price} | committee={candidate.get('strategy', 'ENSEMBLE')}"
-        )
-        open_result = execute_hl_order(
-            coin=candidate['asset'],
-            side=open_side,
-            size=new_size,
-            reduce_only=False,
-            strategy="HUNTER_FILL",
-            regime=candidate.get("regime", "SIDEWAYS"),
-            execution_label="QT_ENTRY"
-        )
-        
-        if open_result.get("success"):
-            logger.info(f"✅ Hunter Protocol: Successfully filled slot with {candidate['asset']} {open_side}")
-        else:
-            logger.error(f"❌ Hunter Protocol: Failed to open {candidate['asset']}: {open_result.get('error')}")
-            
-    except Exception as e:
-        logger.error(f"❌ Hunter Protocol: Fill execution failed: {e}")
 
 async def hunter_monitor_loop(system=None):
-    """Continuous Hunter monitor with local slot gating and the existing six-strategy committee."""
-    logger.info("🏹 Hunter Monitor: Starting continuous background monitoring (Staggered 30-min phases)...")
-    # Hunter does not own strategy selection. StrategyManager remains the
-    # canonical six-strategy committee and MetaLearner remains its learning layer.
-    
-    iteration = 0      # Tracks 5-minute intervals
-    
+    """Continuously discover opportunities and invoke the existing committee."""
+    logger.info(
+        "🏹 Hunter Monitor: Starting continuous background monitoring "
+        "(Staggered 30-min phases)..."
+    )
+    logger.info(
+        "🏹 Hunter Monitor: Execution authority remains in the canonical core trade path."
+    )
+
+    iteration = 0
+
     while True:
         try:
-            # Wait 5 minutes between loop iterations
             await asyncio.sleep(300)
             iteration += 1
-            
-            # 1. ALWAYS check for stagnant positions every 5 minutes.
+
             stagnant_assets = check_stagnant_positions()
             if stagnant_assets:
                 logger.info(
                     f"🏹 Hunter Monitor: Found {len(stagnant_assets)} stagnant asset(s). "
                     "Waiting for committee-approved replacement opportunities."
                 )
-            
-            # 2. Every 30 minutes, hunt only when there is a reason to hunt.
-            if iteration % 6 == 0:
-                empty_slots = _hunter_empty_slots()
-                if empty_slots == 0 and not stagnant_assets:
+
+            if iteration % 6 != 0:
+                continue
+
+            empty_slots = _hunter_empty_slots()
+            if empty_slots == 0 and not stagnant_assets:
+                logger.info(
+                    f"🏹 Hunter Monitor: All {MAX_POSITIONS} trading slots are full; "
+                    "skipping discovery, committee, and execution calls."
+                )
+                continue
+
+            logger.info(
+                f"🏹 Hunter Monitor: Running opportunity analysis "
+                f"({empty_slots} empty slot(s), {len(stagnant_assets)} stagnant)..."
+            )
+
+            try:
+                from core.signal_generator import analyze_batch
+                from core.asset_universe import get_universe
+                from core.data_fetcher import get_mtf_data
+                from config_loader import get_config
+                from core.strategy_manager import StrategyManager
+
+                # Discovery uses the same live signal-scanner universe as the
+                # primary scanner. Hunter does not invent a second universe.
+                selected_assets = get_universe().signal_scanner_coins()
+
+                # Never send already-open assets into discovery/committee work.
+                open_assets = set(state.OPEN_POSITIONS.keys())
+                selected_assets = [
+                    asset for asset in selected_assets
+                    if asset not in open_assets
+                ]
+
+                # Keep discovery bounded. This is NOT the committee; only
+                # prefiltered candidates reach the canonical StrategyManager.
+                chunk_assets = selected_assets[:10]
+                items = {
+                    asset: get_mtf_data(asset)
+                    for asset in chunk_assets
+                }
+                items = {
+                    asset: data
+                    for asset, data in items.items()
+                    if data
+                }
+
+                if not items:
                     logger.info(
-                        f"🏹 Hunter Monitor: All {MAX_POSITIONS} trading slots are full; "
-                        "skipping Top-10 analysis and execution API calls."
+                        "🏹 Hunter Monitor: No candidate market data available "
+                        "after slot/open-position filtering."
                     )
                     continue
 
                 logger.info(
-                    f"🏹 Hunter Monitor: Running opportunity analysis "
-                    f"({empty_slots} empty slot(s), {len(stagnant_assets)} stagnant)..."
+                    f"🔎 Hunter Monitor: Prefiltering {len(items)} discovery "
+                    "candidate(s) before strategy committee..."
                 )
-                
-                try:
-                    from core.signal_generator import analyze_batch
-                    from core.asset_universe import get_universe
-                    from core.data_fetcher import get_mtf_data
-                    from config_loader import get_config
-                    from core.strategy_manager import StrategyManager
 
-                    # HARD GATE: Hunter uses the same live signal-scanning universe
-                    # as the primary scanner, then filters candidates before the
-                    # existing six-strategy committee is invoked.
-                    selected_assets = get_universe().signal_scanner_coins()
+                # Discovery only. This does not select the execution strategy.
+                results, provider = await analyze_batch(items, get_config())
+                logger.info(f"🧠 Hunter discovery provider: {provider}")
 
-                    # Never analyze assets that are already open.
-                    open_assets = set(state.OPEN_POSITIONS.keys())
-                    selected_assets = [
-                        asset for asset in selected_assets
-                        if asset not in open_assets
-                    ]
+                committee = StrategyManager()
+                pending_signals = []
 
-                    # Keep the discovery stage bounded. These assets are NOT all
-                    # sent to the committee; MBIO intelligence prefilters them.
-                    chunk_assets = selected_assets[:10]
-                    items = {
-                        asset: get_mtf_data(asset)
-                        for asset in chunk_assets
-                    }
-                    items = {asset: data for asset, data in items.items() if data}
+                for asset_name, data in items.items():
+                    result = results.get(asset_name) or {}
+                    discovery_signal = result.get("signal", "HOLD")
+                    discovery_conf = int(result.get("confidence", 0) or 0)
 
-                    if not items:
-                        logger.info("🏹 Hunter Monitor: No candidate market data available after slot/open-position filtering.")
+                    # Avoid unnecessary committee churn. The canonical committee
+                    # still makes the actual opportunity decision.
+                    if (
+                        discovery_conf < MIN_CONFIDENCE
+                        or "HOLD" in discovery_signal.upper()
+                    ):
+                        logger.debug(
+                            f"🏹 Hunter prefilter rejected {asset_name}: "
+                            f"signal={discovery_signal} conf={discovery_conf}%"
+                        )
                         continue
 
-                    logger.info(
-                        f"🔎 Hunter Monitor: Prefiltering {len(items)} discovery candidate(s) "
-                        "before strategy committee..."
+                    committee_signal, committee_conf, committee_strategy = (
+                        await committee.get_trade_signal(data)
                     )
 
-                    # Discovery/prefilter only. This does NOT replace the strategy
-                    # committee and does NOT select the execution strategy.
-                    results, provider = await analyze_batch(items, get_config())
-                    logger.info(f"🧠 Hunter discovery provider: {provider}")
+                    logger.info(
+                        f"🗳️ Hunter Committee: {asset_name} | "
+                        f"signal={committee_signal} conf={committee_conf}% "
+                        f"winner={committee_strategy}"
+                    )
 
-                    committee = StrategyManager()
-                    pending_signals = []
-
-                    for asset_name, data in items.items():
-                        result = results.get(asset_name) or {}
-                        discovery_signal = result.get("signal", "HOLD")
-                        discovery_conf = result.get("confidence", 0)
-
-                        # Avoid sending every discovered asset through all six
-                        # strategies. Only actionable discovery candidates reach
-                        # the canonical committee.
-                        if discovery_conf < MIN_CONFIDENCE or "HOLD" in discovery_signal.upper():
-                            logger.debug(
-                                f"🏹 Hunter prefilter rejected {asset_name}: "
-                                f"signal={discovery_signal} conf={discovery_conf}%"
-                            )
-                            continue
-
-                        # THIS IS THE EXISTING COMMITTEE. Hunter does not reproduce
-                        # its voting, weighting, MetaLearner, or regime-gate logic.
-                        committee_signal, committee_conf, committee_strategy = await committee.get_trade_signal(data)
-
+                    if (
+                        committee_signal == "HOLD"
+                        or int(committee_conf or 0) < MIN_CONFIDENCE
+                    ):
                         logger.info(
-                            f"🗳️ Hunter Committee: {asset_name} | "
-                            f"signal={committee_signal} conf={committee_conf}% "
-                            f"winner={committee_strategy}"
+                            f"🏹 Hunter rejected by committee: {asset_name} | "
+                            f"signal={committee_signal} conf={committee_conf}%"
                         )
+                        continue
 
-                        if committee_signal == "HOLD" or committee_conf < MIN_CONFIDENCE:
-                            logger.info(
-                                f"🏹 Hunter rejected by committee: {asset_name} | "
-                                f"signal={committee_signal} conf={committee_conf}%"
-                            )
-                            continue
-
-                        regime = getattr(committee, "current_regime", "RANGING")
-                        pending_signals.append({
+                    regime = getattr(committee, "current_regime", "RANGING")
+                    pending_signals.append(
+                        {
                             "asset": asset_name,
                             "signal": committee_signal,
-                            "confidence": committee_conf,
+                            "confidence": int(committee_conf),
                             "regime": regime,
                             "strategy": committee_strategy,
                             "committee_passed": True,
                             "data": data,
-                        })
-
-                    if pending_signals:
-                        await run_hunter_protocol_idle(
-                            pending_signals,
-                            None,
-                            system=system,
-                        )
-                    else:
-                        logger.info("🏹 Hunter Monitor: No committee-approved opportunities in this phase.")
-                            
-                except Exception as e:
-                    import traceback
-                    logger.error(
-                        f"🏹 Hunter Monitor: Failed to analyze opportunity universe: "
-                        f"{e}\n{traceback.format_exc()}"
+                        }
                     )
-                
-        except Exception as e:
-            logger.error(f"🏹 Hunter Monitor: Loop error: {e}")
+
+                if pending_signals:
+                    await run_hunter_protocol_idle(
+                        pending_signals,
+                        None,
+                        system=system,
+                    )
+                else:
+                    logger.info(
+                        "🏹 Hunter Monitor: No committee-approved opportunities in this phase."
+                    )
+
+            except Exception as exc:
+                logger.exception(
+                    f"🏹 Hunter Monitor: Failed to analyze opportunity universe: {exc}"
+                )
+
+        except asyncio.CancelledError:
+            logger.info("🏹 Hunter Monitor: Cancelled")
+            raise
+        except Exception as exc:
+            logger.error(f"🏹 Hunter Monitor: Loop error: {exc}")
             await asyncio.sleep(60)
