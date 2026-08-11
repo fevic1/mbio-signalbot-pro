@@ -19,7 +19,7 @@ from routes.dashboard_auth import (
 )
 from routes.dashboard_sse import dashboard_sse_stream
 from core.app_context import app_context
-from core.mcp_registry import MCPServerConfig
+from core.mcp_registry import MCPServerConfig, mcp_registry
 from core.executor_utils import run_executor_method
 from core.exchange_limits import get_exchange_limits, can_trade
 
@@ -2134,45 +2134,26 @@ async def get_regime(asset: str = "BTC"):
 # Exposes internal MCP registry to frontend via JWT-authenticated API
 # ============================================================
 @router.get("/mcp/servers")
-async def get_mcp_servers(current_user: dict = Depends(get_current_user)):
-    """List all registered MCP servers. Requires valid JWT session."""
+async def get_mcp_servers(
+    current_user: dict = Depends(get_current_user),
+):
+    """List registered MCP servers through the canonical registry."""
     try:
-        from core.mcp_registry import mcp_registry
-        servers = await mcp_registry.list_servers()
-        return {"servers": servers}
+        servers = await mcp_registry.get_all_servers()
+
+        return {
+            "servers": [
+                {
+                    "server_id": server.server_id,
+                    "name": server.name,
+                    "description": server.description,
+                    "rate_limit_per_min": server.rate_limit_per_min,
+                    "is_active": server.enabled,
+                }
+                for server in servers
+            ]
+        }
+
     except Exception as e:
         logger.error(f"get_mcp_servers failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/mcp/register")
-async def register_mcp_server(
-    payload: dict,
-    current_user: dict = Depends(get_current_user)
-):
-    """Register a new MCP server. Requires valid JWT session + OTP for write ops."""
-    try:
-        from core.mcp_registry import mcp_registry
-        from core.mcp_models import MCPServerConfig
-        
-        config = MCPServerConfig(**payload)
-        await mcp_registry.register_server(config)
-        logger.info(f"MCP server registered: {config.server_id} by {current_user.get('email')}")
-        return {"success": True, "server_id": config.server_id}
-    except Exception as e:
-        logger.error(f"register_mcp_server failed: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.post("/mcp/unregister/{server_id}")
-async def unregister_mcp_server(
-    server_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Unregister an MCP server. Requires valid JWT session."""
-    try:
-        from core.mcp_registry import mcp_registry
-        await mcp_registry.unregister_server(server_id)
-        logger.info(f"MCP server unregistered: {server_id} by {current_user.get('email')}")
-        return {"success": True}
-    except Exception as e:
-        logger.error(f"unregister_mcp_server failed: {e}")
-        raise HTTPException(status_code=404, detail=str(e))
