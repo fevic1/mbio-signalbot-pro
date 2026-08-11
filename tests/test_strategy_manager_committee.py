@@ -72,7 +72,7 @@ async def test_three_three_split_is_hold():
     )
 
     assert signal == "HOLD"
-    assert confidence >= 0
+    assert confidence == 0
     assert winner == "ENSEMBLE"
 
 
@@ -92,7 +92,7 @@ async def test_single_high_confidence_strategy_cannot_bypass_committee():
     )
 
     assert signal == "HOLD"
-    assert confidence == 99
+    assert confidence == 0
     assert winner == "ENSEMBLE"
 
 
