@@ -19,7 +19,7 @@ class MCPServerConfig:
     endpoint: Optional[str] = None
     enabled: bool = True
     metadata: Dict[str, Any] = field(default_factory=dict)
-    registered_at: datetime = field(default_factory=datetime.utcnow)
+    registered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_heartbeat: Optional[datetime] = None
 
 
@@ -42,6 +42,31 @@ class MCPRegistry:
             self._servers[config.server_id] = config
             self._tools[config.server_id] = {}
             logger.info(f"[OK] MCP Server registered: {config.name} ({config.server_id})")
+            return True
+
+    async def update_server(self, server_id: str, config: MCPServerConfig) -> bool:
+        """Update an existing MCP server without replacing its registered tools."""
+        async with self._lock:
+            existing = self._servers.get(server_id)
+            if existing is None:
+                return False
+
+            if config.server_id != server_id:
+                raise ValueError("server_id cannot be changed during an update")
+
+            # A blank API key means retain the existing credential.
+            if not config.api_key:
+                config.api_key = existing.api_key
+
+            # Preserve registry lifecycle state and existing tool registrations.
+            config.registered_at = existing.registered_at
+            config.last_heartbeat = existing.last_heartbeat
+
+            self._servers[server_id] = config
+
+            logger.info(
+                f"[UPDATED] MCP Server updated: {config.name} ({server_id})"
+            )
             return True
 
     async def unregister_server(self, server_id: str) -> bool:

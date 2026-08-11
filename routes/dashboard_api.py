@@ -2075,6 +2075,28 @@ async def register_mcp_server(
         raise HTTPException(status_code=409, detail=f"Server ID '{config.server_id}' already exists or is invalid.")
     return {"status": "success", "server_id": config.server_id}
 
+@router.put("/mcp/servers/{server_id}")
+async def update_mcp_server(
+    server_id: str,
+    config: MCPServerConfig,
+    current_user: dict = Depends(get_current_user),
+):
+    """Update an existing MCP server through the canonical registry."""
+    if config.server_id != server_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Server ID cannot be changed during an update.",
+        )
+
+    success = await mcp_registry.update_server(server_id, config)
+    if not success:
+        raise HTTPException(status_code=404, detail="Server not found.")
+
+    return {
+        "status": "success",
+        "server_id": server_id,
+    }
+
 @router.post("/mcp/unregister/{server_id}")
 async def unregister_mcp_server(
     server_id: str,
@@ -2148,6 +2170,7 @@ async def get_mcp_servers(
                     "name": server.name,
                     "description": server.description,
                     "rate_limit_per_min": server.rate_limit_per_min,
+                    "endpoint": server.endpoint,
                     "is_active": server.enabled,
                 }
                 for server in servers

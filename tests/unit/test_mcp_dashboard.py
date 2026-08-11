@@ -83,6 +83,7 @@ async def test_dashboard_lists_registry_metadata_without_api_key():
             "name": "Test MCP",
             "description": "Dashboard MCP regression test",
             "rate_limit_per_min": 60,
+            "endpoint": "https://example.test/mcp",
             "is_active": True,
         }
         assert "api_key" not in server
@@ -152,6 +153,63 @@ async def test_dashboard_unregister_missing_server_returns_404():
     assert exc.value.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_dashboard_updates_server_and_preserves_existing_api_key():
+    server_id = f"test-mcp-{uuid.uuid4().hex[:10]}"
+    config = make_config(server_id)
+
+    try:
+        assert await mcp_registry.register_server(config)
+
+        updated = MCPServerConfig(
+            server_id=server_id,
+            name="Updated MCP",
+            description="Updated dashboard MCP",
+            api_key=None,
+            rate_limit_per_min=120,
+            endpoint="https://updated.example.test/mcp",
+            enabled=False,
+        )
+
+        result = await dashboard_api.update_mcp_server(
+            server_id,
+            updated,
+            {"email": "test@mbio.com"},
+        )
+
+        assert result == {
+            "status": "success",
+            "server_id": server_id,
+        }
+
+        registered = await mcp_registry.get_server(server_id)
+
+        assert registered is not None
+        assert registered.name == "Updated MCP"
+        assert registered.description == "Updated dashboard MCP"
+        assert registered.rate_limit_per_min == 120
+        assert registered.endpoint == "https://updated.example.test/mcp"
+        assert registered.enabled is False
+        assert registered.api_key == config.api_key
+
+    finally:
+        await mcp_registry.unregister_server(server_id)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_update_missing_server_returns_404():
+    server_id = f"missing-mcp-{uuid.uuid4().hex[:10]}"
+
+    with pytest.raises(HTTPException) as exc:
+        await dashboard_api.update_mcp_server(
+            server_id,
+            make_config(server_id),
+            {"email": "test@mbio.com"},
+        )
+
+    assert exc.value.status_code == 404
+
+
 def test_dashboard_mcp_routes_are_registered():
     routes = {
         (method, route.path)
@@ -161,6 +219,7 @@ def test_dashboard_mcp_routes_are_registered():
 
     assert ("GET", "/api/dashboard/mcp/servers") in routes
     assert ("POST", "/api/dashboard/mcp/register") in routes
+    assert ("PUT", "/api/dashboard/mcp/servers/{server_id}") in routes
     assert ("POST", "/api/dashboard/mcp/unregister/{server_id}") in routes
 
 

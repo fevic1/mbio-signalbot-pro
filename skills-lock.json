@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "skills": {
+    "chain-ecosystem": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "chain-ecosystem/SKILL.md",
+      "computedHash": "51a9bd488d44a09b669ee1a823d0f465ee97f393d49a34c412d448de95867761"
+    },
+    "defi-data": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "defi-data/SKILL.md",
+      "computedHash": "a85bb4e65684118b9d93556438d5324b7e426e6eeb97ad753720385859e44011"
+    },
+    "defi-market-overview": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "defi-market-overview/SKILL.md",
+      "computedHash": "05a5e817bb4f219ebc5dbb80151612dac26dda8e3fd49d42ca9b94f6ae9ed412"
+    },
+    "defillama-setup": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "defillama-setup/SKILL.md",
+      "computedHash": "414194dd4bdef00ce35d59f5dfc1574bfcb4c2552779ab23155ba5f58b1ef96d"
+    },
+    "flows-and-events": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "flows-and-events/SKILL.md",
+      "computedHash": "e30e6b79d76db06d7097d2b0f46aee9fccb220c31268797c4aa6635396db7c99"
+    },
+    "institutional-crypto": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "institutional-crypto/SKILL.md",
+      "computedHash": "3ea31efe5eb3c6c61182492f5933fc5021417ccf6d95a33dde3507b4e7df7a94"
+    },
+    "market-analysis": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "market-analysis/SKILL.md",
+      "computedHash": "5e7dc10b69f991119d4261e7b02c0c504e3f8e7a9a6a9b295f384b231895c9e3"
+    },
+    "protocol-deep-dive": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "protocol-deep-dive/SKILL.md",
+      "computedHash": "66742ed0c72b85608e070318faf2fdd825f96839be128273be4cd1eb93f94e67"
+    },
+    "risk-assessment": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "risk-assessment/SKILL.md",
+      "computedHash": "4879a84bc4d5c1b453e510520de71e594b1b64a17217e4efc57370a42beb85c7"
+    },
+    "token-research": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "token-research/SKILL.md",
+      "computedHash": "c357da039ae10f47f6d30995067edc3f04c487e8e29ae5c7f2146a0d91e9f107"
+    },
+    "yield-strategies": {
+      "source": "DefiLlama/defillama-skills",
+      "sourceType": "github",
+      "skillPath": "yield-strategies/SKILL.md",
+      "computedHash": "c45f3d4771adf9eced3f1ca37010c0302e4836683284f9e6b7e9463467e563aa"
+    }
+  }
+}
