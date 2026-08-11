@@ -38,10 +38,26 @@ class MCPRegistry:
             if config.server_id in self._servers:
                 logger.warning(f"[DUPLICATE] MCP Server already registered: {config.server_id}")
                 return False
-
             self._servers[config.server_id] = config
             self._tools[config.server_id] = {}
             logger.info(f"[OK] MCP Server registered: {config.name} ({config.server_id})")
+            return True
+
+    async def update_server(self, server_id: str, config: MCPServerConfig) -> bool:
+        """Update an existing server without replacing its registered tool set."""
+        async with self._lock:
+            existing = self._servers.get(server_id)
+            if existing is None:
+                return False
+            if config.server_id != server_id:
+                logger.warning("[INVALID] MCP server ID cannot be changed during update")
+                return False
+            if not config.api_key:
+                config.api_key = existing.api_key
+            config.registered_at = existing.registered_at
+            config.last_heartbeat = existing.last_heartbeat
+            self._servers[server_id] = config
+            logger.info(f"[UPDATED] MCP Server updated: {config.name} ({server_id})")
             return True
 
     async def unregister_server(self, server_id: str) -> bool:
@@ -49,7 +65,6 @@ class MCPRegistry:
         async with self._lock:
             if server_id not in self._servers:
                 return False
-
             del self._servers[server_id]
             del self._tools[server_id]
             logger.info(f"[REMOVED] MCP Server unregistered: {server_id}")
@@ -61,53 +76,42 @@ class MCPRegistry:
             if server_id not in self._servers:
                 logger.error(f"[ERROR] Cannot register tool: server {server_id} not found")
                 return False
-
             self._tools[server_id][tool_name] = tool_schema
             logger.debug(f"[TOOL] Registered tool '{tool_name}' for server {server_id}")
             return True
 
     async def get_server(self, server_id: str) -> Optional[MCPServerConfig]:
-        """Get server configuration by ID."""
         async with self._lock:
             return self._servers.get(server_id)
 
     async def get_tools(self, server_id: str) -> Dict[str, Any]:
-        """Get all tools for a specific server."""
         async with self._lock:
             return self._tools.get(server_id, {})
 
     async def get_all_servers(self) -> List[MCPServerConfig]:
-        """Get all registered servers."""
         async with self._lock:
             return list(self._servers.values())
 
     async def get_all_tools(self) -> Dict[str, Dict[str, Any]]:
-        """Get all tools across all servers."""
         async with self._lock:
             return dict(self._tools)
 
     async def update_heartbeat(self, server_id: str) -> bool:
-        """Update heartbeat timestamp for a server."""
         async with self._lock:
             if server_id not in self._servers:
                 return False
-
             self._servers[server_id].last_heartbeat = datetime.now(timezone.utc)
             return True
 
     async def is_server_alive(self, server_id: str, timeout_seconds: int = 60) -> bool:
-        """Check if a server is alive based on heartbeat."""
         async with self._lock:
             if server_id not in self._servers:
                 return False
-
             server = self._servers[server_id]
             if server.last_heartbeat is None:
                 return False
-
             elapsed = (datetime.now(timezone.utc) - server.last_heartbeat).total_seconds()
             return elapsed < timeout_seconds
 
 
-# Singleton instance
 mcp_registry = MCPRegistry()
