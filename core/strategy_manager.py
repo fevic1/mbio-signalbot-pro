@@ -1,6 +1,7 @@
 import logging
 import asyncio
 from typing import Dict, Any, Tuple
+
 from strategies.momentum import MomentumStrategy
 from strategies.meanreversion import MeanReversionStrategy
 from strategies.breakout import BreakoutStrategy
@@ -13,7 +14,33 @@ from core.regime import detect_regime
 
 logger = logging.getLogger(__name__)
 
+MIN_VOTES_TO_PASS = 4
+TOTAL_COMMITTEE_VOTERS = 6
+MIN_CONSENSUS_CONFIDENCE = 70
+
+
 class StrategyManager:
+    """Six-strategy trading committee.
+
+    The committee is limited to the six strategies represented by MetaLearner
+    weights: Momentum, MeanReversion, Breakout, Carry, SimpleRSI and LLM.
+    DeterministicStrategy remains available for other callers but is not a
+    committee voter.
+
+    A trade decision requires a true 4-of-6 directional majority and a
+    weighted confidence of at least 70%. Individual high-confidence strategies
+    cannot bypass the committee.
+    """
+
+    COMMITTEE = (
+        "Momentum",
+        "MeanReversion",
+        "Breakout",
+        "Carry",
+        "SimpleRSI",
+        "LLM",
+    )
+
     def __init__(self):
         self.strategies = {
             "Momentum": MomentumStrategy(),
@@ -28,115 +55,133 @@ class StrategyManager:
         self.current_regime = "RANGING"
         self.last_signal_cache = {}
 
-    async def get_trade_signal(self, asset_data: Dict[str, Any]) -> Tuple[str, int, str]:
-        final_signal = "HOLD"  # 🛡️ Prevent UnboundLocalError
-        final_confidence = 0
-        used_strategy = "ENSEMBLE"
-        # Detect regime
+    async def get_trade_signal(
+        self,
+        asset_data: Dict[str, Any],
+        llm_signal: str | None = None,
+        llm_confidence: int = 0,
+    ) -> Tuple[str, int, str]:
+        """Evaluate the six-strategy committee and return its final decision.
+
+        ``llm_signal``/``llm_confidence`` let the canonical MBIO intelligence
+        result serve as the LLM committee vote without making a second API
+        request. When omitted, the LLM strategy remains a HOLD voter.
+        """
         if "4h" in asset_data and asset_data["4h"].get("candles"):
             self.current_regime = detect_regime(asset_data["4h"])
         else:
             self.current_regime = "RANGING"
 
         weights = self.meta.get_weights(self.current_regime)
+        committee_weights = {
+            name: float(weights.get(name, 0.0))
+            for name in self.COMMITTEE
+        }
 
-        # 🛡️ ARCHITECTURAL FIX: Prevent Meta-Learner Weight Collapse
-        if not weights or sum(weights.values()) < 0.5:
-            weights = {name: 1.0 for name in self.strategies.keys()}
-            logger.warning("⚠️ Meta-Learner weights collapsed. Forcing uniform committee distribution.")
-
+        if sum(committee_weights.values()) <= 0:
+            committee_weights = {name: 1.0 for name in self.COMMITTEE}
 
         tasks = []
-        for name, strat in self.strategies.items():
-            if name not in weights or weights[name] <= 0:
-                continue
-            tasks.append(self._get_strategy_signal(strat, asset_data, name))
+        for name in self.COMMITTEE:
+            if name == "LLM" and llm_signal is not None:
+                tasks.append(self._provided_llm_vote(llm_signal, llm_confidence))
+            else:
+                tasks.append(
+                    self._get_strategy_signal(
+                        self.strategies[name],
+                        asset_data,
+                        name,
+                    )
+                )
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        weighted_sum = 0.0
-        total_weight = 0.0
-        best_signal = None
-        best_confidence = 0
-        used_strategy = None
-
-        sniper_signal = None
-        sniper_conf = 0
-        
+        votes = []
         for res in results:
             if isinstance(res, Exception):
-                logger.error(f"Strategy error: {res}")
+                logger.error("Strategy error: %s", res)
                 continue
+
             name, signal, conf = res
-            
-            # SNIPER OVERRIDE: If any strategy is > 85% confident, force it
-            if conf >= 85 and signal != "HOLD":
-                if conf > sniper_conf:
-                    sniper_conf = conf
-                    sniper_signal = signal
-                    sniper_name = name
-                    
-            weight = weights.get(name, 0.1)
-            numeric = 1 if signal == "BUY" else -1 if signal == "SELL" else 0
-            weighted_sum += numeric * conf * weight
-            total_weight += weight
-            if conf > best_confidence and signal != "HOLD":
-                best_confidence = conf
-                best_signal = signal
-                used_strategy = name
+            signal = str(signal or "HOLD").upper().strip()
+            if signal not in {"BUY", "SELL", "HOLD"}:
+                signal = "HOLD"
 
-        # Return Sniper Override if triggered
-        if sniper_signal:
-            logger.info(f"🎯 SNIPER OVERRIDE: {sniper_name} triggered with {sniper_conf}% confidence! (Bypassing Ensemble)")
-            return sniper_signal, sniper_conf, sniper_name
+            try:
+                conf = max(0, min(100, int(conf)))
+            except (TypeError, ValueError):
+                conf = 0
 
-        if total_weight == 0:
-            return best_signal or "HOLD", best_confidence, used_strategy or "LLM"
+            votes.append({
+                "strategy": name,
+                "signal": signal,
+                "confidence": conf,
+                "weight": committee_weights.get(name, 0.0),
+            })
 
-        norm = weighted_sum / (total_weight * 100)
-        if norm > 0.2:
-            final_signal = "BUY"
-            conf = int(min(100, norm * 100))
-        elif norm < -0.3:
-            final_signal = "SELL"
-            conf = int(min(100, -norm * 100))
+        buy_votes = [v for v in votes if v["signal"] == "BUY"]
+        sell_votes = [v for v in votes if v["signal"] == "SELL"]
+
+        if len(buy_votes) >= len(sell_votes):
+            winner_signal = "BUY"
+            winning_votes = buy_votes
         else:
-            # WEAK ENSEMBLE: Use best individual strategy instead of blocking
-            if best_signal and best_confidence > 0:
-                final_signal = best_signal
-                conf = best_confidence
-                # 🛡️ PHASE 4: BLIND SPOT OVERRIDE (Deterministic Math Fallback)
-                _rsi_1d = float(asset_data.get("1d", {}).get("rsi", 50))
-                _rsi_1h = float(asset_data.get("1h", {}).get("rsi", 50))
-                
-                if _rsi_1d < 30 and _rsi_1h < 45:
-                    logger.info(f"🚀 BLIND SPOT OVERRIDE: 1D RSI={_rsi_1d:.1f} < 30 & 1H RSI={_rsi_1h:.1f} < 45. Deterministic BUY.")
-                    return "BUY", 85, "DETERMINISTIC_MATH"
-                elif _rsi_1d > 70 and _rsi_1h > 65:
-                    logger.info(f"🚀 BLIND SPOT OVERRIDE: 1D RSI={_rsi_1d:.1f} > 70 & 1H RSI={_rsi_1h:.1f} > 65. Deterministic SELL.")
-                    return "SELL", 85, "DETERMINISTIC_MATH"
-                else:
-                    pass  # 🛡️ Auto-fixed empty block
-        winner = locals().get("winner", "ENSEMBLE")
-        
-        # 🛡️ INSTITUTIONAL REGIME GATE: Enforce directional rules before execution
+            winner_signal = "SELL"
+            winning_votes = sell_votes
+
+        vote_count = len(winning_votes)
+        total_weight = sum(v["weight"] for v in winning_votes)
+        weighted_confidence = (
+            sum(v["confidence"] * v["weight"] for v in winning_votes) / total_weight
+            if total_weight > 0
+            else 0.0
+        )
+
+        passed = (
+            vote_count >= MIN_VOTES_TO_PASS
+            and weighted_confidence >= MIN_CONSENSUS_CONFIDENCE
+        )
+
+        final_signal = winner_signal if passed else "HOLD"
+        final_confidence = int(round(weighted_confidence))
+
         if final_signal != "HOLD":
             if self.current_regime == "TRENDING_UP" and final_signal == "SELL":
-                logger.info(f"🚫 REGIME GATE: Blocked SELL signal in TRENDING_UP regime (prevents counter-trend shorts).")
-                final_signal, conf, winner = "HOLD", 0, "REGIME_GATE"
+                logger.info(
+                    "🚫 REGIME GATE: Blocked committee SELL in TRENDING_UP regime."
+                )
+                final_signal, final_confidence = "HOLD", 0
             elif self.current_regime == "TRENDING_DOWN" and final_signal == "BUY":
-                logger.info(f"🚫 REGIME GATE: Blocked BUY signal in TRENDING_DOWN regime (prevents catching falling knives).")
-                final_signal, conf, winner = "HOLD", 0, "REGIME_GATE"
-            elif self.current_regime == "RANGING" and winner in ["Momentum", "Breakout"]:
-                logger.info(f"🚫 REGIME GATE: Blocked directional {winner} signal in RANGING regime (prevents false breakouts).")
-                final_signal, conf, winner = "HOLD", 0, "REGIME_GATE"
+                logger.info(
+                    "🚫 REGIME GATE: Blocked committee BUY in TRENDING_DOWN regime."
+                )
+                final_signal, final_confidence = "HOLD", 0
 
-        logger.info(f"🏆 Ensemble Vote: {final_signal} | Winning Strategy: {winner} | Consensus Score: {conf}% | Regime: {self.current_regime}")
-        return final_signal, conf, winner
+        logger.info(
+            "🏆 Ensemble Vote: %s | Votes: %d/%d | Confidence: %d%% | Regime: %s | Committee=%s",
+            final_signal,
+            vote_count,
+            TOTAL_COMMITTEE_VOTERS,
+            final_confidence,
+            self.current_regime,
+            ",".join(
+                f"{v['strategy']}={v['signal']}:{v['confidence']}"
+                for v in votes
+            ),
+        )
+        return final_signal, final_confidence, "ENSEMBLE"
+
+    async def _provided_llm_vote(self, signal: str, confidence: int):
+        return "LLM", signal, confidence
 
     async def _get_strategy_signal(self, strat, data, name):
         if asyncio.iscoroutinefunction(strat.calculate_signal):
             sig, conf = await strat.calculate_signal(data)
         else:
             loop = asyncio.get_event_loop()
-            sig, conf = await loop.run_in_executor(None, strat.calculate_signal, data)
+            sig, conf = await loop.run_in_executor(
+                None,
+                strat.calculate_signal,
+                data,
+            )
         return name, sig, conf
