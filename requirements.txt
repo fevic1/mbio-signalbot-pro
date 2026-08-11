@@ -2,7 +2,7 @@ hyperliquid-python-sdk
 # Paste contents of requirements-hl.txt here after running Step 1
 # For now, using known-working base from SDK v0.8.x:
 eth-account==0.10.0
-websockets==11.0.3
+websockets>=15.0.1,<16.0
 msgpack==1.0.7
 requests==2.31.0
 pycryptodome==3.19.0
