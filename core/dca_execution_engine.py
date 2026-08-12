@@ -13,6 +13,7 @@ from core.app_context import app_context
 from core.execution_coordinator import ExecutionCoordinator, ExecutionResult
 from core.market_cache import market_cache
 from core.exchange_limits import get_exchange_limits
+from core.asset_universe import AssetUniverse
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +93,32 @@ class DCAExecutionEngine:
         return abs(new_price - old_price) / abs(old_price) * 100.0 >= threshold_pct
 
     @staticmethod
-    def _normalize_order(order: DCAOrder, price_decimals: int | None = None, size_decimals: int | None = None) -> DCAOrder:
-        price = round(float(order.price), price_decimals) if price_decimals is not None else float(order.price)
-        size = round(float(order.size), size_decimals) if size_decimals is not None else float(order.size)
+    def _normalize_order(
+        order: DCAOrder,
+        price_decimals: int | None = None,
+        size_decimals: int | None = None,
+        asset: str | None = None,
+    ) -> DCAOrder:
+        if asset:
+            universe = AssetUniverse()
+            if price_decimals is None:
+                tick = float(universe.tick_size(asset))
+                if tick > 0:
+                    price_decimals = max(0, len(str(tick).rstrip("0").split(".")[-1]))
+            if size_decimals is None:
+                size_decimals = int(universe.sz_decimals(asset))
+
+        price = (
+            round(float(order.price), price_decimals)
+            if price_decimals is not None
+            else float(order.price)
+        )
+        size = (
+            round(abs(float(order.size)), size_decimals)
+            if size_decimals is not None
+            else abs(float(order.size))
+        )
+
         return DCAOrder(order.level, price, size, order.side)
 
     async def _exchange_open_orders(self, asset: str) -> list[dict]:

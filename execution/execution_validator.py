@@ -9,26 +9,19 @@ class ExecutionValidationError(Exception):
 
 class ExecutionValidator:
 
-
     def validate(
         self,
         intent,
     ):
-
-
         if not intent.label:
-
             raise ExecutionValidationError(
                 "Execution label required"
             )
 
-
         if intent.size <= 0:
-
             raise ExecutionValidationError(
                 "Invalid order size"
             )
-
 
         if intent.label in (
             ExecutionLabel.QT_ENTRY,
@@ -36,32 +29,31 @@ class ExecutionValidator:
             ExecutionLabel.QT_REDUCE,
             ExecutionLabel.QT_EMERGENCY_CLOSE,
         ):
-
             if intent.order_type != OrderType.MARKET:
-
                 raise ExecutionValidationError(
                     "Quick Ticket requires MARKET execution"
                 )
-
 
         if intent.label in (
             ExecutionLabel.DCA_ENTRY,
             ExecutionLabel.DCA_ADD,
             ExecutionLabel.DCA_EXIT,
         ):
-
             if intent.order_type != OrderType.LIMIT:
-
                 raise ExecutionValidationError(
                     "DCA requires LIMIT execution"
                 )
 
+        if intent.label in (
+            ExecutionLabel.SIGNAL_ENTRY,
+            ExecutionLabel.SIGNAL_EXIT,
+        ):
+            if intent.order_type != OrderType.LIMIT:
+                raise ExecutionValidationError(
+                    "Signal execution requires LIMIT execution"
+                )
 
         return {
-
             "valid": True,
-
-            "label":
-                intent.label.value,
-
+            "label": intent.label.value,
         }

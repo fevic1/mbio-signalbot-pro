@@ -16,6 +16,11 @@ class ExecutionLabel(str, Enum):
     DCA_EXIT = "DCA_EXIT"
 
 
+# Normal signal execution
+    SIGNAL_ENTRY = "SIGNAL_ENTRY"
+    SIGNAL_EXIT = "SIGNAL_EXIT"
+
+
 def normalize_execution_label(value):
     if isinstance(value, ExecutionLabel):
         return value

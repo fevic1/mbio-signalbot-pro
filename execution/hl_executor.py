@@ -353,7 +353,7 @@ class HLExecutor:
                         result.get("avg_price", limit_px or 0)
                     )
 
-                    if reduce_only:
+                    if reduce_only and normalized_label != "SIGNAL_EXIT":
                         pos = state.OPEN_POSITIONS.get(coin)
 
                         if pos:
@@ -373,7 +373,7 @@ class HLExecutor:
                                 exit_price=price,
                                 close_reason="Exit",
                             )
-                    else:
+                    elif not reduce_only:
                         tracker.record_open_trade(
                             asset=coin,
                             side=side,

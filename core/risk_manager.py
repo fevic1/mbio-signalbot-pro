@@ -140,13 +140,27 @@ class RiskManager:
         max_total_exposure_pct: float = 5.0,
         **kwargs,
     ):
-
         # Backward compatibility:
         # RiskManager(config)
         # RiskManager(max_risk_per_trade=0.02)
+        #
+        # Active YAML schema:
+        #   risk:
+        #       max_risk_per_trade_pct
+        #       max_total_risk_pct
+        #       max_total_exposure_pct
+        #
+        # Historical schema:
+        #   risk_management: {...}
 
         if isinstance(config, dict):
-            risk_cfg = config.get("risk_management", config)
+            risk_cfg = config.get("risk_management")
+
+            if not isinstance(risk_cfg, dict):
+                risk_cfg = config.get("risk")
+
+            if not isinstance(risk_cfg, dict):
+                risk_cfg = config
 
             max_risk_per_trade = risk_cfg.get(
                 "max_risk_per_trade_pct",
@@ -184,7 +198,6 @@ class RiskManager:
         self.max_total_exposure_pct = float(
             max_total_exposure_pct
         )
-
 
     def calculate_economic_trade_plan(
         self,
@@ -348,6 +361,45 @@ class RiskManager:
         return True, "OK"
 
 
+    def check_capital_usage(
+        self,
+        balance: float,
+        new_size: float,
+        new_entry: float,
+        open_positions: Dict[str, Any],
+    ):
+        """Validate proposed exposure against the configured capital limit."""
+        try:
+            balance = float(balance)
+            new_size = float(new_size)
+            new_entry = float(new_entry)
+
+            if balance <= 0 or new_size <= 0 or new_entry <= 0:
+                return False, "Invalid capital usage inputs"
+
+            current_exposure = sum(
+                float(pos.get("size", 0) or 0)
+                * float(pos.get("entry", 0) or 0)
+                for pos in (open_positions or {}).values()
+                if isinstance(pos, dict)
+            )
+
+            proposed_exposure = new_size * new_entry
+            max_exposure = balance * float(self.max_total_exposure_pct)
+
+            if current_exposure + proposed_exposure > max_exposure:
+                return (
+                    False,
+                    f"Total exposure ${current_exposure + proposed_exposure:.2f} "
+                    f"exceeds limit ${max_exposure:.2f}",
+                )
+
+            return True, "OK"
+
+        except (TypeError, ValueError) as exc:
+            logger.error("check_capital_usage failed: %s", exc)
+            return False, f"Capital usage validation error: {exc}"
+
     def check_correlation(self, asset, open_positions):
 
         l1_assets = {
@@ -447,7 +499,9 @@ def calculate_trade_plan(
     atr: float,
 ) -> Dict:
 
-    manager = RiskManager()
+    from config_loader import get_config
+
+    manager = RiskManager(get_config())
 
     return manager.calculate_trade_plan(
         account_balance,
@@ -480,7 +534,9 @@ def calculate_trade_plan(
     atr: float,
 ) -> Dict:
 
-    manager = RiskManager()
+    from config_loader import get_config
+
+    manager = RiskManager(get_config())
 
     return manager.calculate_trade_plan(
         account_balance,

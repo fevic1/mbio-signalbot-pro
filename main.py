@@ -458,7 +458,8 @@ def _execute_trade(asset_name, signal, entry_price, sl, tp1, tp2, tp3, size,
             side="BUY" if "BUY" in signal else "SELL",
             size=size,
             strategy=strategy,
-            regime=regime
+            regime=regime,
+            execution_label="SIGNAL_ENTRY",
         )
         return result
     except Exception as e:
@@ -603,16 +604,54 @@ async def run_trade(asset_name: str, data: dict, signal: str, conf: int,
 
     trade_plan = (entry_price, _sl, _tp1, _tp2, _tp3)
 
-    logger.info(f"{asset_name}: {signal} Conf={conf} Entry={entry_price:.4f} Size={size:.6f} (Strategy: AI ensemble)")
+    # Preserve the concrete strategy that produced the signal.
+    # Current signal reasoning uses: "Strategy: <name> | ..."
+    import re
+
+    execution_strategy = "AI ensemble"
+    strategy_match = re.search(
+        r"Strategy:\s*([^|]+)",
+        str(reasoning or ""),
+        flags=re.IGNORECASE,
+    )
+    if strategy_match:
+        candidate_strategy = strategy_match.group(1).strip()
+        if candidate_strategy:
+            execution_strategy = candidate_strategy
+
+    logger.info(
+        f"{asset_name}: {signal} Conf={conf} Entry={entry_price:.4f} "
+        f"Size={size:.6f} (Strategy: {execution_strategy})"
+    )
 
     if ENABLE_AUTO_TRADING and size > 0:
         logger.info(f"🚀 Executing {signal} {asset_name}...")
-        order_response = _execute_trade(asset_name, signal, entry_price, _sl, _tp1, _tp2, _tp3, size,
-                                        strategy="AI ensemble", regime="RANGING")
+        order_response = _execute_trade(
+            asset_name,
+            signal,
+            entry_price,
+            _sl,
+            _tp1,
+            _tp2,
+            _tp3,
+            size,
+            strategy=execution_strategy,
+            regime="RANGING",
+        )
         if order_response and order_response.get("success"):
             order_id = order_response.get("order_id", "unknown")
-            await send_execution(asset_name, "BUY" if "BUY" in signal else "SELL",
-                                 size, entry_price, _sl, _tp1, _tp2, _tp3, order_id, TELEGRAM_CHAT_ID)
+            await send_execution(
+                asset_name,
+                "BUY" if "BUY" in signal else "SELL",
+                size,
+                entry_price,
+                _sl,
+                _tp1,
+                _tp2,
+                _tp3,
+                order_id,
+                TELEGRAM_CHAT_ID,
+            )
             state.OPEN_POSITIONS[asset_name] = {
                 "side": "BUY" if "BUY" in signal else "SELL",
                 "entry": entry_price,
@@ -623,7 +662,7 @@ async def run_trade(asset_name: str, data: dict, signal: str, conf: int,
                 "tp3": _tp3,
                 "order_id": order_id,
                 "opened_at": datetime.now(timezone.utc),
-                "strategy": "AI ensemble",
+                "strategy": execution_strategy,
                 "llm_reasoning": {
                     "reasoning": reasoning,
                     "provider": provider,
@@ -659,7 +698,7 @@ async def analyze_tier(tier_name: str, tier_assets: dict) -> None:
         
     for asset_name, data in cached_assets:
         cache = state.SIGNAL_CACHE[asset_name]
-        _tp_c = calculate_trade_plan(data["1h"]["price"], data["1h"]["atr"], cache["signal"])
+        _tp_c = calculate_trade_plan(get_account_balance(), data["1h"]["price"], data["1h"]["atr"])
         trade_plan = _tp_c if _tp_c and len(_tp_c) >= 5 else (data["1h"]["price"], data["1h"]["price"]*0.97, data["1h"]["price"]*1.03, data["1h"]["price"]*1.05, data["1h"]["price"]*1.08)
         await send_signal(asset_name, data, cache["signal"], cache["confidence"], cache["reasoning"], trade_plan, "Cached", TELEGRAM_CHAT_ID)
         
@@ -679,17 +718,43 @@ async def analyze_tier(tier_name: str, tier_assets: dict) -> None:
             except Exception as e: logger.warning(f"StrategyManager failed: {e}")
                 
             if signal != "HOLD" and conf >= cfg.get("trading", {}).get("entry_min_confidence", 75):
-                _tp_s = calculate_trade_plan(data["1h"]["price"], data["1h"]["atr"], signal)
+                _tp_s = calculate_trade_plan(get_account_balance(), data["1h"]["price"], data["1h"]["atr"])
                 trade_plan = _tp_s if _tp_s and len(_tp_s) >= 5 else (data["1h"]["price"], data["1h"]["price"]*0.97, data["1h"]["price"]*1.03, data["1h"]["price"]*1.05, data["1h"]["price"]*1.08)
                 await send_signal(asset_name, data, signal, conf, reason, trade_plan, provider, TELEGRAM_CHAT_ID)
                 if asset_name not in state.OPEN_POSITIONS and len(state.OPEN_POSITIONS) < max_pos:
                     await run_trade(asset_name, data, signal, conf, reason, provider)
 
 async def run_cycle() -> None:
-    """Safe wrapper for full analysis cycle."""
-    import logging, asyncio
-    logging.getLogger(__name__).info("♻️ Run cycle executed.")
-    await asyncio.sleep(10)
+    """Run the existing normal market-analysis path."""
+    universe = get_universe()
+    ranked_coins = list(universe.signal_scanner_coins())
+
+    if not ranked_coins:
+        logger.warning("Full analysis skipped: ranked scanner universe is empty")
+        return
+
+    tier_assets = {
+        str(coin).upper(): str(coin).upper()
+        for coin in ranked_coins
+    }
+
+    logger.info(
+        "FULL SCAN: starting analysis for %d ranked assets",
+        len(tier_assets),
+    )
+
+    started_at = time.monotonic()
+
+    await analyze_tier(
+        "top_volume",
+        tier_assets,
+    )
+
+    logger.info(
+        "FULL SCAN: completed %d ranked assets in %.1fs",
+        len(tier_assets),
+        time.monotonic() - started_at,
+    )
 
 
 async def cmd_open_dca(update, context):
