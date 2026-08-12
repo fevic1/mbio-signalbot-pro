@@ -95,10 +95,6 @@ async def check_and_close_positions(chat_id: str) -> None:
             if current_price == 0:
                 continue
             should_close = False
-            close_reason = ""
-            tp_hit_label = None
-            pnl_usd = 0.0
-            pnl_pct = 0.0
 
             # ============================================
             # POSITION AGE TRACKING
@@ -133,6 +129,10 @@ async def check_and_close_positions(chat_id: str) -> None:
                                 logger.info(f"⚠️ {asset} position age: {age_hours:.1f}h (warning at {warning_age}h)")
 
 
+            close_reason = ""
+            tp_hit_label = None
+            pnl_usd = 0.0
+            pnl_pct = 0.0
             entry = pos["entry"]
             size = pos["size"]
             side = pos["side"]

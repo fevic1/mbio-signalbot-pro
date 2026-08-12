@@ -1,0 +1,97 @@
+"""Generic OAuth support for remote MCP servers.
+
+Protocol/authentication is owned by the official MCP SDK.
+This module only supplies encrypted persistence and provider construction.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Awaitable, Callable
+
+from cryptography.fernet import Fernet
+from fastmcp import Client  # imported only to keep dependency visibility explicit
+from key_value.aio.stores.disk import DiskStore
+from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
+from mcp.client.auth import OAuthClientProvider, TokenStorage
+from mcp.shared.auth import OAuthClientMetadata
+
+
+class EncryptedMCPTokenStorage(TokenStorage):
+    """Encrypted persistent storage for MCP OAuth tokens and client info."""
+
+    def __init__(self, server_id: str):
+        if not server_id.strip():
+            raise ValueError("server_id is required")
+
+        base_dir = Path(
+            os.getenv("MCP_OAUTH_STORAGE_DIR", "data/mcp/oauth")
+        )
+        self.storage_dir = base_dir / server_id
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+
+        self.key_file = self.storage_dir / "storage.key"
+        self.token_dir = self.storage_dir / "tokens"
+
+        self.token_store = FernetEncryptionWrapper(
+            key_value=DiskStore(directory=str(self.token_dir)),
+            fernet=Fernet(self._storage_key()),
+        )
+
+    def _storage_key(self) -> bytes:
+        env_key = os.getenv("MCP_OAUTH_STORAGE_KEY")
+        if env_key:
+            return env_key.encode()
+
+        if self.key_file.exists():
+            return self.key_file.read_bytes()
+
+        key = Fernet.generate_key()
+        self.key_file.write_bytes(key)
+        self.key_file.chmod(0o600)
+        return key
+
+    async def get_tokens(self):
+        return await self.token_store.get("oauth_tokens")
+
+    async def set_tokens(self, tokens) -> None:
+        await self.token_store.set("oauth_tokens", tokens)
+
+    async def get_client_info(self):
+        return await self.token_store.get("oauth_client_info")
+
+    async def set_client_info(self, client_info) -> None:
+        await self.token_store.set("oauth_client_info", client_info)
+
+
+def create_oauth_provider(
+    *,
+    server_id: str,
+    server_url: str,
+    redirect_handler: Callable[[str], Awaitable[None]],
+    callback_handler: Callable[[], Awaitable[tuple[str, str | None]]],
+) -> OAuthClientProvider:
+    """Create the official MCP OAuth provider for one server."""
+
+    metadata = OAuthClientMetadata(
+        redirect_uris=[
+            "http://127.0.0.1:8765/oauth/callback",
+        ],
+        token_endpoint_auth_method="none",
+        grant_types=["authorization_code", "refresh_token"],
+        response_types=["code"],
+        client_name="MBIO SignalBot Pro",
+        software_id="mbio-signalbot-pro",
+        software_version="1.0",
+    )
+
+    storage = EncryptedMCPTokenStorage(server_id)
+
+    return OAuthClientProvider(
+        server_url=server_url,
+        client_metadata=metadata,
+        storage=storage,
+        redirect_handler=redirect_handler,
+        callback_handler=callback_handler,
+    )

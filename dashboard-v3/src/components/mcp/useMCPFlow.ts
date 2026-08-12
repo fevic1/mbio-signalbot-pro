@@ -8,7 +8,6 @@ export const STEPS = {
   CONNECT: 'connect',
   AUTHENTICATE: 'authenticate',
   DISCOVER: 'discover',
-  REGISTER: 'register',
   HEALTH: 'health',
   READY: 'ready',
   ERROR: 'error',
@@ -18,13 +17,24 @@ export function useMCPFlow() {
   const [step, setStep] = useState<string>(STEPS.IDLE)
   const [error, setError] = useState<string | null>(null)
   const [serverId, setServerId] = useState<string | null>(null)
-  const [discoveredTools, setDiscoveredTools] = useState<Array<Record<string, unknown>>>([])
-  const [healthStatus, setHealthStatus] = useState<Record<string, unknown> | null>(null)
-  const [logs, setLogs] = useState<Array<{ time: string; message: string }>>([])
+  const [discoveredTools, setDiscoveredTools] =
+    useState<Array<Record<string, unknown>>>([])
+  const [healthStatus, setHealthStatus] =
+    useState<Record<string, unknown> | null>(null)
+  const [logs, setLogs] = useState<Array<{
+    time: string
+    message: string
+  }>>([])
   const abortRef = useRef(false)
 
   const log = useCallback((message: string) => {
-    setLogs((prev) => [...prev, { time: new Date().toISOString(), message }])
+    setLogs((prev) => [
+      ...prev,
+      {
+        time: new Date().toISOString(),
+        message,
+      },
+    ])
   }, [])
 
   const reset = useCallback(() => {
@@ -43,90 +53,144 @@ export function useMCPFlow() {
     setStep(STEPS.IDLE)
   }, [log])
 
-  const runFlow = useCallback(async (config: Record<string, unknown>) => {
+  const runFlow = useCallback(async (
+    config: Record<string, unknown>,
+  ) => {
     reset()
+
     const checkAbort = () => {
-      if (abortRef.current) throw new Error('CANCELLED')
+      if (abortRef.current) {
+        throw new Error('CANCELLED')
+      }
     }
 
     try {
       setStep(STEPS.VALIDATE)
       log('Validating MCP configuration...')
+
       const validation = await mcpApi.validateConfig(config)
       checkAbort()
-      if (!validation.valid) throw new Error(validation.error || 'Configuration validation failed')
+
+      if (!validation.valid) {
+        throw new Error(
+          validation.error ||
+          'Configuration validation failed',
+        )
+      }
 
       setStep(STEPS.TRANSPORT)
       log('Detecting MCP transport...')
+
       const detected = await mcpApi.detectTransport(config)
       checkAbort()
-      const transport = detected.transport || String(config.transport || 'streamable_http')
+
+      const transport =
+        detected.transport ||
+        String(config.transport || 'streamable_http')
+
       config.transport = transport
       log(`Transport: ${transport}`)
 
       setStep(STEPS.CONNECT)
-      log('Registering MCP server...')
-      const registration = await mcpApi.registerServer(config)
-      checkAbort()
-      const sid = registration.server_id
-      setServerId(sid)
-      log(`Server registered: ${sid}`)
+      log('Connecting to MCP server...')
 
-      const auth = (config.auth as Record<string, unknown> | undefined) || { type: 'none' }
-      if (detected.auth_required || auth.type !== 'none') {
+      const result = await mcpApi.connect(config)
+      checkAbort()
+
+      if (result.status === 'auth_required') {
         setStep(STEPS.AUTHENTICATE)
-        log(`Authenticating via ${String(auth.type || 'none')}...`)
-        const authResult = await mcpApi.authenticate(sid, String(auth.type || 'none'), auth)
-        checkAbort()
-        if (!authResult.success && authResult.status !== 'healthy') {
-          throw new Error(authResult.error || 'MCP authentication failed')
+        log('MCP server requires OAuth authentication.')
+
+        if (!result.transaction_id ||
+            !result.authorization_url) {
+          throw new Error(
+            'MCP requested authentication but no OAuth authorization URL was returned.',
+          )
         }
-        log('Authentication accepted')
+
+        log('Opening OAuth authorization...')
+
+        window.open(
+          result.authorization_url,
+          '_blank',
+          'noopener,noreferrer',
+        )
+
+        for (;;) {
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          checkAbort()
+
+          const status = await mcpApi.oauthStatus(
+            result.transaction_id,
+          )
+
+          if (status.status === 'ready') {
+            setServerId(status.server_id || null)
+            setDiscoveredTools(status.tools || [])
+            setHealthStatus(status.health || null)
+            break
+          }
+
+          if (
+            status.status === 'error' ||
+            status.status === 'cancelled'
+          ) {
+            throw new Error(
+              status.error ||
+              `OAuth flow ended with status ${status.status}`,
+            )
+          }
+        }
+
+      } else if (result.status === 'ready') {
+        setServerId(result.server_id || null)
+        setDiscoveredTools(result.tools || [])
+        setHealthStatus(result.health || null)
       } else {
-        const connection = await mcpApi.connect(sid, transport, auth)
-        checkAbort()
-        if (!['healthy', 'ready'].includes(connection.status)) {
-          throw new Error(connection.error || `MCP connection status: ${connection.status}`)
-        }
-        log('MCP connection healthy')
+        throw new Error(
+          result.error ||
+          'MCP connection failed',
+        )
       }
 
       setStep(STEPS.DISCOVER)
-      log('Discovering MCP tools...')
-      const toolsResult = await mcpApi.listTools(sid)
-      checkAbort()
-      setDiscoveredTools(toolsResult.tools || [])
-      log(`Discovered ${toolsResult.tools?.length || 0} tool(s)`)
-
-      setStep(STEPS.REGISTER)
-      log('Registering discovered tools...')
-      await mcpApi.registerTools(sid, toolsResult.tools || [])
-      checkAbort()
+      log(`Discovered ${discoveredTools.length || 0} tool(s)`)
 
       setStep(STEPS.HEALTH)
-      log('Running health check...')
-      const health = await mcpApi.healthCheck(sid)
-      checkAbort()
-      setHealthStatus(health)
-      if (!['healthy', 'ready'].includes(health.status)) {
-        throw new Error(health.error || `MCP health status: ${health.status}`)
-      }
+      log('MCP connection healthy')
 
       setStep(STEPS.READY)
       log('MCP server ready')
-      return { serverId: sid, tools: toolsResult.tools || [], health }
+
+      return {
+        serverId: result.server_id || serverId,
+        tools: result.tools || discoveredTools,
+        health: result.health || healthStatus,
+      }
+
     } catch (err) {
-      if (err instanceof Error && err.message === 'CANCELLED') {
+      const message =
+        err instanceof Error
+          ? err.message
+          : String(err)
+
+      if (message === 'CANCELLED') {
         log('Flow aborted')
         return null
       }
-      const message = err instanceof Error ? err.message : String(err)
+
       setError(message)
       setStep(STEPS.ERROR)
       log(`ERROR: ${message}`)
       throw err
     }
-  }, [log, reset])
+  }, [
+    discoveredTools,
+    healthStatus,
+    log,
+    reset,
+    serverId,
+  ])
 
   return {
     step,
@@ -138,7 +202,11 @@ export function useMCPFlow() {
     runFlow,
     reset,
     cancel,
-    isRunning: ![STEPS.IDLE, STEPS.READY, STEPS.ERROR].includes(step as never),
+    isRunning: ![
+      STEPS.IDLE,
+      STEPS.READY,
+      STEPS.ERROR,
+    ].includes(step as never),
     isReady: step === STEPS.READY,
     hasError: step === STEPS.ERROR,
   }

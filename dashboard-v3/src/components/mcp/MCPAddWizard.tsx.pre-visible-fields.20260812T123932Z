@@ -1,0 +1,133 @@
+import { useMemo, useState } from 'react'
+import useMCPFlow from './useMCPFlow'
+
+interface Props {
+  onClose: () => void
+  onSuccess?: (result: { serverId: string; tools: Array<Record<string, unknown>> }) => void
+}
+
+export default function MCPAddWizard({ onClose, onSuccess }: Props) {
+  const flow = useMCPFlow()
+  const [form, setForm] = useState({
+    server_id: '',
+    name: '',
+    description: '',
+    endpoint: '',
+    transport: 'auto',
+    auth_type: 'none',
+    api_key: '',
+    auth_token: '',
+    auth_header: 'X-API-Key',
+    rate_limit_per_min: 60,
+    enabled: true,
+  })
+
+  const runningLabel = useMemo(() => {
+    const labels: Record<string, string> = {
+      validate: 'Validating',
+      transport: 'Detecting transport',
+      connect: 'Connecting',
+      authenticate: 'Authenticating',
+      discover: 'Discovering tools',
+      register: 'Registering tools',
+      health: 'Checking health',
+    }
+    return labels[flow.step] || 'Working'
+  }, [flow.step])
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    try {
+      const auth = form.auth_type === 'api_key'
+        ? { type: 'api_key', key: form.api_key, header: form.auth_header }
+        : form.auth_type === 'none'
+          ? { type: 'none' }
+          : { type: form.auth_type, token: form.auth_token }
+
+      const result = await flow.runFlow({ ...form, auth })
+      if (result) onSuccess?.({ serverId: result.serverId, tools: result.tools })
+    } catch {
+      // Error is rendered by the flow state.
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-background shadow-2xl">
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <div>
+            <h2 className="text-sm font-bold">Add MCP Server</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Standard MCP transport and authentication</p>
+          </div>
+          <button onClick={flow.isRunning ? flow.cancel : onClose} className="text-xs text-muted-foreground hover:text-white">
+            {flow.isRunning ? 'Cancel' : 'Close'}
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-4 p-5">
+          <div className="grid grid-cols-2 gap-3">
+            <input required placeholder="Server ID" value={form.server_id} disabled={flow.isRunning}
+              onChange={(e) => setForm({ ...form, server_id: e.target.value })} className="rounded border border-border bg-background px-3 py-2 text-sm" />
+            <input required placeholder="Display name" value={form.name} disabled={flow.isRunning}
+              onChange={(e) => setForm({ ...form, name: e.target.value })} className="rounded border border-border bg-background px-3 py-2 text-sm" />
+            <input required placeholder="MCP endpoint, e.g. https://host/mcp" value={form.endpoint} disabled={flow.isRunning}
+              onChange={(e) => setForm({ ...form, endpoint: e.target.value })} className="col-span-2 rounded border border-border bg-background px-3 py-2 text-sm" />
+            <input placeholder="Description" value={form.description} disabled={flow.isRunning}
+              onChange={(e) => setForm({ ...form, description: e.target.value })} className="col-span-2 rounded border border-border bg-background px-3 py-2 text-sm" />
+
+            <select value={form.transport} disabled={flow.isRunning}
+              onChange={(e) => setForm({ ...form, transport: e.target.value })} className="rounded border border-border bg-background px-3 py-2 text-sm">
+              <option value="auto">Auto-detect transport</option>
+              <option value="streamable_http">Streamable HTTP</option>
+              <option value="sse">SSE (legacy)</option>
+            </select>
+            <select value={form.auth_type} disabled={flow.isRunning}
+              onChange={(e) => setForm({ ...form, auth_type: e.target.value })} className="rounded border border-border bg-background px-3 py-2 text-sm">
+              <option value="none">No authentication</option>
+              <option value="api_key">API key</option>
+              <option value="bearer">Bearer token</option>
+              <option value="oauth">OAuth access token</option>
+            </select>
+          </div>
+
+          {form.auth_type === 'api_key' && (
+            <div className="grid grid-cols-2 gap-3">
+              <input required type="password" placeholder="API key" value={form.api_key} disabled={flow.isRunning}
+                onChange={(e) => setForm({ ...form, api_key: e.target.value })} className="rounded border border-border bg-background px-3 py-2 text-sm" />
+              <input placeholder="Header name" value={form.auth_header} disabled={flow.isRunning}
+                onChange={(e) => setForm({ ...form, auth_header: e.target.value })} className="rounded border border-border bg-background px-3 py-2 text-sm" />
+            </div>
+          )}
+
+          {['bearer', 'oauth'].includes(form.auth_type) && (
+            <input required type="password" placeholder="Access token" value={form.auth_token} disabled={flow.isRunning}
+              onChange={(e) => setForm({ ...form, auth_token: e.target.value })} className="w-full rounded border border-border bg-background px-3 py-2 text-sm" />
+          )}
+
+          {flow.logs.length > 0 && (
+            <div className="max-h-36 overflow-auto rounded border border-white/10 bg-black/30 p-3 font-mono text-[10px] text-muted-foreground">
+              {flow.logs.map((entry, index) => <div key={`${entry.time}-${index}`}>{entry.message}</div>)}
+            </div>
+          )}
+
+          {flow.error && <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400">{flow.error}</div>}
+
+          {flow.isReady && (
+            <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-400">
+              Ready. Discovered {flow.discoveredTools.length} tool(s).
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            {!flow.isRunning && !flow.isReady && (
+              <button type="submit" className="rounded bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Connect & Discover</button>
+            )}
+            {flow.isRunning && <span className="px-3 py-2 text-xs text-muted-foreground">{runningLabel}...</span>}
+            {flow.isReady && <button type="button" onClick={onClose} className="rounded bg-emerald-600 px-4 py-2 text-xs font-semibold text-white">Done</button>}
+            {flow.hasError && <button type="button" onClick={flow.reset} className="rounded bg-muted px-4 py-2 text-xs">Retry</button>}
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}

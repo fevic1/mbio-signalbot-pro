@@ -1,6 +1,9 @@
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
-async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+async function apiFetch<T = unknown>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     credentials: 'include',
@@ -11,73 +14,103 @@ async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): P
   })
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText, detail: res.statusText }))
-    throw new Error(body.error || body.detail || body.message || `HTTP ${res.status}`)
+    const body = await res.json().catch(() => ({
+      error: res.statusText,
+      detail: res.statusText,
+    }))
+
+    throw new Error(
+      body.error ||
+      body.detail ||
+      body.message ||
+      `HTTP ${res.status}`,
+    )
   }
+
   return res.json() as Promise<T>
 }
 
 export const mcpApi = {
   validateConfig(config: unknown) {
-    return apiFetch<{ valid: boolean; error?: string }>('/api/mcp/validate', {
+    return apiFetch<{
+      valid: boolean
+      error?: string
+    }>('/api/mcp/validate', {
       method: 'POST',
       body: JSON.stringify(config),
     })
   },
 
   detectTransport(config: unknown) {
-    return apiFetch<{ transport: string; status: string; auth_required: boolean }>('/api/mcp/detect-transport', {
+    return apiFetch<{
+      transport: string
+      status: string
+      auth_required: boolean
+    }>('/api/mcp/detect-transport', {
       method: 'POST',
       body: JSON.stringify(config),
     })
   },
 
-  listAuthProviders(serverId: string) {
-    return apiFetch<{ providers: Array<{ type: string; label: string }> }>(`/api/mcp/${encodeURIComponent(serverId)}/auth-providers`)
-  },
-
-  connect(serverId: string, transport: string, auth: unknown = { type: 'none' }) {
-    return apiFetch<{ server_id: string; status: string; transport?: string; error?: string }>(`/api/mcp/${encodeURIComponent(serverId)}/connect`, {
+  connect(config: unknown) {
+    return apiFetch<{
+      status: 'ready' | 'auth_required' | 'error'
+      server_id?: string
+      transaction_id?: string
+      authorization_url?: string
+      tools?: Array<Record<string, unknown>>
+      health?: Record<string, unknown>
+      error?: string
+    }>('/api/mcp/connect', {
       method: 'POST',
-      body: JSON.stringify({ transport, auth }),
+      body: JSON.stringify(config),
     })
   },
 
-  authenticate(serverId: string, method: string, credentials: unknown) {
-    return apiFetch<{ success: boolean; status: string; error?: string }>(`/api/mcp/${encodeURIComponent(serverId)}/auth`, {
-      method: 'POST',
-      body: JSON.stringify({ method, credentials }),
-    })
-  },
-
-  listTools(serverId: string) {
-    return apiFetch<{ tools: Array<Record<string, unknown>> }>(`/api/mcp/${encodeURIComponent(serverId)}/tools`)
-  },
-
-  registerTools(serverId: string, tools: Array<Record<string, unknown>>) {
-    return apiFetch<{ registered: number }>(`/api/mcp/${encodeURIComponent(serverId)}/register-tools`, {
-      method: 'POST',
-      body: JSON.stringify({ tools }),
-    })
-  },
-
-  healthCheck(serverId: string) {
-    return apiFetch<{ status: string; transport?: string; error?: string }>(`/api/mcp/${encodeURIComponent(serverId)}/health`)
-  },
-
-  registerServer(payload: unknown) {
-    return apiFetch<{ status: string; server_id: string }>('/api/mcp/register', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
+  oauthStatus(transactionId: string) {
+    return apiFetch<{
+      status: string
+      server_id?: string
+      tools?: Array<Record<string, unknown>>
+      health?: Record<string, unknown>
+      error?: string
+    }>(
+      `/api/mcp/oauth/${encodeURIComponent(transactionId)}/status`,
+    )
   },
 
   listServers() {
-    return apiFetch<{ servers: Array<Record<string, unknown>> }>('/api/mcp/servers')
+    return apiFetch<{
+      servers: Array<Record<string, unknown>>
+    }>('/api/mcp/servers')
+  },
+
+  healthCheck(serverId: string) {
+    return apiFetch<{
+      status: string
+      transport?: string
+      error?: string
+    }>(`/api/mcp/${encodeURIComponent(serverId)}/health`)
   },
 
   deleteServer(serverId: string) {
-    return apiFetch<{ deleted: boolean }>(`/api/mcp/${encodeURIComponent(serverId)}`, { method: 'DELETE' })
+    return apiFetch<{ deleted: boolean }>(
+      `/api/mcp/${encodeURIComponent(serverId)}`,
+      { method: 'DELETE' },
+    )
+  },
+
+  updateServer(serverId: string, payload: unknown) {
+    return apiFetch<{
+      status: string
+      server_id: string
+    }>(
+      `/api/dashboard/mcp/servers/${encodeURIComponent(serverId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      },
+    )
   },
 }
 

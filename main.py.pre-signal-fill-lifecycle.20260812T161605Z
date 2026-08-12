@@ -23,7 +23,6 @@ from core.app_context import AppContext
 from routes.tradingview_webhook import router as tv_router
 from routes.dashboard_api import router as dashboard_router
 from routes.auth import router as auth_router
-from routes.dashboard_auth import login as dashboard_login
 from fastapi.middleware.cors import CORSMiddleware
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler
 
@@ -116,9 +115,6 @@ api.add_middleware(
 api.include_router(tv_router)
 api.include_router(dashboard_router)
 api.include_router(auth_router, prefix="/api")
-
-# Dashboard session authentication used by dashboard_api and MCP gateway.
-api.add_api_route("/auth/login", dashboard_login, methods=["POST"])
 
 from routes.hip4_api import router as hip4_router
 api.include_router(hip4_router)
@@ -643,76 +639,29 @@ async def run_trade(asset_name: str, data: dict, signal: str, conf: int,
             regime="RANGING",
         )
         if order_response and order_response.get("success"):
-            # Hyperliquid is authoritative for the actual filled entry.
-            # execute_order() returns avg_price only for an actual fill.
-            filled_entry_price = float(
-                order_response.get("avg_price") or 0.0
-            )
-
-            if filled_entry_price <= 0:
-                logger.error(
-                    f"❌ {asset_name}: execution reported success but "
-                    f"no exchange avg_price was returned; "
-                    f"local signal position will NOT be created."
-                )
-                return
-
             order_id = order_response.get("order_id", "unknown")
-            position_side = "BUY" if "BUY" in signal else "SELL"
-
-            # Preserve the planned risk geometry while anchoring the
-            # lifecycle prices to the actual exchange fill.
-            sl_distance = abs(entry_price - _sl)
-            tp1_distance = abs(_tp1 - entry_price)
-            tp2_distance = abs(_tp2 - entry_price)
-            tp3_distance = abs(_tp3 - entry_price)
-
-            if position_side == "BUY":
-                live_sl = filled_entry_price - sl_distance
-                live_tp1 = filled_entry_price + tp1_distance
-                live_tp2 = filled_entry_price + tp2_distance
-                live_tp3 = filled_entry_price + tp3_distance
-            else:
-                live_sl = filled_entry_price + sl_distance
-                live_tp1 = filled_entry_price - tp1_distance
-                live_tp2 = filled_entry_price - tp2_distance
-                live_tp3 = filled_entry_price - tp3_distance
-
-            filled_at = datetime.now(timezone.utc)
-
-            logger.info(
-                f"✅ {asset_name}: exchange fill confirmed | "
-                f"planned_entry={entry_price:.4f} | "
-                f"filled_entry={filled_entry_price:.4f} | "
-                f"order_id={order_id}"
-            )
-
             await send_execution(
                 asset_name,
-                position_side,
+                "BUY" if "BUY" in signal else "SELL",
                 size,
-                filled_entry_price,
-                live_sl,
-                live_tp1,
-                live_tp2,
-                live_tp3,
+                entry_price,
+                _sl,
+                _tp1,
+                _tp2,
+                _tp3,
                 order_id,
                 TELEGRAM_CHAT_ID,
             )
-
             state.OPEN_POSITIONS[asset_name] = {
-                "side": position_side,
-                "entry": filled_entry_price,
-                "planned_entry": entry_price,
+                "side": "BUY" if "BUY" in signal else "SELL",
+                "entry": entry_price,
                 "size": size,
-                "sl": live_sl,
-                "tp1": live_tp1,
-                "tp2": live_tp2,
-                "tp3": live_tp3,
+                "sl": _sl,
+                "tp1": _tp1,
+                "tp2": _tp2,
+                "tp3": _tp3,
                 "order_id": order_id,
-                "opened_at": filled_at,
-                "opened_at_source": "exchange_fill_ack",
-                "entry_price_source": "exchange_avg_price",
+                "opened_at": datetime.now(timezone.utc),
                 "strategy": execution_strategy,
                 "llm_reasoning": {
                     "reasoning": reasoning,

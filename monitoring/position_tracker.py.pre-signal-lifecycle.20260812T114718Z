@@ -37,25 +37,8 @@ async def check_and_close_positions(chat_id: str) -> None:
         _size = float(_pos.get("size", 0))
         _side = _pos.get("side", "BUY")
         _sl = float(_pos.get("sl", 0))
-        _opened_at = _pos.get("opened_at")
-
-        if isinstance(_opened_at, str):
-            try:
-                _opened_at = datetime.fromisoformat(
-                    _opened_at.replace("Z", "+00:00")
-                )
-            except (TypeError, ValueError):
-                _opened_at = None
-
-        if _opened_at is not None:
-            if _opened_at.tzinfo is None:
-                _opened_at = _opened_at.replace(tzinfo=timezone.utc)
-
-            _age_hrs = (
-                datetime.now(timezone.utc) - _opened_at
-            ).total_seconds() / 3600
-        else:
-            _age_hrs = 0.0
+        _created = _pos.get("created_at", _now_ts)
+        _age_hrs = (_now_ts - _created) / 3600
         try:
             _current = get_current_price(f"{_asset}-USD")
             _pnl_pct = ((_current - _entry) / _entry * 100) if _side == "BUY" else ((_entry - _current) / _entry * 100)
@@ -95,19 +78,11 @@ async def check_and_close_positions(chat_id: str) -> None:
             if current_price == 0:
                 continue
             should_close = False
-            close_reason = ""
-            tp_hit_label = None
-            pnl_usd = 0.0
-            pnl_pct = 0.0
 
             # ============================================
             # POSITION AGE TRACKING
             # ============================================
             cfg_age = get_config().get("position_age", {})
-
-            if not isinstance(cfg_age, dict):
-                cfg_age = {}
-
             if cfg_age.get("enabled", False):
                 opened_at = pos.get("opened_at")
                 if opened_at:
@@ -133,6 +108,10 @@ async def check_and_close_positions(chat_id: str) -> None:
                                 logger.info(f"⚠️ {asset} position age: {age_hours:.1f}h (warning at {warning_age}h)")
 
 
+            close_reason = ""
+            tp_hit_label = None
+            pnl_usd = 0.0
+            pnl_pct = 0.0
             entry = pos["entry"]
             size = pos["size"]
             side = pos["side"]
@@ -464,92 +443,17 @@ async def check_and_close_positions(chat_id: str) -> None:
 
             if should_close:
                 close_side = "SELL" if side == "BUY" else "BUY"
-                result = execute_hl_order(
-                    coin=hl_assets.get(asset, asset),
-                    side=close_side,
-                    size=size,
-                    execution_label="SIGNAL_EXIT",
-                )
-
+                result = execute_hl_order(coin=hl_assets.get(asset, asset), side=close_side, size=size, execution_label="SIGNAL_EXIT")
                 if not result.get("success"):
-                    logger.error(
-                        f"❌ Failed to close {asset}: "
-                        f"{result.get('error', 'unknown')}"
-                    )
+                    logger.error(f"❌ Failed to close {asset}: {result.get('error', 'unknown')}")
                     continue
-
-                # Exchange is authoritative for completion of a normal
-                # signal trade. Do not record the trade locally until the
-                # exchange confirms the position is flat.
-                exchange_flat = False
-
-                for _verify_attempt in range(8):
-                    try:
-                        await asyncio.sleep(1.0)
-
-                        live_positions = await run_executor_method(
-                            app_context.executor.get_open_positions
-                        )
-
-                        live_position = next(
-                            (
-                                p
-                                for p in live_positions
-                                if p.get("coin") == hl_assets.get(asset, asset)
-                            ),
-                            None,
-                        )
-
-                        if live_position is None:
-                            exchange_flat = True
-                            break
-
-                    except Exception as verify_exc:
-                        logger.warning(
-                            "⚠️ %s exchange close verification "
-                            "attempt %d failed: %s",
-                            asset,
-                            _verify_attempt + 1,
-                            verify_exc,
-                        )
-
-                if not exchange_flat:
-                    logger.error(
-                        f"❌ {asset} close not exchange-confirmed after "
-                        f"{8}s; retaining local position state."
-                    )
-                    continue
-
-                # Canonical realized exit price comes from the actual
-                # Hyperliquid fill, not the monitor's sampled market price.
-                exit_price = float(result.get("avg_price") or 0)
-
-                if exit_price <= 0:
-                    logger.error(
-                        f"❌ {asset} close confirmed but exchange returned "
-                        f"no valid avg_price; retaining local position state."
-                    )
-                    continue
-
                 if side == "BUY":
-                    pnl_usd = (exit_price - entry) * size
-                    pnl_pct = (exit_price - entry) / entry * 100
+                    pnl_usd = (current_price - entry) * size
+                    pnl_pct = (current_price - entry) / entry * 100
                 else:
-                    pnl_usd = (entry - exit_price) * size
-                    pnl_pct = (entry - exit_price) / entry * 100
-
-                await send_closure(
-                    asset,
-                    side,
-                    entry,
-                    exit_price,
-                    size,
-                    pnl_usd,
-                    pnl_pct,
-                    close_reason,
-                    chat_id,
-                    tp_hit=tp_hit_label,
-                )
+                    pnl_usd = (entry - current_price) * size
+                    pnl_pct = (entry - current_price) / entry * 100
+                await send_closure(asset, side, entry, current_price, size, pnl_usd, pnl_pct, close_reason, chat_id, tp_hit=tp_hit_label)
                 assets_to_remove.append(asset)
                 updated_pnl = state.add_pnl(pnl_pct)
                 logger.info(f"✅ {asset} closed: {close_reason} | PnL: ${pnl_usd:+,.2f} | Daily: {updated_pnl:.2f}%")

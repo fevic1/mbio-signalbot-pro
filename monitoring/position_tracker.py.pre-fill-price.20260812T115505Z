@@ -95,10 +95,6 @@ async def check_and_close_positions(chat_id: str) -> None:
             if current_price == 0:
                 continue
             should_close = False
-            close_reason = ""
-            tp_hit_label = None
-            pnl_usd = 0.0
-            pnl_pct = 0.0
 
             # ============================================
             # POSITION AGE TRACKING
@@ -133,6 +129,10 @@ async def check_and_close_positions(chat_id: str) -> None:
                                 logger.info(f"⚠️ {asset} position age: {age_hours:.1f}h (warning at {warning_age}h)")
 
 
+            close_reason = ""
+            tp_hit_label = None
+            pnl_usd = 0.0
+            pnl_pct = 0.0
             entry = pos["entry"]
             size = pos["size"]
             side = pos["side"]
@@ -519,37 +519,13 @@ async def check_and_close_positions(chat_id: str) -> None:
                         f"{8}s; retaining local position state."
                     )
                     continue
-
-                # Canonical realized exit price comes from the actual
-                # Hyperliquid fill, not the monitor's sampled market price.
-                exit_price = float(result.get("avg_price") or 0)
-
-                if exit_price <= 0:
-                    logger.error(
-                        f"❌ {asset} close confirmed but exchange returned "
-                        f"no valid avg_price; retaining local position state."
-                    )
-                    continue
-
                 if side == "BUY":
-                    pnl_usd = (exit_price - entry) * size
-                    pnl_pct = (exit_price - entry) / entry * 100
+                    pnl_usd = (current_price - entry) * size
+                    pnl_pct = (current_price - entry) / entry * 100
                 else:
-                    pnl_usd = (entry - exit_price) * size
-                    pnl_pct = (entry - exit_price) / entry * 100
-
-                await send_closure(
-                    asset,
-                    side,
-                    entry,
-                    exit_price,
-                    size,
-                    pnl_usd,
-                    pnl_pct,
-                    close_reason,
-                    chat_id,
-                    tp_hit=tp_hit_label,
-                )
+                    pnl_usd = (entry - current_price) * size
+                    pnl_pct = (entry - current_price) / entry * 100
+                await send_closure(asset, side, entry, current_price, size, pnl_usd, pnl_pct, close_reason, chat_id, tp_hit=tp_hit_label)
                 assets_to_remove.append(asset)
                 updated_pnl = state.add_pnl(pnl_pct)
                 logger.info(f"✅ {asset} closed: {close_reason} | PnL: ${pnl_usd:+,.2f} | Daily: {updated_pnl:.2f}%")

@@ -37,25 +37,8 @@ async def check_and_close_positions(chat_id: str) -> None:
         _size = float(_pos.get("size", 0))
         _side = _pos.get("side", "BUY")
         _sl = float(_pos.get("sl", 0))
-        _opened_at = _pos.get("opened_at")
-
-        if isinstance(_opened_at, str):
-            try:
-                _opened_at = datetime.fromisoformat(
-                    _opened_at.replace("Z", "+00:00")
-                )
-            except (TypeError, ValueError):
-                _opened_at = None
-
-        if _opened_at is not None:
-            if _opened_at.tzinfo is None:
-                _opened_at = _opened_at.replace(tzinfo=timezone.utc)
-
-            _age_hrs = (
-                datetime.now(timezone.utc) - _opened_at
-            ).total_seconds() / 3600
-        else:
-            _age_hrs = 0.0
+        _created = _pos.get("created_at", _now_ts)
+        _age_hrs = (_now_ts - _created) / 3600
         try:
             _current = get_current_price(f"{_asset}-USD")
             _pnl_pct = ((_current - _entry) / _entry * 100) if _side == "BUY" else ((_entry - _current) / _entry * 100)
@@ -95,19 +78,11 @@ async def check_and_close_positions(chat_id: str) -> None:
             if current_price == 0:
                 continue
             should_close = False
-            close_reason = ""
-            tp_hit_label = None
-            pnl_usd = 0.0
-            pnl_pct = 0.0
 
             # ============================================
             # POSITION AGE TRACKING
             # ============================================
             cfg_age = get_config().get("position_age", {})
-
-            if not isinstance(cfg_age, dict):
-                cfg_age = {}
-
             if cfg_age.get("enabled", False):
                 opened_at = pos.get("opened_at")
                 if opened_at:
@@ -133,6 +108,10 @@ async def check_and_close_positions(chat_id: str) -> None:
                                 logger.info(f"⚠️ {asset} position age: {age_hours:.1f}h (warning at {warning_age}h)")
 
 
+            close_reason = ""
+            tp_hit_label = None
+            pnl_usd = 0.0
+            pnl_pct = 0.0
             entry = pos["entry"]
             size = pos["size"]
             side = pos["side"]
@@ -145,102 +124,34 @@ async def check_and_close_positions(chat_id: str) -> None:
                     pos["sl"] = pos["tp1"]
                     await send_tp_hit(asset, "TP2", current_price, entry, chat_id)
                 elif current_price >= pos.get("tp1", float("inf")) and pos.get("sl", 0) < entry and not pos.get("tp1_hit"):
-                    # Executable TP1:
-                    # A partial close is valid only when both the
-                    # closed portion and the remaining position satisfy
-                    # the exchange minimum notional.
-                    requested_pct = float(
-                        config.get("smart_exit", {}).get(
-                            "tp2_partial_pct",
-                            0.35,
-                        )
-                    )
-                    requested_pct = max(0.0, min(1.0, requested_pct))
-
-                    min_notional = float(
-                        get_exchange_limits()["min_notional_usd"]
-                    )
-                    current_notional = size * current_price
-                    requested_close_size = size * requested_pct
-                    requested_close_notional = (
-                        requested_close_size * current_price
-                    )
-
-                    executable_partial = (
-                        requested_close_size > 0
-                        and requested_close_notional >= min_notional
-                        and (size - requested_close_size) * current_price >= min_notional
-                    )
-
-                    if executable_partial:
-                        close_size = requested_close_size
-                        remaining_size = size - close_size
-
+                    # 🏹 PHASE 1: Partial Close 30% at TP1
+                    close_size = size * float(config.get("smart_exit", {}).get("tp2_partial_pct", 0.35))
+                    remaining_size = size - close_size
+                    notional = close_size * current_price
+                    
+                    # Check minimum order size ($10)
+                    _min_notional = get_exchange_limits()["min_notional_usd"]
+                    if notional < _min_notional:
+                        logger.warning(f"⚠️ {asset} partial close skipped: ${notional:.2f} < ${_min_notional} minimum")
+                        pos["sl"] = entry * 1.002
+                        pos["tp1_hit"] = True
+                        await send_tp_hit(asset, "TP1 (skipped - too small)", current_price, entry, chat_id)
+                    else:
                         try:
-                            res = execute_hl_order(
-                                asset,
-                                "SELL",
-                                close_size,
-                                reduce_only=True,
-                                execution_label="SIGNAL_EXIT",
-                            )
-
+                            res = execute_hl_order(asset, "SELL", close_size, reduce_only=True)
                             if res.get("success"):
-                                closed_pct = (close_size / size) * 100.0
-
-                                logger.info(
-                                    f"✅ {asset} Partial TP1: "
-                                    f"Closed {closed_pct:.1f}% "
-                                    f"({close_size:.6f})"
-                                )
-
+                                logger.info(f"✅ {asset} Partial TP1: Closed 30% ({close_size:.4f})")
                                 pos["size"] = remaining_size
                                 pos["sl"] = entry * 1.002
                                 pos["tp1_hit"] = True
-                                pos["tp1_partial_skipped"] = False
-
-                                await send_tp_hit(
-                                    asset,
-                                    f"TP1 ({closed_pct:.1f}% Closed)",
-                                    current_price,
-                                    entry,
-                                    chat_id,
-                                )
+                                await send_tp_hit(asset, "TP1 (30% Closed)", current_price, entry, chat_id)
                             else:
-                                raise Exception(
-                                    res.get("error", "Unknown error")
-                                )
-
+                                raise Exception(res.get("error", "Unknown error"))
                         except Exception as e:
-                            logger.error(
-                                f"❌ Partial TP1 failed: {e}"
-                            )
-                            pos["tp1_hit"] = False
-                            pos["tp1_partial_skipped"] = False
-
-                    else:
-                        # The position is too small for an executable
-                        # partial close. Record TP1 as a milestone only.
-                        pos["tp1_hit"] = True
-                        pos["tp1_partial_skipped"] = True
-                        pos["tp1_execution"] = "MILESTONE_ONLY"
-                        pos["sl"] = entry * 1.002
-
-                        logger.info(
-                            f"📌 {asset} TP1 milestone reached; "
-                            f"partial skipped: "
-                            f"position=${current_notional:.2f}, "
-                            f"minimum=${min_notional:.2f}, "
-                            f"requested=${requested_close_notional:.2f}"
-                        )
-
-                        await send_tp_hit(
-                            asset,
-                            "TP1 (milestone - position too small)",
-                            current_price,
-                            entry,
-                            chat_id,
-                        )
+                            logger.error(f"❌ Partial close failed: {e}")
+                            pos["sl"] = entry * 1.002
+                            pos["tp1_hit"] = True
+                            await send_tp_hit(asset, "TP1", current_price, entry, chat_id)
                 # 🏹 PHASE 1: Chandelier Exit for TRENDING regime (after TP1)
                 # 💰 DOLLAR-BASED RATCHET: Activate at $1+ net profit (not TP1-gated)
                 _entry_r = pos.get("entry", 0)
@@ -306,102 +217,34 @@ async def check_and_close_positions(chat_id: str) -> None:
                     pos["sl"] = pos["tp1"]
                     await send_tp_hit(asset, "TP2", current_price, entry, chat_id)
                 elif current_price <= pos.get("tp1", float("inf")) and pos.get("sl", float("inf")) > entry and not pos.get("tp1_hit"):
-                    # Executable TP1:
-                    # Only submit a partial close when both the close and
-                    # remaining position can satisfy the exchange minimum.
-                    requested_pct = float(
-                        config.get("smart_exit", {}).get(
-                            "tp2_partial_pct",
-                            0.35,
-                        )
-                    )
-                    requested_pct = max(0.0, min(1.0, requested_pct))
-
-                    min_notional = float(
-                        get_exchange_limits()["min_notional_usd"]
-                    )
-                    current_notional = size * current_price
-                    requested_close_size = size * requested_pct
-                    requested_close_notional = (
-                        requested_close_size * current_price
-                    )
-                    min_order_size = min_notional / current_price
-
-                    executable_partial = (
-                        requested_close_size > 0
-                        and requested_close_notional >= min_notional
-                        and (size - requested_close_size) * current_price >= min_notional
-                    )
-
-                    if executable_partial:
-                        close_size = requested_close_size
-                        remaining_size = size - close_size
-
+                    # 🏹 PHASE 1: Partial Close 30% at TP1
+                    close_size = size * float(config.get("smart_exit", {}).get("tp2_partial_pct", 0.35))
+                    remaining_size = size - close_size
+                    notional = close_size * current_price
+                    
+                    # Check minimum order size ($10)
+                    _min_notional = get_exchange_limits()["min_notional_usd"]
+                    if notional < _min_notional:
+                        logger.warning(f"⚠️ {asset} partial close skipped: ${notional:.2f} < ${_min_notional} minimum")
+                        pos["sl"] = entry * 0.998
+                        pos["tp1_hit"] = True
+                        await send_tp_hit(asset, "TP1 (skipped - too small)", current_price, entry, chat_id)
+                    else:
                         try:
-                            res = execute_hl_order(
-                                asset,
-                                "BUY",
-                                close_size,
-                                reduce_only=True,
-                                execution_label="SIGNAL_EXIT",
-                            )
-
+                            res = execute_hl_order(asset, "BUY", close_size, reduce_only=True)
                             if res.get("success"):
-                                closed_pct = (close_size / size) * 100.0
-
-                                logger.info(
-                                    f"✅ {asset} Partial TP1: "
-                                    f"Closed {closed_pct:.1f}% "
-                                    f"({close_size:.6f})"
-                                )
-
+                                logger.info(f"✅ {asset} Partial TP1: Closed 30% ({close_size:.4f})")
                                 pos["size"] = remaining_size
                                 pos["sl"] = entry * 0.998
                                 pos["tp1_hit"] = True
-                                pos["tp1_partial_skipped"] = False
-
-                                await send_tp_hit(
-                                    asset,
-                                    f"TP1 ({closed_pct:.1f}% Closed)",
-                                    current_price,
-                                    entry,
-                                    chat_id,
-                                )
+                                await send_tp_hit(asset, "TP1 (30% Closed)", current_price, entry, chat_id)
                             else:
-                                raise Exception(
-                                    res.get("error", "Unknown error")
-                                )
-
+                                raise Exception(res.get("error", "Unknown error"))
                         except Exception as e:
-                            logger.error(
-                                f"❌ Partial TP1 failed: {e}"
-                            )
-                            pos["tp1_hit"] = False
-                            pos["tp1_partial_skipped"] = False
-
-                    else:
-                        # The position is too small for an executable partial.
-                        # Do not pretend a profit was taken.
-                        pos["tp1_hit"] = True
-                        pos["tp1_partial_skipped"] = True
-                        pos["tp1_execution"] = "MILESTONE_ONLY"
-                        pos["sl"] = entry * 0.998
-
-                        logger.info(
-                            f"📌 {asset} TP1 milestone reached; "
-                            f"partial skipped: "
-                            f"position=${current_notional:.2f}, "
-                            f"minimum=${min_notional:.2f}, "
-                            f"requested=${requested_close_notional:.2f}"
-                        )
-
-                        await send_tp_hit(
-                            asset,
-                            "TP1 (milestone - position too small)",
-                            current_price,
-                            entry,
-                            chat_id,
-                        )
+                            logger.error(f"❌ Partial close failed: {e}")
+                            pos["sl"] = entry * 0.998
+                            pos["tp1_hit"] = True
+                            await send_tp_hit(asset, "TP1", current_price, entry, chat_id)
                 # 🏹 PHASE 1: Chandelier Exit for TRENDING regime (after TP1)
                 if pos.get("tp1_hit") and str(pos.get("regime", "")).startswith("TRENDING"):
                     atr = pos.get("atr", 0)
@@ -464,92 +307,17 @@ async def check_and_close_positions(chat_id: str) -> None:
 
             if should_close:
                 close_side = "SELL" if side == "BUY" else "BUY"
-                result = execute_hl_order(
-                    coin=hl_assets.get(asset, asset),
-                    side=close_side,
-                    size=size,
-                    execution_label="SIGNAL_EXIT",
-                )
-
+                result = execute_hl_order(coin=hl_assets.get(asset, asset), side=close_side, size=size)
                 if not result.get("success"):
-                    logger.error(
-                        f"❌ Failed to close {asset}: "
-                        f"{result.get('error', 'unknown')}"
-                    )
+                    logger.error(f"❌ Failed to close {asset}: {result.get('error', 'unknown')}")
                     continue
-
-                # Exchange is authoritative for completion of a normal
-                # signal trade. Do not record the trade locally until the
-                # exchange confirms the position is flat.
-                exchange_flat = False
-
-                for _verify_attempt in range(8):
-                    try:
-                        await asyncio.sleep(1.0)
-
-                        live_positions = await run_executor_method(
-                            app_context.executor.get_open_positions
-                        )
-
-                        live_position = next(
-                            (
-                                p
-                                for p in live_positions
-                                if p.get("coin") == hl_assets.get(asset, asset)
-                            ),
-                            None,
-                        )
-
-                        if live_position is None:
-                            exchange_flat = True
-                            break
-
-                    except Exception as verify_exc:
-                        logger.warning(
-                            "⚠️ %s exchange close verification "
-                            "attempt %d failed: %s",
-                            asset,
-                            _verify_attempt + 1,
-                            verify_exc,
-                        )
-
-                if not exchange_flat:
-                    logger.error(
-                        f"❌ {asset} close not exchange-confirmed after "
-                        f"{8}s; retaining local position state."
-                    )
-                    continue
-
-                # Canonical realized exit price comes from the actual
-                # Hyperliquid fill, not the monitor's sampled market price.
-                exit_price = float(result.get("avg_price") or 0)
-
-                if exit_price <= 0:
-                    logger.error(
-                        f"❌ {asset} close confirmed but exchange returned "
-                        f"no valid avg_price; retaining local position state."
-                    )
-                    continue
-
                 if side == "BUY":
-                    pnl_usd = (exit_price - entry) * size
-                    pnl_pct = (exit_price - entry) / entry * 100
+                    pnl_usd = (current_price - entry) * size
+                    pnl_pct = (current_price - entry) / entry * 100
                 else:
-                    pnl_usd = (entry - exit_price) * size
-                    pnl_pct = (entry - exit_price) / entry * 100
-
-                await send_closure(
-                    asset,
-                    side,
-                    entry,
-                    exit_price,
-                    size,
-                    pnl_usd,
-                    pnl_pct,
-                    close_reason,
-                    chat_id,
-                    tp_hit=tp_hit_label,
-                )
+                    pnl_usd = (entry - current_price) * size
+                    pnl_pct = (entry - current_price) / entry * 100
+                await send_closure(asset, side, entry, current_price, size, pnl_usd, pnl_pct, close_reason, chat_id, tp_hit=tp_hit_label)
                 assets_to_remove.append(asset)
                 updated_pnl = state.add_pnl(pnl_pct)
                 logger.info(f"✅ {asset} closed: {close_reason} | PnL: ${pnl_usd:+,.2f} | Daily: {updated_pnl:.2f}%")
