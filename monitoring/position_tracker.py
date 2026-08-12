@@ -17,7 +17,12 @@ logger = logging.getLogger(__name__)
 async def check_and_close_positions(chat_id: str) -> None:
     if not state.OPEN_POSITIONS:
         return
-    logger.info(f"🔍 Checking {len(state.OPEN_POSITIONS)} open positions...")
+    _monitored_positions = {
+        _asset: _pos
+        for _asset, _pos in state.OPEN_POSITIONS.items()
+        if not str(_asset).startswith("GRID::")
+    }
+    logger.info(f"🔍 Checking {len(_monitored_positions)} open positions...")
 
     # 🛡️ ARCHITECTURAL FIX: Institutional Position Telemetry
     from datetime import datetime
@@ -332,16 +337,6 @@ async def check_and_close_positions(chat_id: str) -> None:
                     logger.info(f"📊 Trade recorded: {asset} | {side} | PnL: ${pnl_usd:+,.2f} ({pnl_pct:+.2f}%)")
                 except Exception as e:
                     logger.error(f"Failed to record trade: {e}")
-                
-                # SELF-LEARNING FEEDBACK LOOP
-                try:
-                    from core.meta_learner import get_meta_learner
-                    meta = get_meta_learner()
-                    strat_name = pos.get("strategy", "LLM")
-                    regime = pos.get("regime", "RANGING")
-                    meta.record_trade_outcome(strat_name, regime, pnl_pct)
-                except Exception as e:
-                    logger.error(f"MetaLearner update failed: {e}")
                 
                 # 📊 PHASE 2: EXIT ANALYTICS DATA COLLECTION
                 try:

@@ -510,24 +510,78 @@ async def run_trade(asset_name: str, data: dict, signal: str, conf: int,
         logger.warning(f"⚠️ {asset_name} SL ${sl_distance:.2f} exceeds safe limit ${_max_sl_distance:.2f} at {_leverage}x. Capping.")
         sl_distance = _max_sl_distance
 
-    risk_amount = balance * risk_per_trade
-    size = risk_amount / sl_distance if sl_distance > 0 else 0.0
-    if size <= 0:
-        logger.error(f"Calculated size <= 0 for {asset_name}")
-        return
+    side = "BUY" if "BUY" in signal.upper() else "SELL"
 
-    current_exposure = sum(p.get("size", 0) * p.get("entry", 0) for p in state.OPEN_POSITIONS.values())
-    new_exposure = size * entry_price
-    max_allowed_exposure = balance * exposure_limit
-    if (current_exposure + new_exposure) > max_allowed_exposure:
-        logger.warning(f"Exposure limit would be exceeded for {asset_name}")
-        return
+    _sl = (
+        entry_price - sl_distance
+        if side == "BUY"
+        else entry_price + sl_distance
+    )
+
+    _tp1 = (
+        entry_price + sl_distance * tp.get("tp1_atr_multiplier", 1.0)
+        if side == "BUY"
+        else entry_price - sl_distance * tp.get("tp1_atr_multiplier", 1.0)
+    )
+    _tp2 = (
+        entry_price + sl_distance * tp.get("tp2_atr_multiplier", 2.0)
+        if side == "BUY"
+        else entry_price - sl_distance * tp.get("tp2_atr_multiplier", 2.0)
+    )
+    _tp3 = (
+        entry_price + sl_distance * tp.get("tp3_atr_multiplier", 3.0)
+        if side == "BUY"
+        else entry_price - sl_distance * tp.get("tp3_atr_multiplier", 3.0)
+    )
 
     risk_mgr = RiskManager(
         max_risk_per_trade_pct=risk_per_trade,
         max_total_risk_pct=r.get("max_total_risk_pct", 0.20),
         max_total_exposure_pct=exposure_limit
     )
+
+    current_exposure = sum(
+        float(p.get("size", 0) or 0) * float(p.get("entry", 0) or 0)
+        for p in state.OPEN_POSITIONS.values()
+    )
+
+    current_margin = (
+        current_exposure / _leverage
+        if _leverage > 0
+        else current_exposure
+    )
+    available_margin = max(balance - current_margin, 0.0)
+
+    trade_plan_economic = risk_mgr.calculate_economic_trade_plan(
+        account_equity=balance,
+        entry_price=entry_price,
+        stop_loss_price=_sl,
+        target_price=_tp1,
+        leverage=_leverage,
+        available_margin=available_margin,
+        fee_rate=float(r.get("taker_fee_pct", 0.0)) / 100.0,
+        slippage_rate=float(r.get("slippage_pct", 0.0)) / 100.0,
+    )
+
+    risk_budget = trade_plan_economic["risk_budget"]
+    risk_derived_notional = trade_plan_economic["risk_derived_notional"]
+    executable_notional = trade_plan_economic["executable_notional"]
+    expected_net_profit = trade_plan_economic["expected_net_profit"]
+    expected_net_r = trade_plan_economic["expected_net_r"]
+
+    if executable_notional <= 0:
+        logger.warning(
+            f"{asset_name}: economic sizing rejected: "
+            f"no executable notional"
+        )
+        return
+
+    size = executable_notional / entry_price
+
+    if size <= 0:
+        logger.error(f"Calculated size <= 0 for {asset_name}")
+        return
+
     can_capital, cap_reason = risk_mgr.check_capital_usage(
         balance=balance,
         new_size=size,
@@ -538,11 +592,14 @@ async def run_trade(asset_name: str, data: dict, signal: str, conf: int,
         logger.info(f"Capital limit: {cap_reason}")
         return
 
-    side = "BUY" if "BUY" in signal.upper() else "SELL"
-    _sl = entry_price - sl_distance if "BUY" in signal.upper() else entry_price + sl_distance
-    _tp1 = entry_price + sl_distance * tp.get("tp1_atr_multiplier", 1.0) if "BUY" in signal.upper() else entry_price - sl_distance * tp.get("tp1_atr_multiplier", 1.0)
-    _tp2 = entry_price + sl_distance * tp.get("tp2_atr_multiplier", 2.0) if "BUY" in signal.upper() else entry_price - sl_distance * tp.get("tp2_atr_multiplier", 2.0)
-    _tp3 = entry_price + sl_distance * tp.get("tp3_atr_multiplier", 3.0) if "BUY" in signal.upper() else entry_price - sl_distance * tp.get("tp3_atr_multiplier", 3.0)
+    logger.info(
+        f"{asset_name}: economic plan "
+        f"risk=${risk_budget:.4f} "
+        f"risk_notional=${risk_derived_notional:.4f} "
+        f"executable=${executable_notional:.4f} "
+        f"expected_net=${expected_net_profit:.4f} "
+        f"net_R={expected_net_r:.2f}"
+    )
 
     trade_plan = (entry_price, _sl, _tp1, _tp2, _tp3)
 

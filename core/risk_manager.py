@@ -186,6 +186,86 @@ class RiskManager:
         )
 
 
+    def calculate_economic_trade_plan(
+        self,
+        account_equity: float,
+        entry_price: float,
+        stop_loss_price: float,
+        target_price: float,
+        leverage: float,
+        available_margin: float,
+        fee_rate: float = 0.0,
+        slippage_rate: float = 0.0,
+    ) -> dict:
+        """
+        Build an economic trade plan from market structure and account risk.
+
+        Risk determines the loss budget.
+        Stop distance determines risk-derived notional.
+        Margin x leverage determines executable capacity.
+        Target determines expected reward.
+
+        No fixed-dollar profit or fixed-dollar notional target is used.
+        """
+        equity = max(float(account_equity), 0.0)
+        entry = float(entry_price)
+        stop = float(stop_loss_price)
+        target = float(target_price)
+        lev = max(float(leverage), 0.0)
+        margin = max(float(available_margin), 0.0)
+        fee = max(float(fee_rate), 0.0)
+        slippage = max(float(slippage_rate), 0.0)
+
+        risk_budget = equity * float(self.max_risk_per_trade)
+
+        stop_distance = abs(entry - stop)
+        target_distance = abs(target - entry)
+
+        stop_pct = stop_distance / abs(entry) if entry else 0.0
+        target_pct = target_distance / abs(entry) if entry else 0.0
+
+        if stop_pct > 0.0:
+            risk_derived_notional = risk_budget / stop_pct
+        else:
+            risk_derived_notional = 0.0
+
+        margin_capacity = margin * lev
+
+        executable_notional = min(
+            max(risk_derived_notional, 0.0),
+            max(margin_capacity, 0.0),
+        )
+
+        gross_reward = executable_notional * target_pct
+
+        # Round-trip trading cost is applied to the executable notional.
+        # Slippage is treated as a round-trip proportional execution cost.
+        total_cost_rate = (2.0 * fee) + (2.0 * slippage)
+        estimated_cost = executable_notional * total_cost_rate
+
+        expected_net_profit = gross_reward - estimated_cost
+
+        expected_net_r = (
+            expected_net_profit / risk_budget
+            if risk_budget > 0.0
+            else 0.0
+        )
+
+        return {
+            "risk_budget": risk_budget,
+            "stop_distance": stop_distance,
+            "stop_pct": stop_pct,
+            "target_distance": target_distance,
+            "target_pct": target_pct,
+            "risk_derived_notional": risk_derived_notional,
+            "margin_capacity": margin_capacity,
+            "executable_notional": executable_notional,
+            "gross_reward": gross_reward,
+            "estimated_cost": estimated_cost,
+            "expected_net_profit": expected_net_profit,
+            "expected_net_r": expected_net_r,
+        }
+
     def calculate_position_size(
         self,
         account_balance: float,

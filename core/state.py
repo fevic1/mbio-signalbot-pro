@@ -6,6 +6,7 @@ Exchange-agnostic: Compatible with all adapters.
 import asyncio
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -144,39 +145,140 @@ def add_pnl(pnl_pct: float) -> float:
 def is_drawdown_halt(halt_threshold_pct: float) -> bool:
     return daily_pnl <= halt_threshold_pct
 
-def record_closed_trade(asset: str, side: str, entry: float, exit_price: float, size: float, close_reason: str, strategy: str = "Ensemble", regime: str = "RANGING"):
-    """Records trade outcome, updates Daily PnL, and feeds the Smart Learner."""
+def record_closed_trade(
+    asset: str,
+    side: str,
+    entry: float,
+    exit_price: float,
+    size: float,
+    close_reason: str,
+    strategy: str = "Ensemble",
+    regime: str = "RANGING",
+):
+    """Canonical MBIO trade-outcome recording path.
+
+    Every completed trade is recorded once here. The canonical event is
+    persisted to state, fed to MetaLearner, and stored in ChromaDB with the
+    resulting rating so wins and losses are both observable.
+    """
     global daily_pnl
-    
-    # Calculate PnL
+
     if side == "BUY":
         pnl_pct = ((exit_price - entry) / entry) * 100
         usd_pnl = (exit_price - entry) * size
     else:
         pnl_pct = ((entry - exit_price) / entry) * 100
         usd_pnl = (entry - exit_price) * size
-        
-    # Update Daily PnL
+
     daily_pnl += pnl_pct
-    
-    # Record in History
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    trade_id = f"{asset}-{side}-{uuid.uuid4().hex}"
+
     trade_record = {
-        "asset": asset, "side": side, "entry": entry, "exit": exit_price,
-        "size": size, "pnl_pct": pnl_pct, "usd_pnl": usd_pnl,
-        "reason": close_reason, "strategy": strategy, "regime": regime,
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "trade_id": trade_id,
+        "asset": asset,
+        "side": side,
+        "entry": entry,
+        "exit": exit_price,
+        "size": size,
+        "pnl_pct": pnl_pct,
+        "usd_pnl": usd_pnl,
+        "reason": close_reason,
+        "strategy": strategy,
+        "regime": regime,
+        "timestamp": timestamp,
+        "outcome": "WIN" if pnl_pct > 0 else "LOSS",
     }
+
     TRADE_HISTORY.append(trade_record)
-    
-    # 🧠 Feed the Smart Learner (MetaLearner)
+
+    # Persist the canonical trade event immediately.
+    save_state()
+
+    # Canonical MetaLearner update.
     try:
         from core.meta_learner import get_meta_learner
+
         meta = get_meta_learner()
+        before_rating = meta.get_weights(regime).get(strategy, 0.0)
+
         meta.update(regime, strategy, pnl_pct)
-        print(f" Smart Learner updated: {strategy} in {regime} (PnL: {pnl_pct:+.2f}%)")
+
+        after_rating = meta.get_weights(regime).get(strategy, 0.0)
+
+        trade_record["meta_rating_before"] = before_rating
+        trade_record["meta_rating_after"] = after_rating
+
+        logger.info(
+            "🧠 MBIO LEARNING: %s | %s/%s | PnL=%+.2f%% ($%+.4f) | "
+            "rating %.4f → %.4f | %s",
+            trade_id,
+            strategy,
+            regime,
+            pnl_pct,
+            usd_pnl,
+            before_rating,
+            after_rating,
+            trade_record["outcome"],
+        )
     except Exception as e:
-        pass
-        
+        trade_record["meta_rating_error"] = str(e)
+        logger.error(
+            "❌ MBIO MetaLearner recording failed for %s: %s",
+            trade_id,
+            e,
+        )
+
+    # Store the exact same canonical outcome in ChromaDB.
+    try:
+        from core.memory import TradeMemory
+
+        memory = TradeMemory()
+        memory.store_trade(
+            trade_id=trade_id,
+            asset=asset,
+            side=side,
+            pnl=pnl_pct,
+            regime=regime,
+            strategy=strategy,
+            entry_price=entry,
+            exit_price=exit_price,
+            metadata_extra={
+                "trade_id": trade_id,
+                "usd_pnl": float(usd_pnl),
+                "close_reason": close_reason,
+                "outcome": trade_record["outcome"],
+                "meta_rating_before": float(
+                    trade_record.get("meta_rating_before", 0.0)
+                ),
+                "meta_rating_after": float(
+                    trade_record.get("meta_rating_after", 0.0)
+                ),
+                "timestamp": timestamp,
+            },
+        )
+
+        trade_record["chroma_recorded"] = True
+
+        logger.info(
+            "💾 MBIO CHROMA: %s | %s | rating=%.4f",
+            trade_id,
+            trade_record["outcome"],
+            trade_record.get("meta_rating_after", 0.0),
+        )
+    except Exception as e:
+        trade_record["chroma_recorded"] = False
+        trade_record["chroma_error"] = str(e)
+        logger.error(
+            "❌ MBIO Chroma recording failed for %s: %s",
+            trade_id,
+            e,
+        )
+
+    # Persist enriched learning/rating information.
+    save_state()
+
     return pnl_pct
 
 
