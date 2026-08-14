@@ -79,13 +79,13 @@ class AssetUniverse:
         return ticker.replace("-USD", "").replace("USDT", "").upper()
 
     def tradeable_coins(self) -> List[str]:
-        """Return only the live exchange-ranked top-10 tradeable assets.
-
-        Full exchange metadata remains in _assets for execution validation,
-        precision, leverage and symbol existence checks.  This method is the
-        public opportunity universe consumed by scanners and dashboards.
-        """
-        return self.signal_scanner_coins()
+        self._ensure_fresh()
+        return sorted([
+            n for n, m in self._assets.items()
+            if n not in self._exclusions
+            and not m.is_delisted
+            and not m.only_isolated
+        ])
 
     def signal_scanner_coins(self) -> List[str]:
         """Return only the live exchange-ranked top 10 assets for signal scanning."""
@@ -144,6 +144,7 @@ class AssetUniverse:
                 logger.error(f"AssetUniverse: only {len(universe)} assets — skipping")
                 return False
 
+            prices = self._fetch_prices()
             new_assets = {}
             for a in universe:
                 name = a.get("name", "").upper()
@@ -152,10 +153,7 @@ class AssetUniverse:
                 sz = int(a.get("szDecimals", 4))
                 ml = int(a.get("maxLeverage", 10))
                 iso = bool(a.get("onlyIsolated", False))
-                # Do not issue a market-wide allMids request just to derive
-                # approximate tick precision. Use known exchange-safe
-                # fallbacks; execution performs final exchange normalization.
-                tick = self._derive_tick(name, 0)
+                tick = self._derive_tick(name, prices.get(name, 0))
                 dl = bool(a.get("isDelisted", False))
                 new_assets[name] = _AssetMeta(name, sz, ml, iso, dl, tick)
 
@@ -217,6 +215,15 @@ class AssetUniverse:
             logger.error(f"AssetUniverse refresh error: {e}", exc_info=True)
             return False
 
+    def _fetch_prices(self) -> Dict[str, float]:
+        try:
+            r = requests.post(HL_INFO_URL, json={"type": "allMids"}, timeout=REQUEST_TIMEOUT)
+            if r.status_code == 200:
+                return {k: float(v) for k, v in r.json().items()}
+        except Exception:
+            pass
+        return {}
+
     def _derive_tick(self, coin: str, price: float) -> float:
         if coin in _TICK_FALLBACK:
             return _TICK_FALLBACK[coin]
@@ -233,36 +240,10 @@ class AssetUniverse:
         """Return assets grouped by PERP, SPOT, TRENDING."""
         self._ensure_fresh()
         perp_coins = self.tradeable_coins()
-        selected = set(perp_coins)
-
-        # Do not expose the complete spot universe. Keep only spot pairs whose
-        # base asset belongs to the selected top-10 opportunity universe.
-        spot_coins = []
-        seen_spot = set()
-
-        for pair in self._spot_pairs:
-            name = str(pair.get("name", "")).strip()
-            base = name.split("/", 1)[0].upper() if "/" in name else ""
-
-            if not name or base not in selected:
-                continue
-
-            if name in seen_spot:
-                continue
-
-            seen_spot.add(name)
-            spot_coins.append(name)
-
-            if len(spot_coins) >= SIGNAL_SCAN_LIMIT:
-                break
-        trending_coins = list(perp_coins)
-
-        return {
-            "PERP": perp_coins,
-            "SPOT": spot_coins,
-            "TRENDING": trending_coins,
-            "last_refresh": self._last_refresh,
-        }
+        spot_coins = [p["name"] for p in self._spot_pairs]
+        sorted_by_vol = sorted(self._volume_ctxs.items(), key=lambda x: x[1], reverse=True)
+        trending_coins = [name for name, vol in sorted_by_vol[:SIGNAL_SCAN_LIMIT]]
+        return {"PERP": perp_coins, "SPOT": spot_coins, "TRENDING": trending_coins, "last_refresh": self._last_refresh}
 
     def _bg_loop(self):
         while True:

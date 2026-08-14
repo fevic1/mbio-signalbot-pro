@@ -238,23 +238,13 @@ class AssetUniverse:
         # Do not expose the complete spot universe. Keep only spot pairs whose
         # base asset belongs to the selected top-10 opportunity universe.
         spot_coins = []
-        seen_spot = set()
-
         for pair in self._spot_pairs:
-            name = str(pair.get("name", "")).strip()
+            name = str(pair.get("name", ""))
             base = name.split("/", 1)[0].upper() if "/" in name else ""
+            if base in selected:
+                spot_coins.append(name)
 
-            if not name or base not in selected:
-                continue
-
-            if name in seen_spot:
-                continue
-
-            seen_spot.add(name)
-            spot_coins.append(name)
-
-            if len(spot_coins) >= SIGNAL_SCAN_LIMIT:
-                break
+        spot_coins = spot_coins[:SIGNAL_SCAN_LIMIT]
         trending_coins = list(perp_coins)
 
         return {
